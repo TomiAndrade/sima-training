@@ -1,0 +1,17 @@
+export const employees = [
+  { id: 1, name: 'Martín Guerrero', company: 'YPF S.A.' },
+  { id: 2, name: 'Ana Fernández', company: 'Pan American Energy' },
+  { id: 3, name: 'Nicolás Palacios', company: 'Pan American Energy' },
+  { id: 4, name: 'Valentina Cruz', company: 'TotalEnergies Argentina' },
+  { id: 5, name: 'Diego Morales', company: 'Vista Energy' },
+  { id: 6, name: 'Jorge Aguirre', company: 'YPF S.A.' },
+  { id: 7, name: 'Lorena Soto', company: 'Pan American Energy' },
+  { id: 8, name: 'Esteban Ruiz', company: 'TotalEnergies Argentina' },
+  { id: 9, name: 'Gabriela Paz', company: 'Vista Energy' },
+  { id: 10, name: 'Sebastián Núñez', company: 'YPF S.A.' },
+  { id: 11, name: 'Marcela Ibáñez', company: 'Pan American Energy' },
+  { id: 12, name: 'Facundo Romero', company: 'YPF S.A.' },
+  { id: 13, name: 'Carolina Vega', company: 'TotalEnergies Argentina' },
+  { id: 14, name: 'Leandro Muñoz', company: 'Vista Energy' },
+  { id: 15, name: 'Florencia Acosta', company: 'YPF S.A.' },
+]
