@@ -2,65 +2,76 @@ import { useState } from 'react'
 import { employees } from '../data/employees'
 
 export default function EmployeeSelection({ onSelect }) {
-  const [search, setSearch] = useState('')
+  const [dni, setDni] = useState('')
+  const [error, setError] = useState('')
 
-  const filtered = employees.filter((e) =>
-    e.name.toLowerCase().includes(search.toLowerCase()) ||
-    e.company.toLowerCase().includes(search.toLowerCase())
-  )
+  const handleSubmit = () => {
+    const trimmed = dni.trim()
+    if (!trimmed) {
+      setError('Ingresá tu DNI para continuar.')
+      return
+    }
+    const emp = employees.find((e) => e.dni === trimmed)
+    if (!emp) {
+      setError('No se encontró ningún empleado con ese DNI. Verificá el número e intentá de nuevo.')
+      return
+    }
+    onSelect({ id: emp.id, dni: emp.dni, name: emp.name, companyId: emp.companyId, company: emp.company })
+  }
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter') handleSubmit()
+  }
 
   return (
-    <div className="min-h-screen bg-slate-950 flex flex-col">
-      {/* Header */}
-      <div className="bg-slate-900 border-b border-slate-700 px-6 pt-8 pb-6">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="w-10 h-10 bg-red-600 rounded-xl flex items-center justify-center font-black text-white text-lg">S</div>
-          <div>
-            <div className="font-bold text-white text-lg leading-tight">SIMA CHECK</div>
-            <div className="text-slate-500 text-sm">Ingeniería Sima</div>
-          </div>
-        </div>
-        <h1 className="text-white text-3xl font-bold mb-1">Seleccioná tu nombre</h1>
-        <p className="text-slate-400 text-lg">Buscá por nombre o empresa</p>
-        <div className="mt-5 relative">
-          <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-xl">🔍</span>
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar empleado..."
-            className="w-full bg-slate-800 border-2 border-slate-600 rounded-2xl py-4 pl-12 pr-5 text-white text-xl focus:outline-none focus:border-red-600 placeholder-slate-500"
-            autoFocus
-          />
-        </div>
-      </div>
+    <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-6">
+      <div className="w-full max-w-sm space-y-8">
 
-      {/* List */}
-      <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3">
-        {filtered.map((emp) => (
-          <button
-            key={emp.id}
-            onClick={() => onSelect(emp)}
-            className="w-full text-left bg-slate-800 border-2 border-slate-700 hover:border-red-600 active:bg-slate-700 rounded-2xl px-5 py-4 transition-all duration-150 touch-manipulation"
-          >
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-full bg-slate-700 border border-slate-600 flex items-center justify-center text-red-500 font-bold text-lg flex-shrink-0">
-                {emp.name.split(' ').map((n) => n[0]).slice(0, 2).join('')}
-              </div>
-              <div className="min-w-0">
-                <p className="text-white font-semibold text-lg leading-tight truncate">{emp.name}</p>
-                <p className="text-slate-400 text-sm truncate">{emp.company}</p>
-              </div>
-              <span className="ml-auto text-slate-500 text-2xl flex-shrink-0">›</span>
-            </div>
-          </button>
-        ))}
-        {filtered.length === 0 && (
-          <div className="text-center py-16 text-slate-500">
-            <div className="text-5xl mb-3">🔍</div>
-            <p className="text-xl">Sin resultados</p>
+        {/* Logo */}
+        <div className="text-center">
+          <div className="w-16 h-16 bg-red-600 rounded-2xl flex items-center justify-center font-black text-white text-2xl mx-auto mb-4">
+            S
           </div>
-        )}
+          <h1 className="text-white text-3xl font-black tracking-tight">SIMA CHECK</h1>
+          <p className="text-slate-400 text-base mt-1">Sistema de Evaluación Industrial</p>
+        </div>
+
+        {/* Form */}
+        <div className="bg-slate-900 border border-slate-700 rounded-2xl p-6 space-y-5">
+          <div>
+            <label className="block text-slate-300 text-sm font-semibold mb-2 text-center">
+              Ingrese su DNI
+            </label>
+            <input
+              type="text"
+              inputMode="numeric"
+              maxLength={8}
+              placeholder="Ej: 28541367"
+              value={dni}
+              onChange={(e) => {
+                setDni(e.target.value.replace(/\D/g, ''))
+                setError('')
+              }}
+              onKeyDown={handleKeyDown}
+              className="w-full bg-slate-800 border border-slate-600 rounded-xl px-4 py-4 text-white text-2xl text-center tracking-widest font-mono focus:outline-none focus:border-red-600 transition-colors placeholder:text-slate-600 placeholder:text-base placeholder:tracking-normal"
+            />
+          </div>
+
+          {error && (
+            <div className="bg-red-600/10 border border-red-600/30 rounded-xl px-4 py-3">
+              <p className="text-red-400 text-sm text-center leading-snug">{error}</p>
+            </div>
+          )}
+
+          <button
+            onClick={handleSubmit}
+            className="w-full bg-red-600 hover:bg-red-700 active:bg-red-800 text-white font-bold text-lg py-4 rounded-xl transition-colors touch-manipulation"
+          >
+            Ingresar
+          </button>
+        </div>
+
+        <p className="text-center text-slate-600 text-xs">Ingeniería Sima · Oil &amp; Gas</p>
       </div>
     </div>
   )

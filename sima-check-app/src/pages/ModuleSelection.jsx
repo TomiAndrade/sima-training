@@ -6,7 +6,7 @@ export default function ModuleSelection({ employee, onSelect, onBack }) {
       {/* Header */}
       <div className="bg-slate-900 border-b border-slate-700 px-6 pt-8 pb-6">
         <button onClick={onBack} className="text-red-500 text-lg font-semibold mb-5 flex items-center gap-2 touch-manipulation">
-          ‹ Cambiar empleado
+          ‹ Volver
         </button>
         <div className="flex items-center gap-4">
           <div className="w-14 h-14 rounded-full bg-red-600/20 border-2 border-red-600 flex items-center justify-center text-red-500 font-black text-xl">
