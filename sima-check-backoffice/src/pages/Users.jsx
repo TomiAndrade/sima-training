@@ -5,23 +5,22 @@ import Modal from '../components/Modal'
 import { users as initialUsers } from '../data/users'
 import { companies } from '../data/companies'
 
-const ROLES = ['admin', 'supervisor', 'empleado']
+const ROLES = ['administrador', 'coordinador']
 
 const roleBadge = {
-  admin: 'bg-red-600/20 text-red-400',
-  supervisor: 'bg-blue-500/20 text-blue-400',
-  empleado: 'bg-slate-500/20 text-slate-300',
+  administrador: 'bg-red-600/20 text-red-400',
+  coordinador: 'bg-blue-500/20 text-blue-400',
 }
 
 export default function Users() {
   const [users, setUsers] = useState(initialUsers)
   const [modal, setModal] = useState(null)
-  const [form, setForm] = useState({ name: '', role: 'empleado', companyId: 1 })
+  const [form, setForm] = useState({ name: '', role: 'coordinador', companyId: 1 })
 
   const getCompanyName = (id) => companies.find((c) => c.id === id)?.name ?? '—'
 
   const openCreate = () => {
-    setForm({ name: '', role: 'empleado', companyId: companies[0]?.id ?? 1 })
+    setForm({ name: '', role: 'coordinador', companyId: companies[0]?.id ?? 1 })
     setModal({ mode: 'create' })
   }
 
