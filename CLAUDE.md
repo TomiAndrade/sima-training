@@ -10,10 +10,8 @@ MVP navegable de alta fidelidad para validar la plataforma **SIMA TRAINING** de 
 
 | Proyecto | Descripción | Puerto dev |
 |---|---|---|
-| `sima-check-backoffice/` | Backoffice de la plataforma SIMA TRAINING | 5173 |
+| `sima-training-backoffice/` | Backoffice de la plataforma SIMA TRAINING | 5173 |
 | `sima-check-app/` | App de evaluación para tablets industriales (producto SIMA CHECK) | 5174 |
-
-> Nota: la carpeta se llama `sima-check-backoffice/` hasta que pueda renombrarse a `sima-training-backoffice/` — el contenido interno ya refleja la nueva arquitectura.
 
 ## Stack técnico
 
@@ -27,7 +25,7 @@ Ambos proyectos usan el mismo stack:
 
 ```bash
 # Backoffice
-cd TRAINING/sima-check-backoffice
+cd TRAINING/sima-training-backoffice
 npm install
 npm run dev   # → http://localhost:5173
 
