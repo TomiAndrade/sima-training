@@ -4,25 +4,65 @@ import Button from '../../components/Button'
 import Modal from '../../components/Modal'
 import { trainingModules as modules } from '../data/training-modules'
 
-const EMPTY_FORM = { moduleId: 1, type: 'truefalse', statement: '', options: ['', '', '', ''], correctAnswer: '' }
+const EMPTY_FORM = { type: 'truefalse', statement: '', options: ['', '', '', ''], correctAnswer: '' }
 
-export default function Questions() {
-  const allQuestions = modules.flatMap((m) => m.questions.map((q) => ({ ...q, moduleId: m.id, moduleName: m.name })))
-  const [questions, setQuestions] = useState(allQuestions)
-  const [filterModule, setFilterModule] = useState('all')
+const inputCls = 'w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-red-600'
+
+function typeBadge(type) {
+  return (
+    <span className={`px-2 py-0.5 rounded text-[11px] font-semibold font-mono border ${type === 'truefalse' ? 'bg-sky-500/10 text-sky-400 border-sky-500/30' : 'bg-violet-500/10 text-violet-400 border-violet-500/30'}`}>
+      {type === 'truefalse' ? 'V / F' : 'Múltiple'}
+    </span>
+  )
+}
+
+function ModuleSelector({ onSelect }) {
+  return (
+    <div className="space-y-5 max-w-4xl">
+      <div>
+        <div className="text-zinc-500 text-[10px] font-semibold uppercase tracking-widest mb-1">Preguntas</div>
+        <p className="text-zinc-400 text-sm">Seleccioná un módulo para ver y editar sus preguntas.</p>
+      </div>
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+        {modules.map((m) => (
+          <button
+            key={m.id}
+            onClick={() => onSelect(m.id)}
+            className="text-left bg-zinc-900 border border-zinc-800 rounded p-5 relative overflow-hidden hover:bg-zinc-800/50 hover:border-zinc-700 transition-colors duration-150 group"
+          >
+            <div className="absolute top-0 left-0 right-0 h-px bg-red-600/60" />
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-white font-semibold text-sm mb-1 group-hover:text-zinc-100">{m.name}</div>
+                <div className="text-zinc-500 text-xs font-mono">{m.questions.length} preguntas</div>
+              </div>
+              <span className={`flex-shrink-0 px-2 py-0.5 rounded text-[10px] font-semibold font-mono border uppercase tracking-wider ${m.active ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/30' : 'bg-zinc-800 text-zinc-500 border-zinc-700'}`}>
+                {m.active ? 'Activo' : 'Inactivo'}
+              </span>
+            </div>
+            <div className="mt-4 text-zinc-600 text-[10px] font-mono uppercase tracking-widest group-hover:text-zinc-500 transition-colors">
+              Ver preguntas →
+            </div>
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function QuestionsTable({ moduleId, onBack }) {
+  const module = modules.find((m) => m.id === moduleId)
+  const [questions, setQuestions] = useState(module.questions)
   const [modal, setModal] = useState(null)
   const [form, setForm] = useState(EMPTY_FORM)
 
-  const filtered = filterModule === 'all' ? questions : questions.filter((q) => q.moduleId === Number(filterModule))
-
   const openCreate = () => {
-    setForm({ ...EMPTY_FORM, moduleId: modules[0]?.id ?? 1 })
+    setForm(EMPTY_FORM)
     setModal({ mode: 'create' })
   }
 
   const openEdit = (q) => {
     setForm({
-      moduleId: q.moduleId,
       type: q.type,
       statement: q.statement,
       options: q.options ? [...q.options] : ['', '', '', ''],
@@ -33,10 +73,7 @@ export default function Questions() {
 
   const handleSave = () => {
     if (!form.statement.trim() || !form.correctAnswer) return
-    const modName = modules.find((m) => m.id === Number(form.moduleId))?.name ?? ''
     const base = {
-      moduleId: Number(form.moduleId),
-      moduleName: modName,
       type: form.type,
       statement: form.statement,
       correctAnswer: form.correctAnswer,
@@ -50,41 +87,28 @@ export default function Questions() {
     setModal(null)
   }
 
-  const typeBadge = (type) => (
-    <span className={`px-2 py-0.5 rounded text-xs font-semibold ${type === 'truefalse' ? 'bg-blue-500/20 text-blue-400' : 'bg-purple-500/20 text-purple-400'}`}>
-      {type === 'truefalse' ? 'V/F' : 'Múltiple'}
-    </span>
-  )
-
   const columns = [
-    { key: 'statement', label: 'Enunciado', render: (v) => <span className="text-slate-200 line-clamp-2 max-w-xs">{v}</span> },
+    { key: 'statement', label: 'Enunciado', render: (v) => <span className="text-zinc-200 line-clamp-2 max-w-xs">{v}</span> },
     { key: 'type', label: 'Tipo', render: typeBadge },
-    { key: 'moduleName', label: 'Módulo', render: (v) => <span className="text-slate-400 text-xs">{v}</span> },
   ]
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-5 max-w-5xl">
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h2 className="text-white font-bold text-xl">Preguntas</h2>
-          <p className="text-slate-400 text-sm">{filtered.length} preguntas</p>
-        </div>
         <div className="flex items-center gap-3">
-          <select
-            className="bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-red-600"
-            value={filterModule}
-            onChange={(e) => setFilterModule(e.target.value)}
-          >
-            <option value="all">Todos los módulos</option>
-            {modules.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-          </select>
-          <Button onClick={openCreate}>+ Nueva pregunta</Button>
+          <Button variant="ghost" size="sm" onClick={onBack}>← Volver</Button>
+          <div className="w-px h-5 bg-zinc-700" />
+          <div>
+            <div className="text-white font-semibold text-sm">{module.name}</div>
+            <div className="text-zinc-500 text-[10px] font-mono">{questions.length} preguntas</div>
+          </div>
         </div>
+        <Button onClick={openCreate}>+ Nueva pregunta</Button>
       </div>
 
       <Table
         columns={columns}
-        data={filtered}
+        data={questions}
         actions={(row) => (
           <Button variant="ghost" size="sm" onClick={() => openEdit(row)}>Editar</Button>
         )}
@@ -102,34 +126,22 @@ export default function Questions() {
         }
       >
         <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-slate-300 text-sm font-medium mb-1">Módulo</label>
-              <select
-                className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-red-600"
-                value={form.moduleId}
-                onChange={(e) => setForm((f) => ({ ...f, moduleId: Number(e.target.value) }))}
-              >
-                {modules.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-slate-300 text-sm font-medium mb-1">Tipo</label>
-              <select
-                className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-red-600"
-                value={form.type}
-                onChange={(e) => setForm((f) => ({ ...f, type: e.target.value, correctAnswer: '' }))}
-              >
-                <option value="truefalse">Verdadero / Falso</option>
-                <option value="multiple">Opción múltiple</option>
-              </select>
-            </div>
+          <div>
+            <label className="block text-zinc-400 text-xs font-semibold uppercase tracking-widest mb-1.5">Tipo</label>
+            <select
+              className={inputCls}
+              value={form.type}
+              onChange={(e) => setForm((f) => ({ ...f, type: e.target.value, correctAnswer: '' }))}
+            >
+              <option value="truefalse">Verdadero / Falso</option>
+              <option value="multiple">Opción múltiple</option>
+            </select>
           </div>
           <div>
-            <label className="block text-slate-300 text-sm font-medium mb-1">Enunciado</label>
+            <label className="block text-zinc-400 text-xs font-semibold uppercase tracking-widest mb-1.5">Enunciado</label>
             <textarea
               rows={3}
-              className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-red-600 resize-none"
+              className={`${inputCls} resize-none`}
               value={form.statement}
               onChange={(e) => setForm((f) => ({ ...f, statement: e.target.value }))}
               placeholder="Escribí la pregunta aquí..."
@@ -137,10 +149,10 @@ export default function Questions() {
           </div>
           {form.type === 'multiple' && (
             <div className="space-y-2">
-              <label className="block text-slate-300 text-sm font-medium">Opciones</label>
+              <label className="block text-zinc-400 text-xs font-semibold uppercase tracking-widest">Opciones</label>
               {['a', 'b', 'c', 'd'].map((letter, i) => (
                 <div key={letter} className="flex items-center gap-2">
-                  <span className="text-slate-500 text-sm w-4">{letter})</span>
+                  <span className="text-zinc-600 text-xs font-mono w-4">{letter})</span>
                   <input
                     className="flex-1 bg-zinc-800 border border-zinc-700 rounded px-3 py-1.5 text-white text-sm focus:outline-none focus:border-red-600"
                     value={form.options[i]}
@@ -156,10 +168,10 @@ export default function Questions() {
             </div>
           )}
           <div>
-            <label className="block text-slate-300 text-sm font-medium mb-1">Respuesta correcta</label>
+            <label className="block text-zinc-400 text-xs font-semibold uppercase tracking-widest mb-1.5">Respuesta correcta</label>
             {form.type === 'truefalse' ? (
               <select
-                className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-red-600"
+                className={inputCls}
                 value={form.correctAnswer}
                 onChange={(e) => setForm((f) => ({ ...f, correctAnswer: e.target.value }))}
               >
@@ -169,7 +181,7 @@ export default function Questions() {
               </select>
             ) : (
               <select
-                className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-red-600"
+                className={inputCls}
                 value={form.correctAnswer}
                 onChange={(e) => setForm((f) => ({ ...f, correctAnswer: e.target.value }))}
               >
@@ -182,4 +194,14 @@ export default function Questions() {
       </Modal>
     </div>
   )
+}
+
+export default function Questions() {
+  const [selectedModuleId, setSelectedModuleId] = useState(null)
+
+  if (selectedModuleId === null) {
+    return <ModuleSelector onSelect={setSelectedModuleId} />
+  }
+
+  return <QuestionsTable moduleId={selectedModuleId} onBack={() => setSelectedModuleId(null)} />
 }
