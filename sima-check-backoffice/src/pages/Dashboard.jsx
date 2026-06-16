@@ -3,6 +3,7 @@ import { companies } from '../data/companies'
 import { users } from '../data/users'
 import { modules } from '../data/modules'
 import { evaluations } from '../data/evaluations'
+import { assignments } from '../data/assignments'
 
 const moduleNames = ['SIMA Básico', 'SIMA Intermedio', 'SIMA Avanzado', 'Reglas de Oro Industria Petrolera']
 const shortNames = ['Básico', 'Intermedio', 'Avanzado', 'Reglas de Oro']
@@ -43,17 +44,21 @@ export default function Dashboard() {
   const totalUsers = users.length
   const activeModules = modules.filter((m) => m.active).length
   const approvedPct = Math.round((evaluations.filter((e) => e.approved).length / evaluations.length) * 100)
+  const pendingAssignments = assignments.filter((a) => a.status === 'pending').length
+  const completedAssignments = assignments.filter((a) => a.status === 'completed').length
 
   const recent = [...evaluations].sort((a, b) => b.id - a.id).slice(0, 7)
 
   return (
     <div className="space-y-6">
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 xl:grid-cols-3 gap-4">
         <StatCard label="Empresas activas" value={activeCompanies} icon="🏢" delta="+1 este mes" deltaPositive />
         <StatCard label="Usuarios registrados" value={totalUsers} icon="👤" delta="+3 este mes" deltaPositive />
         <StatCard label="Módulos activos" value={activeModules} icon="📋" />
         <StatCard label="% Aprobación general" value={`${approvedPct}%`} icon="✓" delta={approvedPct >= 70 ? 'Óptimo' : 'Por mejorar'} deltaPositive={approvedPct >= 70} />
+        <StatCard label="Asignaciones pendientes" value={pendingAssignments} icon="📌" delta="Por completar" />
+        <StatCard label="Asignaciones completadas" value={completedAssignments} icon="✓" deltaPositive />
       </div>
 
       {/* Chart + Recent */}
