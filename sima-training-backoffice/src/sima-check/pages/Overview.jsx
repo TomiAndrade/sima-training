@@ -16,25 +16,33 @@ function ApprovalChart() {
     return { name: shortNames[i], pct }
   })
 
-  const maxPct = 100
   const chartH = 140
 
   return (
     <div className="flex items-end justify-around gap-4 pt-4" style={{ height: chartH + 40 }}>
       {stats.map((s) => {
-        const barH = Math.round((s.pct / maxPct) * chartH)
+        const barH = Math.round((s.pct / 100) * chartH)
         const color = s.pct >= 70 ? '#10b981' : '#f59e0b'
         return (
           <div key={s.name} className="flex flex-col items-center gap-2 flex-1">
-            <span className="text-xs font-semibold" style={{ color }}>{s.pct}%</span>
+            <span className="text-xs font-semibold font-mono" style={{ color }}>{s.pct}%</span>
             <div
-              className="w-full rounded-t-md transition-all duration-700"
+              className="w-full rounded-t transition-all duration-700"
               style={{ height: barH, backgroundColor: color, minHeight: 4 }}
             />
-            <span className="text-slate-400 text-xs text-center leading-tight">{s.name}</span>
+            <span className="text-zinc-500 text-[10px] text-center leading-tight uppercase tracking-wide">{s.name}</span>
           </div>
         )
       })}
+    </div>
+  )
+}
+
+function SectionHeader({ children }) {
+  return (
+    <div className="flex items-center gap-3 mb-3">
+      <span className="text-zinc-500 text-[10px] font-semibold uppercase tracking-widest">{children}</span>
+      <div className="flex-1 h-px bg-zinc-800" />
     </div>
   )
 }
@@ -50,43 +58,62 @@ export default function Overview() {
   const recent = [...evaluations].sort((a, b) => b.id - a.id).slice(0, 7)
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-7 max-w-6xl">
+
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 xl:grid-cols-3 gap-4">
-        <StatCard label="Empresas activas" value={activeCompanies} icon="🏢" delta="+1 este mes" deltaPositive />
-        <StatCard label="Usuarios registrados" value={totalUsers} icon="👤" delta="+3 este mes" deltaPositive />
-        <StatCard label="Módulos activos" value={activeModules} icon="📋" />
-        <StatCard label="% Aprobación general" value={`${approvedPct}%`} icon="✓" delta={approvedPct >= 70 ? 'Óptimo' : 'Por mejorar'} deltaPositive={approvedPct >= 70} />
-        <StatCard label="Asignaciones pendientes" value={pendingAssignments} icon="📌" delta="Por completar" />
-        <StatCard label="Asignaciones completadas" value={completedAssignments} icon="✓" deltaPositive />
+      <div>
+        <SectionHeader>Métricas Operacionales</SectionHeader>
+        <div className="grid grid-cols-2 xl:grid-cols-3 gap-3">
+          <StatCard label="Empresas activas" value={activeCompanies} delta="+1 este mes" deltaPositive />
+          <StatCard label="Usuarios registrados" value={totalUsers} delta="+3 este mes" deltaPositive />
+          <StatCard label="Módulos activos" value={activeModules} />
+          <StatCard label="% Aprobación general" value={`${approvedPct}%`} delta={approvedPct >= 70 ? 'Óptimo' : 'Por mejorar'} deltaPositive={approvedPct >= 70} />
+          <StatCard label="Asignaciones pendientes" value={pendingAssignments} delta="Por completar" />
+          <StatCard label="Asignaciones completadas" value={completedAssignments} delta="Historial total" deltaPositive />
+        </div>
       </div>
 
-      {/* Chart + Recent */}
+      {/* Chart + Recent evaluations */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+
         {/* Chart */}
-        <div className="bg-slate-800 border border-slate-700 rounded-xl p-5">
-          <h3 className="text-white font-semibold mb-1">Aprobación por módulo</h3>
-          <p className="text-slate-400 text-xs mb-4">Porcentaje de evaluaciones aprobadas</p>
-          <ApprovalChart />
+        <div>
+          <SectionHeader>Aprobación por Módulo</SectionHeader>
+          <div className="bg-zinc-900 border border-zinc-800 rounded p-5">
+            <p className="text-zinc-600 text-[10px] font-mono uppercase tracking-widest mb-4">
+              % evaluaciones aprobadas por capacitación
+            </p>
+            <ApprovalChart />
+          </div>
         </div>
 
         {/* Recent evaluations */}
-        <div className="bg-slate-800 border border-slate-700 rounded-xl p-5">
-          <h3 className="text-white font-semibold mb-4">Últimas evaluaciones</h3>
-          <div className="space-y-2">
-            {recent.map((ev) => (
-              <div key={ev.id} className="flex items-center justify-between py-2 border-b border-slate-700/50 last:border-0">
+        <div>
+          <SectionHeader>Últimas Evaluaciones</SectionHeader>
+          <div className="bg-zinc-900 border border-zinc-800 rounded overflow-hidden">
+            {recent.map((ev, i) => (
+              <div
+                key={ev.id}
+                className={`flex items-center justify-between px-4 py-3 ${i < recent.length - 1 ? 'border-b border-zinc-800/50' : ''} hover:bg-zinc-800/20 transition-colors`}
+              >
                 <div className="min-w-0">
-                  <p className="text-slate-200 text-sm font-medium truncate">{ev.employeeName}</p>
-                  <p className="text-slate-500 text-xs truncate">{ev.moduleName} · {ev.date}</p>
+                  <p className="text-zinc-200 text-sm font-medium truncate">{ev.employeeName}</p>
+                  <p className="text-zinc-600 text-[10px] font-mono uppercase tracking-wide truncate">
+                    {ev.moduleName} · {ev.date}
+                  </p>
                 </div>
-                <span className={`ml-3 flex-shrink-0 px-2.5 py-1 rounded-full text-xs font-bold ${ev.approved ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}`}>
+                <span className={`ml-3 flex-shrink-0 px-2 py-1 rounded text-[11px] font-bold font-mono border ${
+                  ev.approved
+                    ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/30'
+                    : 'bg-red-500/10 text-red-500 border-red-500/30'
+                }`}>
                   {ev.score}%
                 </span>
               </div>
             ))}
           </div>
         </div>
+
       </div>
     </div>
   )

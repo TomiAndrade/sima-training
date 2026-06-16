@@ -86,7 +86,7 @@ export default function Users() {
           <div>
             <label className="block text-slate-300 text-sm font-medium mb-1">Nombre</label>
             <input
-              className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-red-600"
+              className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-red-600"
               value={form.name}
               onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
               placeholder="Nombre completo"
@@ -95,7 +95,7 @@ export default function Users() {
           <div>
             <label className="block text-slate-300 text-sm font-medium mb-1">Rol</label>
             <select
-              className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-red-600"
+              className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-red-600"
               value={form.role}
               onChange={(e) => setForm((f) => ({ ...f, role: e.target.value }))}
             >
@@ -105,7 +105,7 @@ export default function Users() {
           <div>
             <label className="block text-slate-300 text-sm font-medium mb-1">Empresa</label>
             <select
-              className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-red-600"
+              className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-red-600"
               value={form.companyId}
               onChange={(e) => setForm((f) => ({ ...f, companyId: Number(e.target.value) }))}
             >

@@ -1,23 +1,23 @@
 const NAV_SECTIONS = [
   {
     items: [
-      { id: 'dashboard', label: 'Dashboard', icon: '▦' },
+      { id: 'dashboard', label: 'Panel Principal' },
     ],
   },
   {
     header: 'Administración',
     items: [
-      { id: 'companies', label: 'Empresas', icon: '🏢' },
-      { id: 'users', label: 'Usuarios', icon: '👤' },
+      { id: 'companies', label: 'Empresas' },
+      { id: 'users', label: 'Usuarios' },
     ],
   },
   {
     header: 'SIMA CHECK',
     items: [
-      { id: 'sima-check-overview', label: 'Resumen', icon: '◈' },
-      { id: 'training-modules', label: 'Capacitaciones', icon: '📋' },
-      { id: 'questions', label: 'Preguntas', icon: '❓' },
-      { id: 'training-assignments', label: 'Asignaciones', icon: '📌' },
+      { id: 'sima-check-overview', label: 'Resumen Operacional' },
+      { id: 'training-modules', label: 'Capacitaciones' },
+      { id: 'questions', label: 'Preguntas' },
+      { id: 'training-assignments', label: 'Asignaciones' },
     ],
   },
   {
@@ -30,41 +30,47 @@ const ALL_NAV_ITEMS = NAV_SECTIONS.flatMap((s) => s.items)
 
 export default function BackofficeLayout({ page, navigate, children }) {
   return (
-    <div className="flex h-screen bg-slate-950 text-slate-100 overflow-hidden">
+    <div className="flex h-screen bg-zinc-950 text-zinc-100 overflow-hidden">
       {/* Sidebar */}
-      <aside className="w-60 bg-slate-900 border-r border-slate-700 flex flex-col flex-shrink-0">
+      <aside className="w-56 bg-zinc-950 border-r border-zinc-800 flex flex-col flex-shrink-0">
         {/* Logo */}
-        <div className="p-5 border-b border-slate-700">
+        <div className="px-4 py-4 border-b border-zinc-800">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 bg-red-600 rounded-lg flex items-center justify-center font-black text-white text-sm">S</div>
+            <div className="w-8 h-8 bg-red-600 rounded flex items-center justify-center font-bold text-white text-[11px] tracking-widest">
+              ST
+            </div>
             <div>
-              <div className="font-bold text-white text-sm leading-tight">SIMA TRAINING</div>
-              <div className="text-slate-500 text-xs">Backoffice</div>
+              <div className="font-semibold text-white text-sm tracking-wide leading-tight">SIMA TRAINING</div>
+              <div className="text-zinc-600 text-[10px] font-mono uppercase tracking-widest">Plataforma v2.0</div>
             </div>
           </div>
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 p-3 space-y-4">
+        <nav className="flex-1 py-2 overflow-y-auto">
           {NAV_SECTIONS.map((section, i) => (
-            <div key={i}>
+            <div key={i} className={section.header ? 'mt-5' : 'mt-1'}>
               {section.header && (
-                <div className="px-3 mb-1 text-slate-500 text-xs font-semibold uppercase tracking-wider">
+                <div className="px-4 pb-1 text-[10px] font-semibold uppercase tracking-widest text-zinc-600">
                   {section.header}
                 </div>
               )}
-              <div className="space-y-1">
+              <div>
                 {section.items.map((item) => (
                   <button
                     key={item.id}
                     onClick={() => navigate(item.id)}
-                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors text-left ${
+                    className={`w-full flex items-center gap-2.5 py-2 px-4 text-[13px] transition-colors duration-150 text-left border-l-2 ${
                       page === item.id
-                        ? 'bg-red-600/10 text-red-400 border border-red-600/20'
-                        : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800'
+                        ? 'border-red-600 text-white bg-zinc-900 font-medium'
+                        : 'border-transparent text-zinc-500 hover:text-zinc-200 hover:bg-zinc-900/60 font-normal'
                     }`}
                   >
-                    <span className="text-base">{item.icon}</span>
+                    <span
+                      className={`w-1 h-1 rounded-full flex-shrink-0 transition-colors ${
+                        page === item.id ? 'bg-red-500' : 'bg-zinc-700'
+                      }`}
+                    />
                     {item.label}
                   </button>
                 ))}
@@ -74,13 +80,18 @@ export default function BackofficeLayout({ page, navigate, children }) {
         </nav>
 
         {/* Footer */}
-        <div className="p-4 border-t border-slate-700">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-slate-700 rounded-full flex items-center justify-center text-xs font-bold text-red-400">CM</div>
-            <div className="min-w-0">
-              <div className="text-slate-200 text-xs font-medium truncate">Carlos Méndez</div>
-              <div className="text-slate-500 text-xs">Administrador</div>
+        <div className="px-4 py-3 border-t border-zinc-800">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-7 h-7 bg-zinc-800 border border-zinc-700 rounded flex items-center justify-center text-[10px] font-bold text-red-400 font-mono flex-shrink-0">
+                CM
+              </div>
+              <div className="min-w-0">
+                <div className="text-zinc-300 text-xs font-medium truncate">Carlos Méndez</div>
+                <div className="text-zinc-600 text-[10px] uppercase tracking-wider">Administrador</div>
+              </div>
             </div>
+            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 flex-shrink-0 ml-2" title="Sistema operativo" />
           </div>
         </div>
       </aside>
@@ -88,18 +99,29 @@ export default function BackofficeLayout({ page, navigate, children }) {
       {/* Main */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Header */}
-        <header className="h-14 bg-slate-900/50 border-b border-slate-700 flex items-center justify-between px-6 flex-shrink-0">
-          <h1 className="text-white font-semibold text-base">
-            {ALL_NAV_ITEMS.find((n) => n.id === page)?.label}
-          </h1>
-          <div className="flex items-center gap-3">
-            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="text-slate-400 text-sm">Sistema activo</span>
+        <header className="h-11 bg-zinc-950 border-b border-zinc-800 flex items-center justify-between px-6 flex-shrink-0">
+          <div className="flex items-center gap-2">
+            <span className="text-zinc-600 text-[10px] font-mono uppercase tracking-widest">SIMA TRAINING</span>
+            <span className="text-zinc-700 text-xs">›</span>
+            <span className="text-zinc-300 text-[11px] font-medium uppercase tracking-widest">
+              {ALL_NAV_ITEMS.find((n) => n.id === page)?.label ?? 'Panel Principal'}
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+            <span className="text-zinc-600 text-[10px] font-mono uppercase tracking-widest">SYS:OPERATIVO</span>
           </div>
         </header>
 
         {/* Content */}
-        <main className="flex-1 overflow-y-auto p-6">
+        <main
+          className="flex-1 overflow-y-auto p-6 bg-zinc-950"
+          style={{
+            backgroundImage:
+              'linear-gradient(rgba(255,255,255,0.018) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.018) 1px, transparent 1px)',
+            backgroundSize: '32px 32px',
+          }}
+        >
           {children}
         </main>
       </div>

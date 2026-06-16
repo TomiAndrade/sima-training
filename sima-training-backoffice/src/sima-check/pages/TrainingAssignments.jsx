@@ -11,7 +11,7 @@ import { users } from '../../core/data/users'
 const statusBadge = {
   pending: { label: 'Pendiente', cls: 'bg-amber-500/20 text-amber-400' },
   completed: { label: 'Completada', cls: 'bg-emerald-500/20 text-emerald-400' },
-  expired: { label: 'Vencida', cls: 'bg-slate-500/20 text-slate-400' },
+  expired: { label: 'Vencida', cls: 'bg-zinc-700/50 text-zinc-400' },
 }
 
 export default function TrainingAssignments() {
@@ -77,7 +77,7 @@ export default function TrainingAssignments() {
       key: 'status',
       label: 'Estado',
       render: (val) => {
-        const s = statusBadge[val] ?? { label: val, cls: 'bg-slate-500/20 text-slate-400' }
+        const s = statusBadge[val] ?? { label: val, cls: 'bg-zinc-700/50 text-zinc-400' }
         return <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${s.cls}`}>{s.label}</span>
       },
     },
@@ -125,7 +125,7 @@ export default function TrainingAssignments() {
           <div>
             <label className="block text-slate-300 text-sm font-medium mb-1">Empleado</label>
             <select
-              className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-red-600"
+              className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-red-600"
               value={form.employeeId}
               onChange={(e) => { setForm((f) => ({ ...f, employeeId: Number(e.target.value) })); setError('') }}
             >
@@ -139,7 +139,7 @@ export default function TrainingAssignments() {
           <div>
             <label className="block text-slate-300 text-sm font-medium mb-1">Módulo</label>
             <select
-              className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-red-600"
+              className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-red-600"
               value={form.moduleId}
               onChange={(e) => { setForm((f) => ({ ...f, moduleId: Number(e.target.value) })); setError('') }}
             >
