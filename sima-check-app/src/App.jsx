@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { pickRandomQuestions, calculateScore } from './utils/evaluation'
+import { assignments as initialAssignments } from './data/assignments'
 import EmployeeSelection from './pages/EmployeeSelection'
 import ModuleSelection from './pages/ModuleSelection'
 import Evaluation from './pages/Evaluation'
@@ -13,6 +14,7 @@ export default function App() {
   const [module, setModule] = useState(null)
   const [questions, setQuestions] = useState([])
   const [result, setResult] = useState(null)
+  const [assignments, setAssignments] = useState(initialAssignments)
 
   const startEvaluation = (mod) => {
     const picked = pickRandomQuestions(mod.questions, 3)
@@ -24,6 +26,13 @@ export default function App() {
   const finishEvaluation = (answers) => {
     const score = calculateScore(answers, questions)
     setResult(score)
+    setAssignments((prev) =>
+      prev.map((a) =>
+        a.employeeId === employee.id && a.moduleId === module.id && a.status === 'pending'
+          ? { ...a, status: 'completed' }
+          : a
+      )
+    )
     setStep(STEPS.results)
   }
 
@@ -32,6 +41,13 @@ export default function App() {
     setQuestions(picked)
     setResult(null)
     setStep(STEPS.evaluation)
+  }
+
+  const goToModules = () => {
+    setModule(null)
+    setQuestions([])
+    setResult(null)
+    setStep(STEPS.module)
   }
 
   const goHome = () => {
@@ -54,6 +70,7 @@ export default function App() {
     return (
       <ModuleSelection
         employee={employee}
+        assignments={assignments}
         onSelect={startEvaluation}
         onBack={() => setStep(STEPS.employee)}
       />
@@ -78,6 +95,7 @@ export default function App() {
       module={module}
       result={result}
       onRetry={retry}
+      onGoToModules={goToModules}
       onHome={goHome}
     />
   )

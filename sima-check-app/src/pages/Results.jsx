@@ -1,6 +1,6 @@
 import Button from '../components/Button'
 
-export default function Results({ employee, module: mod, result, onRetry, onHome }) {
+export default function Results({ employee, module: mod, result, onRetry, onGoToModules, onHome }) {
   const { correct, total, percentage, approved } = result
 
   const feedbackMsg = approved
@@ -42,7 +42,10 @@ export default function Results({ employee, module: mod, result, onRetry, onHome
 
       {/* Actions */}
       <div className="w-full max-w-sm space-y-3">
-        <Button variant="primary" onClick={onRetry} fullWidth>
+        <Button variant="primary" onClick={onGoToModules} fullWidth>
+          Mis capacitaciones
+        </Button>
+        <Button variant="secondary" onClick={onRetry} fullWidth>
           Reintentar evaluación
         </Button>
         <Button variant="secondary" onClick={onHome} fullWidth>

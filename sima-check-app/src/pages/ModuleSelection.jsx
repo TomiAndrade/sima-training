@@ -1,7 +1,6 @@
 import { modules } from '../data/modules'
-import { assignments } from '../data/assignments'
 
-export default function ModuleSelection({ employee, onSelect, onBack }) {
+export default function ModuleSelection({ employee, assignments, onSelect, onBack }) {
   const pendingModuleIds = assignments
     .filter((a) => a.employeeId === employee.id && a.status === 'pending')
     .map((a) => a.moduleId)
