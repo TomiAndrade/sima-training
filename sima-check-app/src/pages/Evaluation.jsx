@@ -38,7 +38,7 @@ export default function Evaluation({ employee, module: mod, questions, onFinish,
         <div className="flex items-center justify-between mb-4">
           <div>
             <p className="text-slate-400 text-sm">{employee.name}</p>
-            <p className="text-amber-500 font-semibold">{mod.name}</p>
+            <p className="text-red-500 font-semibold">{mod.name}</p>
           </div>
           <button onClick={onBack} className="text-slate-500 text-sm hover:text-slate-300 touch-manipulation">Cancelar</button>
         </div>

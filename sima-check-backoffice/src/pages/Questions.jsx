@@ -71,7 +71,7 @@ export default function Questions() {
         </div>
         <div className="flex items-center gap-3">
           <select
-            className="bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500"
+            className="bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-red-600"
             value={filterModule}
             onChange={(e) => setFilterModule(e.target.value)}
           >
@@ -106,7 +106,7 @@ export default function Questions() {
             <div>
               <label className="block text-slate-300 text-sm font-medium mb-1">Módulo</label>
               <select
-                className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500"
+                className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-red-600"
                 value={form.moduleId}
                 onChange={(e) => setForm((f) => ({ ...f, moduleId: Number(e.target.value) }))}
               >
@@ -116,7 +116,7 @@ export default function Questions() {
             <div>
               <label className="block text-slate-300 text-sm font-medium mb-1">Tipo</label>
               <select
-                className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500"
+                className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-red-600"
                 value={form.type}
                 onChange={(e) => setForm((f) => ({ ...f, type: e.target.value, correctAnswer: '' }))}
               >
@@ -129,7 +129,7 @@ export default function Questions() {
             <label className="block text-slate-300 text-sm font-medium mb-1">Enunciado</label>
             <textarea
               rows={3}
-              className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500 resize-none"
+              className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-red-600 resize-none"
               value={form.statement}
               onChange={(e) => setForm((f) => ({ ...f, statement: e.target.value }))}
               placeholder="Escribí la pregunta aquí..."
@@ -142,7 +142,7 @@ export default function Questions() {
                 <div key={letter} className="flex items-center gap-2">
                   <span className="text-slate-500 text-sm w-4">{letter})</span>
                   <input
-                    className="flex-1 bg-slate-700 border border-slate-600 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-amber-500"
+                    className="flex-1 bg-slate-700 border border-slate-600 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-red-600"
                     value={form.options[i]}
                     onChange={(e) => {
                       const opts = [...form.options]
@@ -159,7 +159,7 @@ export default function Questions() {
             <label className="block text-slate-300 text-sm font-medium mb-1">Respuesta correcta</label>
             {form.type === 'truefalse' ? (
               <select
-                className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500"
+                className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-red-600"
                 value={form.correctAnswer}
                 onChange={(e) => setForm((f) => ({ ...f, correctAnswer: e.target.value }))}
               >
@@ -169,7 +169,7 @@ export default function Questions() {
               </select>
             ) : (
               <select
-                className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500"
+                className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-red-600"
                 value={form.correctAnswer}
                 onChange={(e) => setForm((f) => ({ ...f, correctAnswer: e.target.value }))}
               >

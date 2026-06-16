@@ -14,7 +14,7 @@ export default function BackofficeLayout({ page, navigate, children }) {
         {/* Logo */}
         <div className="p-5 border-b border-slate-700">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 bg-amber-500 rounded-lg flex items-center justify-center font-black text-slate-950 text-sm">S</div>
+            <div className="w-9 h-9 bg-red-600 rounded-lg flex items-center justify-center font-black text-white text-sm">S</div>
             <div>
               <div className="font-bold text-white text-sm leading-tight">SIMA CHECK</div>
               <div className="text-slate-500 text-xs">Backoffice</div>
@@ -30,7 +30,7 @@ export default function BackofficeLayout({ page, navigate, children }) {
               onClick={() => navigate(item.id)}
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors text-left ${
                 page === item.id
-                  ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                  ? 'bg-red-600/10 text-red-400 border border-red-600/20'
                   : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800'
               }`}
             >
@@ -43,7 +43,7 @@ export default function BackofficeLayout({ page, navigate, children }) {
         {/* Footer */}
         <div className="p-4 border-t border-slate-700">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-slate-700 rounded-full flex items-center justify-center text-xs font-bold text-amber-400">CM</div>
+            <div className="w-8 h-8 bg-slate-700 rounded-full flex items-center justify-center text-xs font-bold text-red-400">CM</div>
             <div className="min-w-0">
               <div className="text-slate-200 text-xs font-medium truncate">Carlos Méndez</div>
               <div className="text-slate-500 text-xs">Administrador</div>

@@ -16,8 +16,8 @@ export default function QuestionCard({ question, selectedAnswer, onSelect }) {
               onClick={() => onSelect(opt)}
               className={`w-full text-left px-5 py-4 rounded-2xl text-lg font-semibold border-2 transition-all duration-150 touch-manipulation select-none ${
                 isSelected
-                  ? 'bg-amber-500 border-amber-500 text-slate-950'
-                  : 'bg-slate-800 border-slate-600 text-slate-100 hover:border-amber-500/50 hover:bg-slate-700'
+                  ? 'bg-red-600 border-red-600 text-white'
+                  : 'bg-slate-800 border-slate-600 text-slate-100 hover:border-red-600/50 hover:bg-slate-700'
               }`}
             >
               {!isTF && <span className="mr-3 opacity-60">{LETTERS[i]})</span>}

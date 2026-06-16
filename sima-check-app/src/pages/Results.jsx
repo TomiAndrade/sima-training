@@ -11,7 +11,7 @@ export default function Results({ employee, module: mod, result, onRetry, onHome
     <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center px-6 py-10">
       {/* Logo */}
       <div className="flex items-center gap-3 mb-10">
-        <div className="w-10 h-10 bg-amber-500 rounded-xl flex items-center justify-center font-black text-slate-950 text-lg">S</div>
+        <div className="w-10 h-10 bg-red-600 rounded-xl flex items-center justify-center font-black text-white text-lg">S</div>
         <div>
           <div className="font-bold text-white text-base leading-tight">SIMA CHECK</div>
           <div className="text-slate-500 text-xs">Resultado</div>

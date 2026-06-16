@@ -89,7 +89,7 @@ export default function Modules() {
           <div>
             <label className="block text-slate-300 text-sm font-medium mb-1">Nombre</label>
             <input
-              className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500"
+              className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-red-600"
               value={form.name}
               onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
               placeholder="Nombre del módulo"
@@ -99,7 +99,7 @@ export default function Modules() {
             <label className="text-slate-300 text-sm font-medium">Estado</label>
             <button
               onClick={() => setForm((f) => ({ ...f, active: !f.active }))}
-              className={`relative w-10 h-5 rounded-full transition-colors ${form.active ? 'bg-amber-500' : 'bg-slate-600'}`}
+              className={`relative w-10 h-5 rounded-full transition-colors ${form.active ? 'bg-red-600' : 'bg-slate-600'}`}
             >
               <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform ${form.active ? 'translate-x-5' : 'translate-x-0.5'}`} />
             </button>
