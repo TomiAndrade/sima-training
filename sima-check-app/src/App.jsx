@@ -26,13 +26,15 @@ export default function App() {
   const finishEvaluation = (answers) => {
     const score = calculateScore(answers, questions)
     setResult(score)
-    setAssignments((prev) =>
-      prev.map((a) =>
-        a.employeeId === employee.id && a.moduleId === module.id && a.status === 'pending'
-          ? { ...a, status: 'completed' }
-          : a
+    if (score.approved) {
+      setAssignments((prev) =>
+        prev.map((a) =>
+          a.employeeId === employee.id && a.moduleId === module.id && a.status === 'pending'
+            ? { ...a, status: 'completed' }
+            : a
+        )
       )
-    )
+    }
     setStep(STEPS.results)
   }
 
