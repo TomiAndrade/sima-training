@@ -1,17 +1,17 @@
-# SIMA CHECK — MVP
+# SIMA TRAINING — MVP
 
-> **Estado: MVP de demostración.** No tiene backend ni base de datos. Todos los datos son mockeados. Sirve para validar el producto ante clientes y como base para evolucionar a producción.
+> **Estado: MVP de demostración.** Sin backend ni base de datos. Todos los datos son mockeados. Sirve para validar la plataforma ante clientes y como base para evolucionar a producción.
 
-MVP navegable de alta fidelidad para **Ingeniería Sima**, orientado a la industria Oil & Gas. Incluye dos productos independientes: un backoffice de administración y una app de evaluación para tablets industriales.
+MVP navegable de alta fidelidad para **Ingeniería Sima**, orientado a la industria Oil & Gas. Arquitectura multi-producto: **SIMA CHECK** (capacitaciones y evaluaciones) es el primer producto integrado. El sistema está preparado para incorporar SIMA INSPECTIONS, SIMA AUDITS, etc.
 
 ---
 
-## Productos
+## Proyectos
 
 | Proyecto | Descripción | Puerto dev |
 |---|---|---|
-| `sima-check-backoffice/` | Interfaz admin/supervisor (SaaS corporativo) | 5173 |
-| `sima-check-app/` | App de evaluación para tablets industriales | 5174 |
+| `sima-training-backoffice/` | Backoffice de la plataforma SIMA TRAINING | 5173 |
+| `sima-check-app/` | App de evaluación para tablets industriales (SIMA CHECK) | 5174 |
 
 Cada uno tiene su propio `package.json` y se corre de forma independiente.
 
@@ -19,11 +19,8 @@ Cada uno tiene su propio `package.json` y se corre de forma independiente.
 
 ## Stack
 
-Ambos proyectos comparten el mismo stack:
-
-- **Vite + React** (template react)
+- **Vite + React** (sin react-router — navegación con `useState`)
 - **Tailwind CSS v3** + PostCSS + Autoprefixer
-- Navegación con `useState` (sin react-router)
 - Sin backend, sin API, sin base de datos
 
 ---
@@ -32,34 +29,47 @@ Ambos proyectos comparten el mismo stack:
 
 ```bash
 # Backoffice
-cd sima-check-backoffice
+cd TRAINING/sima-training-backoffice
 npm install
 npm run dev   # → http://localhost:5173
 
 # App tablet
-cd sima-check-app
+cd TRAINING/sima-check-app
 npm install
 npm run dev   # → http://localhost:5174
 ```
 
 ---
 
-## Backoffice — pantallas
+## Backoffice — navegación
 
-1. **Dashboard** — KPIs (empresas activas, usuarios, módulos, % aprobación) + gráfico SVG de barras por módulo + tabla de últimas evaluaciones
-2. **Empresas** — tabla + modal crear/editar + toggle activo/inactivo
-3. **Usuarios** — tabla + modal crear/editar con roles (admin / supervisor / empleado)
-4. **Módulos** — tabla + modal crear/editar + toggle activo/inactivo
-5. **Preguntas** — tabla filtrable por módulo + modal crear/editar (V/F y opción múltiple)
+Sidebar global con tres secciones:
 
-Layout: sidebar fijo + header + contenido principal.
+- **Panel Principal** — vista de plataforma: KPIs operacionales, tabla de actividad reciente, estado del sistema (OPERATIVO/ADVERTENCIA), product cards
+- **Administración** — Empresas · Usuarios
+- **Productos** — SIMA CHECK (ítem único; al entrar aparece tab bar interno)
+
+### SIMA CHECK (tab bar interno)
+
+| Tab | Descripción |
+|---|---|
+| Resumen | Métricas operacionales + gráfico SVG de aprobación por módulo + últimas evaluaciones |
+| Capacitaciones | Tabla de módulos + modal crear/editar + toggle activo/inactivo |
+| Preguntas | Selector de módulo → tabla de preguntas + modal crear/editar (V/F y opción múltiple) |
+| Asignaciones | Tabla con estado + modal crear con validación de duplicados |
+
+---
 
 ## App SIMA CHECK — flujo
 
-1. **Selección de empleado** — buscador en vivo sobre 15 empleados mockeados
-2. **Selección de módulo** — 4 cards grandes (SIMA Básico, Intermedio, Avanzado, Reglas de Oro)
-3. **Evaluación** — 3 preguntas aleatorias del módulo, barra de progreso, opciones táctiles grandes
-4. **Resultado** — score %, badge APROBADO (≥ 70%) / DESAPROBADO (< 70%), reintentar o volver al inicio
+Todas las pantallas son tarjetas flotantes sobre fondo oscuro (listo para imagen de fondo real).
+
+1. **Ingreso por DNI** — campo numérico, validación vacío / no encontrado
+2. **Capacitaciones pendientes** — nombre y empresa del empleado + módulos con `status === 'pending'`
+3. **Evaluación** — 3 preguntas aleatorias, barra de progreso (avanza al responder), opciones táctiles grandes; V/F con verde/rojo; opción múltiple seleccionada en blanco
+4. **Resultado** — score %, badge APROBADO (≥70%) / DESAPROBADO (<70%), botones de acción
+
+Al finalizar, la asignación cambia de `pending → completed` en el estado de la sesión.
 
 ---
 
@@ -68,42 +78,44 @@ Layout: sidebar fijo + header + contenido principal.
 | Entidad | Detalle |
 |---|---|
 | Empresas | YPF, Pan American Energy, TotalEnergies, Pluspetrol, Vista Energy |
-| Usuarios | 10 usuarios con roles distribuidos entre empresas |
-| Módulos | 4 módulos, ~10 preguntas cada uno |
-| Evaluaciones | 20 registros históricos (para el dashboard) |
-| Empleados | 15 empleados de distintas empresas (solo en la app) |
-
-Las preguntas incluyen contenido real del dominio Oil & Gas (módulo SIMA Avanzado, IDs 301–310) ubicadas en `src/data/modules.js` de cada proyecto.
+| Usuarios | 8 usuarios con roles `administrador` o `coordinador` |
+| Empleados | 15 empleados con DNI, nombre y empresa |
+| Módulos | 4 módulos, ~10 preguntas cada uno (incluye preguntas reales de SIMA Avanzado) |
+| Evaluaciones | 20 registros históricos |
+| Asignaciones | 25 asignaciones con `status: pending \| completed \| expired` |
 
 ---
 
 ## Estructura de archivos
 
 ```
-sima-check-backoffice/src/
-├── data/          companies, users, modules, evaluations
-├── components/    Button, Card, Modal, Table, StatCard, ProgressBar
-├── hooks/         useNavigation.js
-└── pages/         Dashboard, Companies, Users, Modules, Questions, BackofficeLayout
+sima-training-backoffice/src/
+├── core/
+│   ├── data/       companies.js · users.js · employees.js
+│   └── pages/      Companies.jsx · Users.jsx
+├── sima-check/
+│   ├── data/       training-modules.js · training-assignments.js · evaluations.js
+│   └── pages/      Overview.jsx · TrainingModules.jsx · Questions.jsx · TrainingAssignments.jsx
+├── pages/          BackofficeLayout.jsx · Dashboard.jsx
+├── components/     Button · Card · Modal · Table · StatCard · ProgressBar
+└── hooks/          useNavigation.js
 
 sima-check-app/src/
-├── data/          employees, modules
-├── components/    Button, ProgressBar, QuestionCard
-├── hooks/         useNavigation.js
-├── utils/         evaluation.js (pickRandomQuestions, calculateScore)
-└── pages/         EmployeeSelection, ModuleSelection, Evaluation, Results
+├── data/           employees.js · modules.js · assignments.js
+├── components/     Button · ProgressBar · QuestionCard
+├── hooks/          useNavigation.js
+├── utils/          evaluation.js (pickRandomQuestions, calculateScore)
+└── pages/          EmployeeSelection · ModuleSelection · Evaluation · Results
 ```
 
 ---
 
 ## Paleta de colores
 
-Identidad visual de Ingeniería Sima: rojo y blanco sobre fondo oscuro industrial.
-
-| Uso | Clase Tailwind |
-|---|---|
-| Acento principal | `red-600` |
-| Fondo profundo | `slate-950` |
-| Fondo card | `slate-900` / `slate-800` |
-| Aprobado | `emerald-500` |
-| Desaprobado / peligro | `red-600` |
+| Contexto | Uso | Clase |
+|---|---|---|
+| Backoffice | Fondos | `zinc-950` / `zinc-900` / `zinc-800` |
+| Backoffice | Acento | `red-600` |
+| App tablet | Fondos | `slate-900` / `slate-800` |
+| Ambos | Aprobado | `emerald-500` |
+| Ambos | Desaprobado / peligro | `red-600` |

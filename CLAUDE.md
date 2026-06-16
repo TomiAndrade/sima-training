@@ -37,11 +37,16 @@ npm run dev   # → http://localhost:5174
 
 ## Paleta de colores
 
-Identidad visual de Ingeniería Sima: **rojo y blanco** sobre fondo oscuro industrial.
-
+**Backoffice** — estética industrial/corporativa, paleta `zinc` (sin tinte azul del `slate`):
+- Fondos: `zinc-950` / `zinc-900` / `zinc-800`
 - Acento principal: `red-600`
-- Fondos: `slate-950` / `slate-900` / `slate-800`
-- Estados: `emerald-500` (aprobado) · `red-600` (desaprobado/peligro)
+- Tipografía Inter, valores técnicos en `font-mono`
+- Estados: `emerald-500` (aprobado) · `red-600` (desaprobado/peligro) · `amber-500` (advertencia)
+
+**App tablet** — paleta `slate`, tarjetas flotantes sobre fondo oscuro:
+- Fondos de card: `slate-900` / `slate-800`
+- Fondo general: gradiente oscuro industrial (listo para imagen real en `App.jsx`)
+- Acento: `red-600`
 
 ## Modelo de dominio
 
@@ -73,28 +78,50 @@ Identidad visual de Ingeniería Sima: **rojo y blanco** sobre fondo oscuro indus
 
 ## Backoffice — pantallas y navegación
 
-### Dashboard
-KPIs (empresas activas, usuarios, módulos, % aprobación, asignaciones pendientes, asignaciones completadas) + gráfico SVG de barras por módulo + tabla de últimas evaluaciones.
+### Sidebar global
+
+Tres secciones:
+- **Panel Principal** → Dashboard de plataforma
+- **Administración** → Empresas, Usuarios
+- **Productos** → SIMA CHECK (ítem único; resaltado en cualquier sub-página del producto)
+
+### Dashboard (Panel Principal)
+
+Vista de plataforma con cuatro bloques:
+- KPIs operacionales: empresas activas, empleados registrados, asignaciones pendientes, completadas
+- Tabla de actividad reciente (mockeada): Fecha / Usuario / Acción / Detalle
+- Estado del sistema: indicadores OPERATIVO (emerald) / ADVERTENCIA (amber) por servicio
+- Product cards: SIMA CHECK (activo, con stats y botón de acceso) + SIMA INSPECTIONS y SIMA AUDITS (roadmap, con ETA)
+
+### SIMA CHECK (producto)
+
+Al navegar a cualquier página de SIMA CHECK aparece una **barra de tabs** entre el header y el contenido:
+
+| Tab | ID de página | Descripción |
+|---|---|---|
+| Resumen | `sima-check-overview` | Métricas: 6 StatCards + gráfico SVG de aprobación por módulo + lista de últimas evaluaciones |
+| Capacitaciones | `training-modules` | Tabla + modal crear/editar + toggle activo/inactivo |
+| Preguntas | `questions` | **Paso 1:** grid de 4 cards de módulos. **Paso 2:** tabla de preguntas del módulo seleccionado + modal crear/editar (sin selector de módulo, ya está implícito). Estado local `selectedModuleId` en `Questions.jsx`. |
+| Asignaciones | `training-assignments` | Tabla (empleado, empresa, módulo, estado, asignado por, fecha) + modal crear con validación de duplicados |
+
+La barra de tabs y el breadcrumb `SIMA TRAINING › SIMA CHECK › {tab}` se renderizan en `BackofficeLayout.jsx` usando `SIMA_CHECK_PAGES` (Set) y `SIMA_CHECK_TABS` (array).
 
 ### Administración (Core)
+
 - **Empresas** — tabla + modal crear/editar + toggle activo/inactivo
 - **Usuarios** — tabla + modal crear/editar con roles (administrador/coordinador)
 
-### SIMA CHECK
-- **Capacitaciones** — tabla + modal crear/editar + toggle activo/inactivo
-- **Preguntas** — tabla filtrable por módulo + modal crear/editar (soporte V/F y opción múltiple)
-- **Asignaciones** — tabla (empleado, empresa, módulo, estado, asignado por, fecha) + modal crear con validación de duplicados
-
 ### Configuración *(placeholder)*
-Sección visible en el sidebar — Roles y Permisos se agregarán en el futuro.
 
-Layout: sidebar fijo con secciones agrupadas + header + contenido principal.
+Sección visible en el sidebar — Roles y Permisos se agregarán en el futuro.
 
 ## App SIMA CHECK — flujo
 
-1. **Ingreso por DNI** — campo numérico, botón Ingresar, validaciones (vacío / no encontrado)
-2. **Capacitaciones pendientes** — muestra nombre y empresa del empleado + solo los módulos con `assignment.status === 'pending'`; estado vacío si no hay pendientes
-3. **Evaluación** — 3 preguntas aleatorias del módulo, barra de progreso, opciones táctiles grandes
+Todas las pantallas son **tarjetas flotantes** (`bg-slate-900/90 backdrop-blur-sm border border-slate-700/60 rounded-2xl shadow-2xl`) sobre un fondo oscuro con gradiente industrial. Para usar imagen de fondo real, reemplazar el `background` inline en `App.jsx` por `backgroundImage: "url('/bg-industrial.jpg')"`.
+
+1. **Ingreso por DNI** — campo numérico (`inputMode="numeric"`), botón Ingresar, validaciones: vacío / DNI no encontrado
+2. **Capacitaciones pendientes** — nombre y empresa del empleado + solo módulos con `assignment.status === 'pending'`; estado vacío si no hay pendientes
+3. **Evaluación** — 3 preguntas aleatorias del módulo; barra de progreso avanza **al responder** (no al llegar); V/F con colores: Verdadero=verde, Falso=rojo; opción múltiple seleccionada resaltada en **blanco** (no rojo)
 4. **Resultado** — score %, badge APROBADO (≥70%) / DESAPROBADO (<70%), botones: Mis capacitaciones / Reintentar / Volver al inicio
 
 Al finalizar una evaluación la asignación correspondiente cambia de `pending → completed` en el estado de la sesión. La pantalla de módulos se actualiza automáticamente.
@@ -113,13 +140,13 @@ Las preguntas reales están en `sima-check/data/training-modules.js` del backoff
 ## Arquitectura de archivos
 
 ```
-sima-check-backoffice/src/
+sima-training-backoffice/src/
 ├── core/
 │   ├── data/          companies.js · users.js · employees.js
 │   └── pages/         Companies.jsx · Users.jsx
 ├── sima-check/
 │   ├── data/          training-modules.js · training-assignments.js · evaluations.js
-│   └── pages/         TrainingModules.jsx · Questions.jsx · TrainingAssignments.jsx
+│   └── pages/         Overview.jsx · TrainingModules.jsx · Questions.jsx · TrainingAssignments.jsx
 ├── pages/             BackofficeLayout.jsx · Dashboard.jsx
 ├── components/        Button · Card · Modal · Table · StatCard · ProgressBar
 └── hooks/             useNavigation.js
@@ -142,10 +169,15 @@ sima-check-app/src/
 - Los gráficos son SVG puro (sin librerías).
 - Tailwind v3 es obligatorio.
 - El campo `company` (string) se mantiene en el empleado de la app junto a `companyId` para evitar importar `companies.js` en la app tablet.
+- La navegación de SIMA CHECK en el backoffice usa un Set (`SIMA_CHECK_PAGES`) en `BackofficeLayout.jsx` para detectar cuándo renderizar la barra de tabs y el breadcrumb de dos niveles.
+- La pantalla Preguntas maneja su propia navegación interna (`selectedModuleId`) con `useState` — no requiere cambios en el router global.
 
 ## Cómo agregar un producto futuro (ej: SIMA INSPECTIONS)
 
 1. Crear `src/sima-inspections/data/` con sus entidades.
-2. Crear `src/sima-inspections/pages/` con sus pantallas.
-3. Agregar una nueva sección en `NAV_SECTIONS` de `BackofficeLayout.jsx`.
+2. Crear `src/sima-inspections/pages/` con sus pantallas (incluyendo un `Overview.jsx`).
+3. Agregar el producto al sidebar en `BackofficeLayout.jsx`:
+   - Nuevo ítem en la sección "Productos"
+   - Nuevo Set equivalente a `SIMA_CHECK_PAGES` y array de tabs
 4. Registrar las páginas nuevas en `PAGES` de `App.jsx`.
+5. Agregar una product card en `Dashboard.jsx`.
