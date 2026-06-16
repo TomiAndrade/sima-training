@@ -32,21 +32,24 @@ export default function Evaluation({ employee, module: mod, questions, onFinish,
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 flex flex-col">
+    <div className="w-full max-w-lg bg-slate-900/90 backdrop-blur-sm border border-slate-700/60 rounded-2xl shadow-2xl overflow-hidden max-h-[92vh] flex flex-col">
       {/* Header */}
-      <div className="bg-slate-900 border-b border-slate-700 px-6 pt-6 pb-5">
+      <div className="px-6 pt-5 pb-4 border-b border-slate-700/50 flex-shrink-0">
         <div className="flex items-center justify-between mb-4">
           <div>
             <p className="text-slate-400 text-sm">{employee.name}</p>
-            <p className="text-red-500 font-semibold">{mod.name}</p>
+            <p className="text-red-500 font-semibold text-sm">{mod.name}</p>
           </div>
-          <button onClick={onBack} className="text-slate-500 text-sm hover:text-slate-300 touch-manipulation">Cancelar</button>
+          <button onClick={onBack} className="text-slate-500 text-sm hover:text-slate-300 touch-manipulation">
+            Cancelar
+          </button>
         </div>
-        <ProgressBar current={currentIndex + 1} total={questions.length} />
+        {/* answered=currentIndex: la barra avanza al pasar a la siguiente pregunta */}
+        <ProgressBar questionNum={currentIndex + 1} answered={currentIndex} total={questions.length} />
       </div>
 
       {/* Question */}
-      <div className="flex-1 px-6 pt-8 pb-4">
+      <div className="flex-1 overflow-y-auto px-6 pt-6 pb-4">
         <QuestionCard
           question={current}
           selectedAnswer={currentAnswer}
@@ -55,18 +58,13 @@ export default function Evaluation({ employee, module: mod, questions, onFinish,
       </div>
 
       {/* Footer */}
-      <div className="px-6 pb-8 pt-4 flex gap-4">
+      <div className="px-6 pb-6 pt-4 border-t border-slate-700/50 flex gap-3 flex-shrink-0">
         {currentIndex > 0 && (
           <Button variant="secondary" onClick={handlePrev} className="flex-shrink-0">
             ‹
           </Button>
         )}
-        <Button
-          variant="primary"
-          onClick={handleNext}
-          disabled={!currentAnswer}
-          fullWidth
-        >
+        <Button variant="primary" onClick={handleNext} disabled={!currentAnswer} fullWidth>
           {isLast ? 'Ver resultado' : 'Siguiente pregunta'}
         </Button>
       </div>

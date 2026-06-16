@@ -58,45 +58,46 @@ export default function App() {
     setStep(STEPS.employee)
   }
 
-  if (step === STEPS.employee) {
-    return (
-      <EmployeeSelection
-        onSelect={(emp) => { setEmployee(emp); setStep(STEPS.module) }}
-      />
-    )
-  }
-
-  if (step === STEPS.module) {
-    return (
-      <ModuleSelection
-        employee={employee}
-        assignments={assignments}
-        onSelect={startEvaluation}
-        onBack={() => setStep(STEPS.employee)}
-      />
-    )
-  }
-
-  if (step === STEPS.evaluation) {
-    return (
-      <Evaluation
-        employee={employee}
-        module={module}
-        questions={questions}
-        onFinish={finishEvaluation}
-        onBack={() => setStep(STEPS.module)}
-      />
-    )
-  }
-
   return (
-    <Results
-      employee={employee}
-      module={module}
-      result={result}
-      onRetry={retry}
-      onGoToModules={goToModules}
-      onHome={goHome}
-    />
+    // Para usar imagen de fondo: reemplazar el style con
+    // backgroundImage: "url('/bg-industrial.jpg')", backgroundSize: 'cover', backgroundPosition: 'center'
+    <div
+      className="fixed inset-0 flex items-center justify-center p-4 overflow-hidden"
+      style={{ background: 'linear-gradient(135deg, #0c1118 0%, #1a2a3a 55%, #0c1118 100%)' }}
+    >
+      <div className="absolute inset-0 bg-black/40" />
+      <div className="relative z-10 w-full flex items-center justify-center">
+        {step === STEPS.employee && (
+          <EmployeeSelection onSelect={(emp) => { setEmployee(emp); setStep(STEPS.module) }} />
+        )}
+        {step === STEPS.module && (
+          <ModuleSelection
+            employee={employee}
+            assignments={assignments}
+            onSelect={startEvaluation}
+            onBack={() => setStep(STEPS.employee)}
+          />
+        )}
+        {step === STEPS.evaluation && (
+          <Evaluation
+            employee={employee}
+            module={module}
+            questions={questions}
+            onFinish={finishEvaluation}
+            onBack={() => setStep(STEPS.module)}
+          />
+        )}
+        {step === STEPS.results && (
+          <Results
+            employee={employee}
+            module={module}
+            result={result}
+            onRetry={retry}
+            onGoToModules={goToModules}
+            onHome={goHome}
+          />
+        )}
+      </div>
+    </div>
   )
 }
