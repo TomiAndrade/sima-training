@@ -4,6 +4,7 @@ const NAV_ITEMS = [
   { id: 'users', label: 'Usuarios', icon: '👤' },
   { id: 'modules', label: 'Módulos', icon: '📋' },
   { id: 'questions', label: 'Preguntas', icon: '❓' },
+  { id: 'assignments', label: 'Asignaciones', icon: '📌' },
 ]
 
 export default function BackofficeLayout({ page, navigate, children }) {

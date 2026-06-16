@@ -5,6 +5,7 @@ import Companies from './pages/Companies'
 import Users from './pages/Users'
 import Modules from './pages/Modules'
 import Questions from './pages/Questions'
+import Assignments from './pages/Assignments'
 
 const PAGES = {
   dashboard: Dashboard,
@@ -12,6 +13,7 @@ const PAGES = {
   users: Users,
   modules: Modules,
   questions: Questions,
+  assignments: Assignments,
 }
 
 export default function App() {
