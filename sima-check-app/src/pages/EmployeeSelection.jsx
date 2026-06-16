@@ -46,7 +46,7 @@ export default function EmployeeSelection({ onSelect }) {
               type="text"
               inputMode="numeric"
               maxLength={8}
-              placeholder="Ej: 28541367"
+              placeholder="Solo números, sin puntos"
               value={dni}
               onChange={(e) => {
                 setDni(e.target.value.replace(/\D/g, ''))
