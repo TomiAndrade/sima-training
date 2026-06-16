@@ -1,9 +1,9 @@
 import StatCard from '../components/StatCard'
-import { companies } from '../data/companies'
-import { users } from '../data/users'
-import { modules } from '../data/modules'
-import { evaluations } from '../data/evaluations'
-import { assignments } from '../data/assignments'
+import { companies } from '../core/data/companies'
+import { users } from '../core/data/users'
+import { trainingModules as modules } from '../sima-check/data/training-modules'
+import { evaluations } from '../sima-check/data/evaluations'
+import { trainingAssignments as assignments } from '../sima-check/data/training-assignments'
 
 const moduleNames = ['SIMA Básico', 'SIMA Intermedio', 'SIMA Avanzado', 'Reglas de Oro Industria Petrolera']
 const shortNames = ['Básico', 'Intermedio', 'Avanzado', 'Reglas de Oro']

@@ -1,5 +1,5 @@
 // status: 'pending' | 'completed' | 'expired'
-export const assignments = [
+export const trainingAssignments = [
   { id: 1, employeeId: 1, moduleId: 1, assignedBy: 3, assignedAt: '2026-06-10', status: 'completed' },
   { id: 2, employeeId: 1, moduleId: 2, assignedBy: 3, assignedAt: '2026-06-10', status: 'completed' },
   { id: 3, employeeId: 1, moduleId: 3, assignedBy: 3, assignedAt: '2026-06-12', status: 'pending' },

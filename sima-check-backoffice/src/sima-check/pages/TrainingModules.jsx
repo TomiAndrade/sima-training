@@ -1,10 +1,10 @@
 import { useState } from 'react'
-import Table from '../components/Table'
-import Button from '../components/Button'
-import Modal from '../components/Modal'
-import { modules as initialModules } from '../data/modules'
+import Table from '../../components/Table'
+import Button from '../../components/Button'
+import Modal from '../../components/Modal'
+import { trainingModules as initialModules } from '../data/training-modules'
 
-export default function Modules() {
+export default function TrainingModules() {
   const [modules, setModules] = useState(initialModules)
   const [modal, setModal] = useState(null)
   const [form, setForm] = useState({ name: '', active: true })
@@ -55,7 +55,7 @@ export default function Modules() {
     <div className="space-y-5">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-white font-bold text-xl">Módulos</h2>
+          <h2 className="text-white font-bold text-xl">Capacitaciones</h2>
           <p className="text-slate-400 text-sm">{modules.length} módulos · {modules.filter((m) => m.active).length} activos</p>
         </div>
         <Button onClick={openCreate}>+ Nuevo módulo</Button>

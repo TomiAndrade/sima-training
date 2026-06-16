@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import Table from '../components/Table'
-import Button from '../components/Button'
-import Modal from '../components/Modal'
+import Table from '../../components/Table'
+import Button from '../../components/Button'
+import Modal from '../../components/Modal'
 import { users as initialUsers } from '../data/users'
 import { companies } from '../data/companies'
 

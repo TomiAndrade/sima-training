@@ -1,8 +1,8 @@
 import { useState } from 'react'
-import Table from '../components/Table'
-import Button from '../components/Button'
-import Modal from '../components/Modal'
-import { modules } from '../data/modules'
+import Table from '../../components/Table'
+import Button from '../../components/Button'
+import Modal from '../../components/Modal'
+import { trainingModules as modules } from '../data/training-modules'
 
 const EMPTY_FORM = { moduleId: 1, type: 'truefalse', statement: '', options: ['', '', '', ''], correctAnswer: '' }
 

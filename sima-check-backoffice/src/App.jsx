@@ -1,19 +1,19 @@
 import useNavigation from './hooks/useNavigation'
 import BackofficeLayout from './pages/BackofficeLayout'
 import Dashboard from './pages/Dashboard'
-import Companies from './pages/Companies'
-import Users from './pages/Users'
-import Modules from './pages/Modules'
-import Questions from './pages/Questions'
-import Assignments from './pages/Assignments'
+import Companies from './core/pages/Companies'
+import Users from './core/pages/Users'
+import TrainingModules from './sima-check/pages/TrainingModules'
+import Questions from './sima-check/pages/Questions'
+import TrainingAssignments from './sima-check/pages/TrainingAssignments'
 
 const PAGES = {
   dashboard: Dashboard,
   companies: Companies,
   users: Users,
-  modules: Modules,
+  'training-modules': TrainingModules,
   questions: Questions,
-  assignments: Assignments,
+  'training-assignments': TrainingAssignments,
 }
 
 export default function App() {

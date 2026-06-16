@@ -1,12 +1,12 @@
 import { useState } from 'react'
-import Table from '../components/Table'
-import Button from '../components/Button'
-import Modal from '../components/Modal'
-import { assignments as initialAssignments } from '../data/assignments'
-import { employees } from '../data/employees'
-import { modules } from '../data/modules'
-import { companies } from '../data/companies'
-import { users } from '../data/users'
+import Table from '../../components/Table'
+import Button from '../../components/Button'
+import Modal from '../../components/Modal'
+import { trainingAssignments as initialAssignments } from '../data/training-assignments'
+import { employees } from '../../core/data/employees'
+import { trainingModules as modules } from '../data/training-modules'
+import { companies } from '../../core/data/companies'
+import { users } from '../../core/data/users'
 
 const statusBadge = {
   pending: { label: 'Pendiente', cls: 'bg-amber-500/20 text-amber-400' },
@@ -14,7 +14,7 @@ const statusBadge = {
   expired: { label: 'Vencida', cls: 'bg-slate-500/20 text-slate-400' },
 }
 
-export default function Assignments() {
+export default function TrainingAssignments() {
   const [assignments, setAssignments] = useState(initialAssignments)
   const [modal, setModal] = useState(null)
   const [form, setForm] = useState({ employeeId: employees[0]?.id ?? 1, moduleId: modules[0]?.id ?? 1 })

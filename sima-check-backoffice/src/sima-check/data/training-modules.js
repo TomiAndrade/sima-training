@@ -1,4 +1,4 @@
-export const modules = [
+export const trainingModules = [
   {
     id: 1,
     name: 'SIMA Básico',
