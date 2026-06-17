@@ -1,6 +1,6 @@
 // status: 'pending' | 'completed' | 'expired'
 export const assignments = [
-  { id: 1, employeeId: 1, moduleId: 1, status: 'completed' },
+  { id: 1, employeeId: 1, moduleId: 1, status: 'pending' },
   { id: 2, employeeId: 1, moduleId: 2, status: 'completed' },
   { id: 3, employeeId: 1, moduleId: 3, status: 'pending' },
   { id: 4, employeeId: 2, moduleId: 1, status: 'completed' },
@@ -25,4 +25,6 @@ export const assignments = [
   { id: 23, employeeId: 11, moduleId: 1, status: 'pending' },
   { id: 24, employeeId: 12, moduleId: 4, status: 'pending' },
   { id: 25, employeeId: 13, moduleId: 2, status: 'pending' },
+  { id: 26, employeeId: 13, moduleId: 1, status: 'pending' },
+  { id: 27, employeeId: 13, moduleId: 3, status: 'pending' },
 ]

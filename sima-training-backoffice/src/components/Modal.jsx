@@ -11,20 +11,20 @@ export default function Modal({ open, onClose, title, children, footer }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/75" onClick={onClose} />
-      <div className="relative z-10 bg-zinc-900 border border-zinc-700 rounded shadow-2xl w-full max-w-lg">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800">
-          <h3 className="text-white font-semibold text-xs uppercase tracking-widest">{title}</h3>
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="relative z-10 bg-white border border-slate-200 rounded shadow-xl w-full max-w-lg flex flex-col max-h-[90vh]">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 flex-shrink-0">
+          <h3 className="text-slate-900 font-semibold text-xs uppercase tracking-widest">{title}</h3>
           <button
             onClick={onClose}
-            className="text-zinc-500 hover:text-white transition-colors text-sm leading-none w-6 h-6 flex items-center justify-center rounded hover:bg-zinc-800"
+            className="text-slate-400 hover:text-slate-700 transition-colors text-sm leading-none w-6 h-6 flex items-center justify-center rounded hover:bg-slate-100"
           >
             ✕
           </button>
         </div>
-        <div className="p-5">{children}</div>
+        <div className="p-5 overflow-y-auto">{children}</div>
         {footer && (
-          <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-zinc-800">
+          <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-slate-200 flex-shrink-0">
             {footer}
           </div>
         )}

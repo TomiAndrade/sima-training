@@ -65,10 +65,10 @@ export default function App() {
     // backgroundImage: "url('/bg-industrial.jpg')", backgroundSize: 'cover', backgroundPosition: 'center'
     <div
       className="fixed inset-0 flex items-center justify-center p-4 overflow-hidden"
-      style={{ background: 'linear-gradient(135deg, #0c1118 0%, #1a2a3a 55%, #0c1118 100%)' }}
+      style={{ backgroundImage: "url('/SIMACHECK-FONDO.png')", backgroundSize: 'cover', backgroundPosition: 'center' }}
     >
-      <div className="absolute inset-0 bg-black/40" />
-      <div className="relative z-10 w-full flex items-center justify-center">
+      <div className="relative z-10 w-full flex flex-col items-center justify-center gap-5">
+        <img src="/logo.png" alt="SIMA CHECK" className="h-16 w-auto object-contain drop-shadow-md" />
         {step === STEPS.employee && (
           <EmployeeSelection onSelect={(emp) => { setEmployee(emp); setStep(STEPS.module) }} />
         )}

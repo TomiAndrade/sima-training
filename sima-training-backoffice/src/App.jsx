@@ -5,7 +5,6 @@ import Companies from './core/pages/Companies'
 import Users from './core/pages/Users'
 import Overview from './sima-check/pages/Overview'
 import TrainingModules from './sima-check/pages/TrainingModules'
-import Questions from './sima-check/pages/Questions'
 import TrainingAssignments from './sima-check/pages/TrainingAssignments'
 
 const PAGES = {
@@ -14,7 +13,6 @@ const PAGES = {
   users: Users,
   'sima-check-overview': Overview,
   'training-modules': TrainingModules,
-  questions: Questions,
   'training-assignments': TrainingAssignments,
 }
 

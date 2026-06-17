@@ -32,15 +32,15 @@ export default function Evaluation({ employee, module: mod, questions, onFinish,
   }
 
   return (
-    <div className="w-full max-w-lg bg-slate-900/90 backdrop-blur-sm border border-slate-700/60 rounded-2xl shadow-2xl overflow-hidden max-h-[92vh] flex flex-col">
+    <div className="w-full max-w-lg bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden max-h-[92vh] flex flex-col">
       {/* Header */}
-      <div className="px-6 pt-5 pb-4 border-b border-slate-700/50 flex-shrink-0">
+      <div className="px-6 pt-5 pb-4 border-b border-slate-200 flex-shrink-0">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <p className="text-slate-400 text-sm">{employee.name}</p>
-            <p className="text-red-500 font-semibold text-sm">{mod.name}</p>
+            <p className="text-slate-500 text-sm">{employee.name}</p>
+            <p className="text-red-600 font-semibold text-sm">{mod.name}</p>
           </div>
-          <button onClick={onBack} className="text-slate-500 text-sm hover:text-slate-300 touch-manipulation">
+          <button onClick={onBack} className="text-slate-400 text-sm hover:text-slate-700 touch-manipulation">
             Cancelar
           </button>
         </div>
@@ -58,7 +58,7 @@ export default function Evaluation({ employee, module: mod, questions, onFinish,
       </div>
 
       {/* Footer */}
-      <div className="px-6 pb-6 pt-4 border-t border-slate-700/50 flex gap-3 flex-shrink-0">
+      <div className="px-6 pb-6 pt-4 border-t border-slate-200 flex gap-3 flex-shrink-0">
         {currentIndex > 0 && (
           <Button variant="secondary" onClick={handlePrev} className="flex-shrink-0">
             ‹

@@ -29,8 +29,8 @@ function StatusDot({ ok }) {
 function SectionHeader({ children }) {
   return (
     <div className="flex items-center gap-3 mb-3">
-      <span className="text-zinc-500 text-[10px] font-semibold uppercase tracking-widest">{children}</span>
-      <div className="flex-1 h-px bg-zinc-800" />
+      <span className="text-slate-500 text-[10px] font-semibold uppercase tracking-widest">{children}</span>
+      <div className="flex-1 h-px bg-slate-200" />
     </div>
   )
 }
@@ -55,10 +55,10 @@ export default function Dashboard({ navigate }) {
             { label: 'Asignaciones Pendientes', value: pendingAssignments },
             { label: 'Capacitaciones Completadas', value: completedAssignments },
           ].map((kpi) => (
-            <div key={kpi.label} className="bg-zinc-900 border border-zinc-800 rounded p-4 relative overflow-hidden">
-              <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-red-900/60 via-zinc-700 to-transparent" />
-              <div className="text-zinc-500 text-[10px] font-semibold uppercase tracking-widest mb-2">{kpi.label}</div>
-              <div className="text-3xl font-bold text-white font-mono leading-none">{kpi.value}</div>
+            <div key={kpi.label} className="bg-white border border-slate-200 rounded p-4 relative overflow-hidden shadow-sm">
+              <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-red-600/40 via-slate-300 to-transparent" />
+              <div className="text-slate-500 text-[10px] font-semibold uppercase tracking-widest mb-2">{kpi.label}</div>
+              <div className="text-3xl font-bold text-slate-900 font-mono leading-none">{kpi.value}</div>
             </div>
           ))}
         </div>
@@ -70,12 +70,12 @@ export default function Dashboard({ navigate }) {
         {/* Actividad reciente */}
         <div className="xl:col-span-2">
           <SectionHeader>Actividad Reciente</SectionHeader>
-          <div className="border border-zinc-800 rounded overflow-hidden">
+          <div className="bg-white border border-slate-200 rounded overflow-hidden shadow-sm">
             <table className="w-full text-xs">
               <thead>
-                <tr className="bg-zinc-900 border-b border-zinc-800">
+                <tr className="bg-slate-50 border-b border-slate-200">
                   {['Fecha', 'Usuario', 'Acción', 'Detalle'].map((h) => (
-                    <th key={h} className="text-left px-4 py-2.5 text-zinc-500 font-semibold uppercase tracking-widest text-[10px]">
+                    <th key={h} className="text-left px-4 py-2.5 text-slate-500 font-semibold uppercase tracking-widest text-[10px]">
                       {h}
                     </th>
                   ))}
@@ -83,13 +83,13 @@ export default function Dashboard({ navigate }) {
               </thead>
               <tbody>
                 {RECENT_ACTIVITY.map((ev, i) => (
-                  <tr key={i} className="border-b border-zinc-800/50 hover:bg-zinc-800/20 transition-colors">
-                    <td className="px-4 py-2.5 font-mono text-zinc-500 whitespace-nowrap">
-                      {ev.date} <span className="text-zinc-700">{ev.time}</span>
+                  <tr key={i} className="border-b border-slate-200/60 hover:bg-slate-50 transition-colors">
+                    <td className="px-4 py-2.5 font-mono text-slate-500 whitespace-nowrap">
+                      {ev.date} <span className="text-slate-300">{ev.time}</span>
                     </td>
-                    <td className="px-4 py-2.5 text-zinc-300 whitespace-nowrap">{ev.user}</td>
-                    <td className="px-4 py-2.5 text-zinc-400">{ev.action}</td>
-                    <td className="px-4 py-2.5 text-zinc-600">{ev.detail}</td>
+                    <td className="px-4 py-2.5 text-slate-700 whitespace-nowrap">{ev.user}</td>
+                    <td className="px-4 py-2.5 text-slate-600">{ev.action}</td>
+                    <td className="px-4 py-2.5 text-slate-400">{ev.detail}</td>
                   </tr>
                 ))}
               </tbody>
@@ -100,14 +100,14 @@ export default function Dashboard({ navigate }) {
         {/* Estado del sistema */}
         <div>
           <SectionHeader>Estado del Sistema</SectionHeader>
-          <div className="bg-zinc-900 border border-zinc-800 rounded divide-y divide-zinc-800">
+          <div className="bg-white border border-slate-200 rounded divide-y divide-slate-200 shadow-sm">
             {SYSTEM_STATUS.map((s) => (
               <div key={s.label} className="flex items-center justify-between px-4 py-3">
                 <div className="flex items-center gap-2.5">
                   <StatusDot ok={s.ok} />
-                  <span className="text-zinc-400 text-xs">{s.label}</span>
+                  <span className="text-slate-600 text-xs">{s.label}</span>
                 </div>
-                <span className={`text-[10px] font-mono font-semibold uppercase tracking-wider ${s.ok ? 'text-emerald-500' : 'text-amber-500'}`}>
+                <span className={`text-[10px] font-mono font-semibold uppercase tracking-wider ${s.ok ? 'text-emerald-600' : 'text-amber-600'}`}>
                   {s.status}
                 </span>
               </div>
@@ -122,34 +122,34 @@ export default function Dashboard({ navigate }) {
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
 
           {/* SIMA CHECK — activo */}
-          <div className="bg-zinc-900 border border-zinc-800 rounded p-5 flex flex-col gap-4 relative overflow-hidden">
+          <div className="bg-white border border-slate-200 rounded p-5 flex flex-col gap-4 relative overflow-hidden shadow-sm">
             <div className="absolute top-0 left-0 right-0 h-px bg-red-600/60" />
             <div className="flex items-start justify-between">
               <div>
                 <div className="flex items-center gap-2 mb-1">
-                  <span className="text-white font-semibold text-sm tracking-wide">SIMA CHECK</span>
-                  <span className="px-1.5 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/30 text-emerald-500 text-[10px] font-mono font-semibold uppercase tracking-wider">
+                  <span className="text-slate-900 font-semibold text-sm tracking-wide">SIMA CHECK</span>
+                  <span className="px-1.5 py-0.5 rounded bg-emerald-50 border border-emerald-200 text-emerald-600 text-[10px] font-mono font-semibold uppercase tracking-wider">
                     Activo
                   </span>
                 </div>
-                <p className="text-zinc-500 text-xs leading-relaxed">Capacitaciones y evaluaciones industriales</p>
+                <p className="text-slate-500 text-xs leading-relaxed">Capacitaciones y evaluaciones industriales</p>
               </div>
-              <div className="w-8 h-8 bg-red-600/10 border border-red-900/50 rounded flex items-center justify-center flex-shrink-0">
-                <span className="text-red-500 font-bold text-[11px] font-mono">SC</span>
+              <div className="w-8 h-8 bg-red-50 border border-red-200 rounded flex items-center justify-center flex-shrink-0">
+                <span className="text-red-600 font-bold text-[11px] font-mono">SC</span>
               </div>
             </div>
             <div className="flex gap-4">
               <div>
-                <div className="text-zinc-600 text-[10px] uppercase tracking-widest">Módulos</div>
-                <div className="text-white font-mono font-bold text-lg">{activeModules}</div>
+                <div className="text-slate-400 text-[10px] uppercase tracking-widest">Módulos</div>
+                <div className="text-slate-900 font-mono font-bold text-lg">{activeModules}</div>
               </div>
               <div>
-                <div className="text-zinc-600 text-[10px] uppercase tracking-widest">Pendientes</div>
-                <div className="text-white font-mono font-bold text-lg">{pendingAssignments}</div>
+                <div className="text-slate-400 text-[10px] uppercase tracking-widest">Pendientes</div>
+                <div className="text-slate-900 font-mono font-bold text-lg">{pendingAssignments}</div>
               </div>
               <div>
-                <div className="text-zinc-600 text-[10px] uppercase tracking-widest">Completadas</div>
-                <div className="text-white font-mono font-bold text-lg">{completedAssignments}</div>
+                <div className="text-slate-400 text-[10px] uppercase tracking-widest">Completadas</div>
+                <div className="text-slate-900 font-mono font-bold text-lg">{completedAssignments}</div>
               </div>
             </div>
             <button
@@ -160,29 +160,29 @@ export default function Dashboard({ navigate }) {
             </button>
           </div>
 
-          {/* SIMA INSPECTIONS — roadmap */}
+          {/* SIMA INSPECTIONS + SIMA AUDITS — roadmap */}
           {[
             { code: 'SI', name: 'SIMA INSPECTIONS', desc: 'Gestión de inspecciones en campo', eta: 'Q3 2026' },
             { code: 'SA', name: 'SIMA AUDITS', desc: 'Auditorías de seguridad y calidad', eta: 'Q4 2026' },
           ].map((prod) => (
-            <div key={prod.code} className="bg-zinc-900/50 border border-zinc-800/60 rounded p-5 flex flex-col gap-4 opacity-60">
+            <div key={prod.code} className="bg-slate-50 border border-slate-200 rounded p-5 flex flex-col gap-4 opacity-60">
               <div className="flex items-start justify-between">
                 <div>
                   <div className="flex items-center gap-2 mb-1">
-                    <span className="text-zinc-400 font-semibold text-sm tracking-wide">{prod.name}</span>
-                    <span className="px-1.5 py-0.5 rounded bg-zinc-800 border border-zinc-700 text-zinc-500 text-[10px] font-mono font-semibold uppercase tracking-wider">
+                    <span className="text-slate-600 font-semibold text-sm tracking-wide">{prod.name}</span>
+                    <span className="px-1.5 py-0.5 rounded bg-slate-100 border border-slate-300 text-slate-500 text-[10px] font-mono font-semibold uppercase tracking-wider">
                       Roadmap
                     </span>
                   </div>
-                  <p className="text-zinc-600 text-xs leading-relaxed">{prod.desc}</p>
+                  <p className="text-slate-400 text-xs leading-relaxed">{prod.desc}</p>
                 </div>
-                <div className="w-8 h-8 bg-zinc-800 border border-zinc-700 rounded flex items-center justify-center flex-shrink-0">
-                  <span className="text-zinc-600 font-bold text-[11px] font-mono">{prod.code}</span>
+                <div className="w-8 h-8 bg-slate-100 border border-slate-200 rounded flex items-center justify-center flex-shrink-0">
+                  <span className="text-slate-400 font-bold text-[11px] font-mono">{prod.code}</span>
                 </div>
               </div>
               <div className="mt-auto">
-                <div className="text-zinc-600 text-[10px] uppercase tracking-widest">Disponibilidad estimada</div>
-                <div className="text-zinc-400 font-mono font-semibold text-sm mt-0.5">{prod.eta}</div>
+                <div className="text-slate-400 text-[10px] uppercase tracking-widest">Disponibilidad estimada</div>
+                <div className="text-slate-600 font-mono font-semibold text-sm mt-0.5">{prod.eta}</div>
               </div>
             </div>
           ))}

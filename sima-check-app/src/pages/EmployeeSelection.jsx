@@ -24,20 +24,11 @@ export default function EmployeeSelection({ onSelect }) {
   }
 
   return (
-    <div className="w-full max-w-sm bg-slate-900/90 backdrop-blur-sm border border-slate-700/60 rounded-2xl shadow-2xl p-8">
-      {/* Logo */}
-      <div className="text-center mb-8">
-        <div className="w-16 h-16 bg-red-600 rounded-2xl flex items-center justify-center font-black text-white text-2xl mx-auto mb-4">
-          S
-        </div>
-        <h1 className="text-white text-3xl font-black tracking-tight">SIMA CHECK</h1>
-        <p className="text-slate-400 text-base mt-1">Sistema de Evaluación Industrial</p>
-      </div>
-
+    <div className="w-full max-w-sm bg-white border border-slate-200 rounded-2xl shadow-2xl p-8">
       {/* Form */}
       <div className="space-y-5">
         <div>
-          <label className="block text-slate-300 text-sm font-semibold mb-2 text-center">
+          <label className="block text-slate-700 text-lg font-bold mb-2 text-center">
             Ingrese su DNI
           </label>
           <input
@@ -51,13 +42,13 @@ export default function EmployeeSelection({ onSelect }) {
               setError('')
             }}
             onKeyDown={handleKeyDown}
-            className="w-full bg-slate-800 border border-slate-600 rounded-xl px-4 py-4 text-white text-2xl text-center tracking-widest font-mono focus:outline-none focus:border-red-600 transition-colors placeholder:text-slate-600 placeholder:text-base placeholder:tracking-normal"
+            className="w-full bg-slate-100 border border-slate-300 rounded-xl px-4 py-4 text-slate-900 text-2xl text-center tracking-widest font-mono focus:outline-none focus:border-red-600 transition-colors placeholder:text-slate-400 placeholder:text-base placeholder:tracking-normal"
           />
         </div>
 
         {error && (
-          <div className="bg-red-600/10 border border-red-600/30 rounded-xl px-4 py-3">
-            <p className="text-red-400 text-sm text-center leading-snug">{error}</p>
+          <div className="bg-red-50 border border-red-300 rounded-xl px-4 py-3">
+            <p className="text-red-600 text-sm text-center leading-snug">{error}</p>
           </div>
         )}
 
@@ -65,11 +56,11 @@ export default function EmployeeSelection({ onSelect }) {
           onClick={handleSubmit}
           className="w-full bg-red-600 hover:bg-red-700 active:bg-red-800 text-white font-bold text-lg py-4 rounded-xl transition-colors touch-manipulation"
         >
-          Ingresar
+          INGRESAR
         </button>
       </div>
 
-      <p className="text-center text-slate-600 text-xs mt-6">Ingeniería Sima · Oil &amp; Gas</p>
+      <p className="text-center text-slate-400 text-xs mt-6">Ingeniería Sima · Oil &amp; Gas</p>
     </div>
   )
 }

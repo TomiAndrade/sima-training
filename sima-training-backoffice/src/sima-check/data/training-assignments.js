@@ -1,6 +1,6 @@
 // status: 'pending' | 'completed' | 'expired'
 export const trainingAssignments = [
-  { id: 1, employeeId: 1, moduleId: 1, assignedBy: 3, assignedAt: '2026-06-10', status: 'completed' },
+  { id: 1, employeeId: 1, moduleId: 1, assignedBy: 3, assignedAt: '2026-06-10', status: 'pending' },
   { id: 2, employeeId: 1, moduleId: 2, assignedBy: 3, assignedAt: '2026-06-10', status: 'completed' },
   { id: 3, employeeId: 1, moduleId: 3, assignedBy: 3, assignedAt: '2026-06-12', status: 'pending' },
   { id: 4, employeeId: 2, moduleId: 1, assignedBy: 4, assignedAt: '2026-06-11', status: 'completed' },
@@ -25,4 +25,6 @@ export const trainingAssignments = [
   { id: 23, employeeId: 11, moduleId: 1, assignedBy: 4, assignedAt: '2026-06-12', status: 'pending' },
   { id: 24, employeeId: 12, moduleId: 4, assignedBy: 3, assignedAt: '2026-06-13', status: 'pending' },
   { id: 25, employeeId: 13, moduleId: 2, assignedBy: 5, assignedAt: '2026-06-15', status: 'pending' },
+  { id: 26, employeeId: 13, moduleId: 1, assignedBy: 1, assignedAt: '2026-06-17', status: 'pending' },
+  { id: 27, employeeId: 13, moduleId: 3, assignedBy: 1, assignedAt: '2026-06-17', status: 'pending' },
 ]

@@ -1,16 +1,51 @@
-# React + Vite
+# SIMA CHECK — App de evaluación
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+App tablet para capacitaciones y evaluaciones industriales. Parte del MVP de la plataforma **SIMA TRAINING** de Ingeniería Sima.
 
-Currently, two official plugins are available:
+## Stack
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- Vite + React
+- Tailwind CSS v3
+- Sin router, sin backend, sin base de datos
 
-## React Compiler
+## Correr en dev
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+```bash
+npm install
+npm run dev   # → http://localhost:5174
+```
 
-## Expanding the ESLint configuration
+## Estructura
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+```
+src/
+├── data/          employees.js · modules.js · assignments.js
+├── components/    Button · ProgressBar · QuestionCard
+├── utils/         evaluation.js (pickRandomQuestions, calculateScore)
+└── pages/         EmployeeSelection · ModuleSelection · Evaluation · Results
+```
+
+## Flujo de la app
+
+1. **Ingreso por DNI** — el empleado ingresa su DNI para identificarse
+2. **Capacitaciones pendientes** — lista de módulos con asignación `status: 'pending'`
+3. **Evaluación** — 3 preguntas aleatorias del módulo seleccionado
+4. **Resultado** — APROBADO (≥70%) o DESAPROBADO (<70%)
+
+Si el empleado aprueba, la asignación pasa a `completed`. Si desaprueba, queda `pending` y puede reintentar.
+
+## Tipos de pregunta
+
+| Tipo | Descripción | Renderizado |
+|---|---|---|
+| `truefalse` | Verdadero / Falso | 2 botones (verde/rojo) |
+| `multiple` | Opción múltiple con texto | Lista vertical, selección resaltada en oscuro |
+| `image-options` | Opciones como imágenes | Grid 2×2 de imágenes, selección con borde rojo |
+
+Cada pregunta puede tener un campo `image` opcional (ruta en `public/`) que muestra una imagen de contexto encima de las opciones.
+
+## Imágenes
+
+- Fondo de pantalla: `public/SIMACHECK-FONDO.png`
+- Logo: `public/logo.png`
+- Imágenes de preguntas/opciones: recomendado en `public/images/`

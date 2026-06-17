@@ -1,6 +1,8 @@
 export function pickRandomQuestions(questions, n = 3) {
-  const shuffled = [...questions].sort(() => Math.random() - 0.5)
-  return shuffled.slice(0, Math.min(n, shuffled.length))
+  const pinned = questions.filter((q) => q.pinned)
+  const rest = questions.filter((q) => !q.pinned)
+  const shuffled = [...rest].sort(() => Math.random() - 0.5)
+  return [...pinned, ...shuffled].slice(0, Math.min(n, questions.length))
 }
 
 export function calculateScore(answers, questions) {

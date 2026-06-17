@@ -8,8 +8,8 @@ import { companies } from '../data/companies'
 const ROLES = ['administrador', 'coordinador']
 
 const roleBadge = {
-  administrador: 'bg-red-600/20 text-red-400',
-  coordinador: 'bg-blue-500/20 text-blue-400',
+  administrador: 'bg-red-50 text-red-600',
+  coordinador: 'bg-blue-50 text-blue-600',
 }
 
 export default function Users() {
@@ -48,14 +48,14 @@ export default function Users() {
         <span className={`px-2.5 py-1 rounded-full text-xs font-semibold capitalize ${roleBadge[val]}`}>{val}</span>
       ),
     },
-    { key: 'companyId', label: 'Empresa', render: (id) => <span className="text-slate-300">{getCompanyName(id)}</span> },
+    { key: 'companyId', label: 'Empresa', render: (id) => <span className="text-slate-700">{getCompanyName(id)}</span> },
   ]
 
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-white font-bold text-xl">Usuarios</h2>
+          <h2 className="text-slate-900 font-bold text-xl">Usuarios</h2>
           <p className="text-slate-400 text-sm">{users.length} usuarios registrados</p>
         </div>
         <Button onClick={openCreate}>+ Nuevo usuario</Button>
@@ -84,18 +84,18 @@ export default function Users() {
       >
         <div className="space-y-4">
           <div>
-            <label className="block text-slate-300 text-sm font-medium mb-1">Nombre</label>
+            <label className="block text-slate-700 text-sm font-medium mb-1">Nombre</label>
             <input
-              className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-red-600"
+              className="w-full bg-white border border-slate-300 rounded px-3 py-2 text-slate-900 text-sm focus:outline-none focus:border-red-600"
               value={form.name}
               onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
               placeholder="Nombre completo"
             />
           </div>
           <div>
-            <label className="block text-slate-300 text-sm font-medium mb-1">Rol</label>
+            <label className="block text-slate-700 text-sm font-medium mb-1">Rol</label>
             <select
-              className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-red-600"
+              className="w-full bg-white border border-slate-300 rounded px-3 py-2 text-slate-900 text-sm focus:outline-none focus:border-red-600"
               value={form.role}
               onChange={(e) => setForm((f) => ({ ...f, role: e.target.value }))}
             >
@@ -103,9 +103,9 @@ export default function Users() {
             </select>
           </div>
           <div>
-            <label className="block text-slate-300 text-sm font-medium mb-1">Empresa</label>
+            <label className="block text-slate-700 text-sm font-medium mb-1">Empresa</label>
             <select
-              className="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-white text-sm focus:outline-none focus:border-red-600"
+              className="w-full bg-white border border-slate-300 rounded px-3 py-2 text-slate-900 text-sm focus:outline-none focus:border-red-600"
               value={form.companyId}
               onChange={(e) => setForm((f) => ({ ...f, companyId: Number(e.target.value) }))}
             >

@@ -1,8 +1,8 @@
 const variants = {
   primary: 'bg-red-600 hover:bg-red-700 text-white font-medium border border-red-600',
-  secondary: 'bg-transparent hover:bg-zinc-800 text-zinc-300 hover:text-zinc-100 font-medium border border-zinc-700',
-  danger: 'bg-transparent hover:bg-red-950/50 text-red-500 font-medium border border-red-900/60',
-  ghost: 'bg-transparent hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 font-medium border border-transparent',
+  secondary: 'bg-transparent hover:bg-slate-100 text-slate-700 hover:text-slate-900 font-medium border border-slate-300',
+  danger: 'bg-transparent hover:bg-red-50 text-red-600 font-medium border border-red-300',
+  ghost: 'bg-transparent hover:bg-slate-100 text-slate-600 hover:text-slate-900 font-medium border border-transparent',
 }
 
 const sizes = {

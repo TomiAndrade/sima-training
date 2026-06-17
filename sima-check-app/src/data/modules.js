@@ -15,6 +15,7 @@ export const modules = [
       { id: 108, type: 'truefalse', statement: 'Las salidas de emergencia deben mantenerse despejadas en todo momento.', correctAnswer: 'Verdadero' },
       { id: 109, type: 'truefalse', statement: 'El uso del celular personal está permitido en zonas de proceso sin restricciones.', correctAnswer: 'Falso' },
       { id: 110, type: 'multiple', statement: '¿Cada cuánto tiempo se debe realizar la revisión del equipo de trabajo?', options: ['Una vez al año', 'Solo si se ve dañado', 'Antes de cada uso', 'Mensualmente'], correctAnswer: 'Antes de cada uso' },
+      { id: 111, type: 'image-options', statement: '¿En qué tacho deben depositarse los residuos biodegradables?', options: ['/tacho-amarillo.png', '/tacho-verde.png', '/tacho-negro.png'], correctAnswer: '/tacho-verde.png', pinned: true },
     ],
   },
   {

@@ -22,7 +22,7 @@ function ApprovalChart() {
     <div className="flex items-end justify-around gap-4 pt-4" style={{ height: chartH + 40 }}>
       {stats.map((s) => {
         const barH = Math.round((s.pct / 100) * chartH)
-        const color = s.pct >= 70 ? '#10b981' : '#f59e0b'
+        const color = s.pct >= 70 ? '#059669' : '#d97706'
         return (
           <div key={s.name} className="flex flex-col items-center gap-2 flex-1">
             <span className="text-xs font-semibold font-mono" style={{ color }}>{s.pct}%</span>
@@ -30,7 +30,7 @@ function ApprovalChart() {
               className="w-full rounded-t transition-all duration-700"
               style={{ height: barH, backgroundColor: color, minHeight: 4 }}
             />
-            <span className="text-zinc-500 text-[10px] text-center leading-tight uppercase tracking-wide">{s.name}</span>
+            <span className="text-slate-400 text-[10px] text-center leading-tight uppercase tracking-wide">{s.name}</span>
           </div>
         )
       })}
@@ -41,8 +41,8 @@ function ApprovalChart() {
 function SectionHeader({ children }) {
   return (
     <div className="flex items-center gap-3 mb-3">
-      <span className="text-zinc-500 text-[10px] font-semibold uppercase tracking-widest">{children}</span>
-      <div className="flex-1 h-px bg-zinc-800" />
+      <span className="text-slate-500 text-[10px] font-semibold uppercase tracking-widest">{children}</span>
+      <div className="flex-1 h-px bg-slate-200" />
     </div>
   )
 }
@@ -79,8 +79,8 @@ export default function Overview() {
         {/* Chart */}
         <div>
           <SectionHeader>Aprobación por Módulo</SectionHeader>
-          <div className="bg-zinc-900 border border-zinc-800 rounded p-5">
-            <p className="text-zinc-600 text-[10px] font-mono uppercase tracking-widest mb-4">
+          <div className="bg-white border border-slate-200 rounded p-5 shadow-sm">
+            <p className="text-slate-400 text-[10px] font-mono uppercase tracking-widest mb-4">
               % evaluaciones aprobadas por capacitación
             </p>
             <ApprovalChart />
@@ -90,22 +90,22 @@ export default function Overview() {
         {/* Recent evaluations */}
         <div>
           <SectionHeader>Últimas Evaluaciones</SectionHeader>
-          <div className="bg-zinc-900 border border-zinc-800 rounded overflow-hidden">
+          <div className="bg-white border border-slate-200 rounded overflow-hidden shadow-sm">
             {recent.map((ev, i) => (
               <div
                 key={ev.id}
-                className={`flex items-center justify-between px-4 py-3 ${i < recent.length - 1 ? 'border-b border-zinc-800/50' : ''} hover:bg-zinc-800/20 transition-colors`}
+                className={`flex items-center justify-between px-4 py-3 ${i < recent.length - 1 ? 'border-b border-slate-200/60' : ''} hover:bg-slate-50 transition-colors`}
               >
                 <div className="min-w-0">
-                  <p className="text-zinc-200 text-sm font-medium truncate">{ev.employeeName}</p>
-                  <p className="text-zinc-600 text-[10px] font-mono uppercase tracking-wide truncate">
+                  <p className="text-slate-800 text-sm font-medium truncate">{ev.employeeName}</p>
+                  <p className="text-slate-400 text-[10px] font-mono uppercase tracking-wide truncate">
                     {ev.moduleName} · {ev.date}
                   </p>
                 </div>
                 <span className={`ml-3 flex-shrink-0 px-2 py-1 rounded text-[11px] font-bold font-mono border ${
                   ev.approved
-                    ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/30'
-                    : 'bg-red-500/10 text-red-500 border-red-500/30'
+                    ? 'bg-emerald-50 text-emerald-600 border-emerald-200'
+                    : 'bg-red-50 text-red-600 border-red-200'
                 }`}>
                   {ev.score}%
                 </span>

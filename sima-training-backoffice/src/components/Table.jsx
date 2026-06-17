@@ -1,19 +1,19 @@
 export default function Table({ columns, data, actions }) {
   return (
-    <div className="overflow-x-auto border border-zinc-800 rounded">
+    <div className="overflow-x-auto bg-white border border-slate-200 rounded shadow-sm">
       <table className="w-full text-sm">
         <thead>
-          <tr className="bg-zinc-900 border-b border-zinc-800">
+          <tr className="bg-slate-50 border-b border-slate-200">
             {columns.map((col) => (
               <th
                 key={col.key}
-                className="text-left px-4 py-3 text-zinc-500 font-semibold uppercase tracking-widest text-[10px] whitespace-nowrap"
+                className="text-left px-4 py-3 text-slate-500 font-semibold uppercase tracking-widest text-[10px] whitespace-nowrap"
               >
                 {col.label}
               </th>
             ))}
             {actions && (
-              <th className="text-right px-4 py-3 text-zinc-500 font-semibold uppercase tracking-widest text-[10px]">
+              <th className="text-right px-4 py-3 text-slate-500 font-semibold uppercase tracking-widest text-[10px]">
                 Acciones
               </th>
             )}
@@ -23,10 +23,10 @@ export default function Table({ columns, data, actions }) {
           {data.map((row, i) => (
             <tr
               key={i}
-              className="border-b border-zinc-800/50 hover:bg-zinc-800/30 transition-colors duration-100"
+              className="border-b border-slate-200/70 hover:bg-slate-50 transition-colors duration-100"
             >
               {columns.map((col) => (
-                <td key={col.key} className="px-4 py-3 text-zinc-300">
+                <td key={col.key} className="px-4 py-3 text-slate-700">
                   {col.render ? col.render(row[col.key], row) : row[col.key]}
                 </td>
               ))}
@@ -43,7 +43,7 @@ export default function Table({ columns, data, actions }) {
             <tr>
               <td
                 colSpan={columns.length + (actions ? 1 : 0)}
-                className="px-4 py-10 text-center text-zinc-600 text-[11px] font-mono uppercase tracking-widest"
+                className="px-4 py-10 text-center text-slate-400 text-[11px] font-mono uppercase tracking-widest"
               >
                 — Sin registros —
               </td>
