@@ -1,0 +1,76 @@
+// Prisma schema — SIMA Training API
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Tipo de organización dentro de la jerarquía cliente → subcontratista.
+enum TipoOrganizacion {
+  CLIENTE
+  SUBCONTRATISTA
+}
+
+// Rol transitorio en Sprint 1 (como simula el prototipo).
+// Migrará a la entidad Vinculacion cuando exista (post Sprint 1).
+enum RolUsuario {
+  ADMINISTRADOR
+  COORDINADOR
+}
+
+// Organizacion: clientes y subcontratistas. La jerarquía se modela con una
+// FK self-referencial (un subcontratista cuelga de un cliente).
+model Organizacion {
+  id                  Int              @id @default(autoincrement())
+  nombre              String
+  tipo                TipoOrganizacion @default(CLIENTE)
+  organizacionPadreId Int?             @map("organizacion_padre_id")
+  activa              Boolean          @default(true)
+
+  // Relación self-referencial
+  organizacionPadre Organizacion?  @relation("OrganizacionJerarquia", fields: [organizacionPadreId], references: [id])
+  subcontratistas   Organizacion[] @relation("OrganizacionJerarquia")
+
+  usuarios Usuario[]
+
+  // Trazabilidad
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  createdBy String?  @map("created_by")
+  updatedBy String?  @map("updated_by")
+
+  @@map("organizaciones")
+}
+
+// Usuario: identidad única de cualquier persona (cuenta de sistema y/o persona
+// evaluada). Decisión de Sprint 1 (pregunta abierta #8): una sola entidad, el
+// rol vive acá de forma transitoria hasta que exista Vinculacion.
+model Usuario {
+  id        Int        @id @default(autoincrement())
+  nombre    String
+  apellido  String
+  dni       String     @unique
+  email     String?
+  rol       RolUsuario @default(COORDINADOR)
+
+  organizacionId Int?          @map("organizacion_id")
+  organizacion   Organizacion? @relation(fields: [organizacionId], references: [id])
+
+  // Datos flexibles de nómina (jsonb). Dato de tránsito: los campos que se
+  // estabilicen cuando llegue el Excel real se promueven a columnas (§3.4-a).
+  datos Json @default("{}")
+
+  // Trazabilidad
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  createdBy String?   @map("created_by")
+  updatedBy String?   @map("updated_by")
+  // Soft-delete (Sprint 1 implementa la baja que el prototipo no tiene).
+  deletedAt DateTime? @map("deleted_at")
+
+  @@map("usuarios")
+}

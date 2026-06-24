@@ -1,0 +1,33 @@
+# Blueprint de Render — PREPARADO PERO NO ACTIVO.
+# Para activar el deploy (pendiente del usuario, Sprint 1):
+#   1. Crear cuenta en Render y conectar el repo de GitHub.
+#   2. Render detecta este render.yaml y provisiona el servicio web + la base Postgres.
+#   3. La variable DATABASE_URL se inyecta automáticamente desde la base gestionada.
+#   4. Setear JWT_SECRET como secreto en el dashboard de Render.
+#
+# Mientras tanto el desarrollo es 100% local (docker-compose + npm run start:dev).
+
+services:
+  - type: web
+    name: sima-training-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    region: oregon
+    branch: main
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: sima-training-db
+          property: connectionString
+      - key: JWT_SECRET
+        sync: false
+      - key: CORS_ORIGINS
+        value: 'http://localhost:5173,http://localhost:5174'
+      - key: PORT
+        value: '3000'
+
+databases:
+  - name: sima-training-db
+    plan: free
+    region: oregon
