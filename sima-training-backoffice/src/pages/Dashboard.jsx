@@ -1,5 +1,4 @@
 import { companies } from '../core/data/companies'
-import { users } from '../core/data/users'
 import { employees } from '../core/data/employees'
 import { trainingModules } from '../sima-check/data/training-modules'
 import { trainingAssignments } from '../sima-check/data/training-assignments'
