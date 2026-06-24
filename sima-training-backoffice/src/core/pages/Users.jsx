@@ -13,6 +13,11 @@ const roleBadge = {
   COORDINADOR: 'bg-blue-50 text-blue-600',
 }
 
+const TABS = [
+  { id: 'sima',    label: 'SIMA' },
+  { id: 'clientes', label: 'Clientes' },
+]
+
 const emptyForm = {
   nombre: '',
   apellido: '',
@@ -27,6 +32,7 @@ export default function Users() {
   const [organizaciones, setOrganizaciones] = useState([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(null)
+  const [tab, setTab] = useState('sima')
 
   const [modal, setModal] = useState(null)
   const [form, setForm] = useState(emptyForm)
@@ -43,7 +49,6 @@ export default function Users() {
     setOrganizaciones(orgs)
   }
 
-  // Recarga manual (botón Reintentar). Es un event handler, no un effect.
   const loadData = async () => {
     setLoading(true)
     setLoadError(null)
@@ -57,23 +62,35 @@ export default function Users() {
   }
 
   useEffect(() => {
-    // Carga inicial al montar. El setState ocurre tras el await (asíncrono);
-    // la regla no distingue el data-fetching legítimo de mount.
     let active = true
     // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchAll()
       .catch((err) => active && setLoadError(err.message))
       .finally(() => active && setLoading(false))
-    return () => {
-      active = false
-    }
+    return () => { active = false }
   }, [])
+
+  // Un usuario es "SIMA" si pertenece a una org de tipo INTERNA.
+  const isSima = (usuario) => {
+    const org = organizaciones.find((o) => o.id === usuario.organizacionId)
+    return org?.tipo === 'INTERNA'
+  }
+
+  const usuariosFiltrados = usuarios.filter((u) =>
+    tab === 'sima' ? isSima(u) : !isSima(u),
+  )
 
   const getOrgName = (id) =>
     organizaciones.find((o) => o.id === id)?.nombre ?? '—'
 
+  // Organizaciones disponibles según la tab activa para el select del form.
+  const orgsParaTab = organizaciones.filter((o) =>
+    tab === 'sima' ? o.tipo === 'INTERNA' : o.tipo !== 'INTERNA',
+  )
+
   const openCreate = () => {
-    setForm({ ...emptyForm, organizacionId: organizaciones[0]?.id ?? '' })
+    const defaultOrg = orgsParaTab[0]?.id ?? ''
+    setForm({ ...emptyForm, organizacionId: defaultOrg })
     setFormError(null)
     setModal({ mode: 'create' })
   }
@@ -155,7 +172,7 @@ export default function Users() {
     },
     {
       key: 'organizacionId',
-      label: 'Cliente',
+      label: tab === 'sima' ? 'Organización' : 'Cliente',
       render: (id) => <span className="text-slate-700">{getOrgName(id)}</span>,
     },
   ]
@@ -166,7 +183,9 @@ export default function Users() {
         <div>
           <h2 className="text-slate-900 font-bold text-xl">Usuarios</h2>
           <p className="text-slate-400 text-sm">
-            {loading ? 'Cargando…' : `${usuarios.length} usuarios registrados`}
+            {loading
+              ? 'Cargando…'
+              : `${usuariosFiltrados.length} usuario${usuariosFiltrados.length !== 1 ? 's' : ''} — ${usuarios.length} en total`}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -183,6 +202,35 @@ export default function Users() {
         </div>
       </div>
 
+      {/* Tabs */}
+      <div className="flex border-b border-slate-200">
+        {TABS.map((t) => {
+          const count = usuarios.filter((u) =>
+            t.id === 'sima' ? isSima(u) : !isSima(u),
+          ).length
+          return (
+            <button
+              key={t.id}
+              onClick={() => setTab(t.id)}
+              className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px ${
+                tab === t.id
+                  ? 'border-red-600 text-red-600'
+                  : 'border-transparent text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              {t.label}
+              {!loading && (
+                <span className={`ml-2 px-1.5 py-0.5 rounded text-xs font-semibold ${
+                  tab === t.id ? 'bg-red-50 text-red-600' : 'bg-slate-100 text-slate-500'
+                }`}>
+                  {count}
+                </span>
+              )}
+            </button>
+          )
+        })}
+      </div>
+
       {loadError && (
         <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded px-4 py-3 flex items-center justify-between">
           <span>No se pudo conectar con la API: {loadError}</span>
@@ -195,7 +243,7 @@ export default function Users() {
       {!loadError && (
         <Table
           columns={columns}
-          data={usuarios}
+          data={usuariosFiltrados}
           actions={(row) => (
             <>
               <Button variant="ghost" size="sm" onClick={() => openEdit(row)}>
@@ -288,14 +336,16 @@ export default function Users() {
             </select>
           </div>
           <div>
-            <label className="block text-slate-700 text-sm font-medium mb-1">Cliente</label>
+            <label className="block text-slate-700 text-sm font-medium mb-1">
+              {tab === 'sima' ? 'Organización' : 'Cliente'}
+            </label>
             <select
               className="w-full bg-white border border-slate-300 rounded px-3 py-2 text-slate-900 text-sm focus:outline-none focus:border-red-600"
               value={form.organizacionId}
               onChange={(e) => setForm((f) => ({ ...f, organizacionId: e.target.value }))}
             >
-              <option value="">— Sin empresa —</option>
-              {organizaciones.map((o) => (
+              <option value="">— Sin organización —</option>
+              {orgsParaTab.map((o) => (
                 <option key={o.id} value={o.id}>
                   {o.nombre}
                 </option>

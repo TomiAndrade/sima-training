@@ -13,6 +13,7 @@ datasource db {
 enum TipoOrganizacion {
   CLIENTE
   SUBCONTRATISTA
+  INTERNA
 }
 
 // Rol transitorio en Sprint 1 (como simula el prototipo).

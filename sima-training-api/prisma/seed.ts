@@ -4,27 +4,29 @@ const prisma = new PrismaClient();
 
 // --- Fixtures tomados del prototipo sima-training-backoffice ---
 
-// core/data/companies.js (companyId del prototipo → se remapea al id real)
-const COMPANIES = [
-  { companyId: 1, nombre: 'YPF S.A.', activa: true },
-  { companyId: 2, nombre: 'Pan American Energy', activa: true },
-  { companyId: 3, nombre: 'TotalEnergies Argentina', activa: true },
-  { companyId: 4, nombre: 'Pluspetrol S.A.', activa: false },
-  { companyId: 5, nombre: 'Vista Energy', activa: true },
+// core/data/clients.js (clientId del prototipo → se remapea al id real)
+const CLIENTS = [
+  { clientId: 1, nombre: 'YPF S.A.', activa: true },
+  { clientId: 2, nombre: 'Pan American Energy', activa: true },
+  { clientId: 3, nombre: 'TotalEnergies Argentina', activa: true },
+  { clientId: 4, nombre: 'Pluspetrol S.A.', activa: false },
+  { clientId: 5, nombre: 'Vista Energy', activa: true },
 ];
 
 // core/data/users.js — el prototipo guarda un único `name` y `role`.
 // Una sola entidad Usuario (decisión Sprint 1): se parte name → nombre/apellido
 // y se generan DNIs de fixture (el prototipo no tenía DNI en estas cuentas).
+// Administradores → organización interna Ingeniería SIMA (tipo INTERNA).
+// Coordinadores → organización cliente (clientId del prototipo).
 const USERS = [
-  { name: 'Carlos Méndez', role: 'administrador', companyId: 1, dni: '20111001' },
-  { name: 'Patricia Herrera', role: 'administrador', companyId: 5, dni: '20111002' },
-  { name: 'Laura Ríos', role: 'coordinador', companyId: 1, dni: '20111003' },
-  { name: 'Sofía Vargas', role: 'coordinador', companyId: 2, dni: '20111004' },
-  { name: 'Roberto Castillo', role: 'coordinador', companyId: 3, dni: '20111005' },
-  { name: 'Andrés Peralta', role: 'coordinador', companyId: 3, dni: '20111006' },
-  { name: 'Claudia Bustamante', role: 'coordinador', companyId: 4, dni: '20111007' },
-  { name: 'Héctor Villanueva', role: 'coordinador', companyId: 5, dni: '20111008' },
+  { name: 'Carlos Méndez',      role: 'administrador', clientId: null, dni: '20111001' },
+  { name: 'Patricia Herrera',   role: 'administrador', clientId: null, dni: '20111002' },
+  { name: 'Laura Ríos',         role: 'coordinador',   clientId: 1,   dni: '20111003' },
+  { name: 'Sofía Vargas',       role: 'coordinador',   clientId: 2,   dni: '20111004' },
+  { name: 'Roberto Castillo',   role: 'coordinador',   clientId: 3,   dni: '20111005' },
+  { name: 'Andrés Peralta',     role: 'coordinador',   clientId: 3,   dni: '20111006' },
+  { name: 'Claudia Bustamante', role: 'coordinador',   clientId: 4,   dni: '20111007' },
+  { name: 'Héctor Villanueva',  role: 'coordinador',   clientId: 5,   dni: '20111008' },
 ];
 
 const ROL_MAP: Record<string, RolUsuario> = {
@@ -43,9 +45,19 @@ async function main() {
   await prisma.usuario.deleteMany();
   await prisma.organizacion.deleteMany();
 
-  // 1) Organizaciones (clientes) — se guarda el mapa companyId → id real.
-  const companyIdMap = new Map<number, number>();
-  for (const c of COMPANIES) {
+  // 1) Organización interna de Ingeniería SIMA.
+  const simaOrg = await prisma.organizacion.create({
+    data: {
+      nombre: 'Ingeniería SIMA',
+      tipo: TipoOrganizacion.INTERNA,
+      activa: true,
+      createdBy: 'seed',
+    },
+  });
+
+  // 2) Organizaciones cliente — se guarda el mapa clientId → id real.
+  const clientIdMap = new Map<number, number>();
+  for (const c of CLIENTS) {
     const org = await prisma.organizacion.create({
       data: {
         nombre: c.nombre,
@@ -54,11 +66,11 @@ async function main() {
         createdBy: 'seed',
       },
     });
-    companyIdMap.set(c.companyId, org.id);
+    clientIdMap.set(c.clientId, org.id);
   }
 
-  // 2) Un subcontratista colgando de un cliente (ejercita la FK self-referencial).
-  const ypfId = companyIdMap.get(1)!;
+  // 3) Un subcontratista colgando de un cliente (ejercita la FK self-referencial).
+  const ypfId = clientIdMap.get(1)!;
   await prisma.organizacion.create({
     data: {
       nombre: 'Servicios Petroleros del Sur (subcontratista)',
@@ -69,16 +81,20 @@ async function main() {
     },
   });
 
-  // 3) Usuarios.
+  // 4) Usuarios: administradores → Ingeniería SIMA; coordinadores → su cliente.
   for (const u of USERS) {
     const { nombre, apellido } = splitNombre(u.name);
+    const orgId =
+      u.clientId === null
+        ? simaOrg.id
+        : (clientIdMap.get(u.clientId) ?? null);
     await prisma.usuario.create({
       data: {
         nombre,
         apellido,
         dni: u.dni,
         rol: ROL_MAP[u.role],
-        organizacionId: companyIdMap.get(u.companyId) ?? null,
+        organizacionId: orgId,
         createdBy: 'seed',
       },
     });

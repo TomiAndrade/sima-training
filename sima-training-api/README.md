@@ -101,7 +101,7 @@ src/
 └── main.ts          ValidationPipe global + CORS
 prisma/
 ├── schema.prisma    Modelos Usuario y Organizacion
-├── seed.ts          Fixtures del prototipo (5 empresas, 8 usuarios)
+├── seed.ts          Fixtures del prototipo (5 clientes, 8 usuarios)
 └── migrations/      Migraciones versionadas
 ```
 

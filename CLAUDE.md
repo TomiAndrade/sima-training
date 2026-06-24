@@ -80,7 +80,9 @@ Monolito NestJS organizado por dominio. Detalle en [`sima-training-api/README.md
 | Entidad | Campos clave |
 |---|---|
 | `Usuario` | `id, nombre, apellido, dni` (único), `email?, rol` (ADMINISTRADOR/COORDINADOR), `organizacionId` (FK), `datos` (jsonb) + trazabilidad + `deletedAt` (soft-delete) |
-| `Organizacion` | `id, nombre, tipo` (CLIENTE/SUBCONTRATISTA), `organizacionPadreId` (FK self-referencial), `activa` + trazabilidad |
+| `Organizacion` | `id, nombre, tipo` (CLIENTE/SUBCONTRATISTA/**INTERNA**), `organizacionPadreId` (FK self-referencial), `activa` + trazabilidad |
+
+**Tipo `INTERNA`:** La organización **"Ingeniería SIMA"** usa este tipo. Los usuarios que pertenecen a ella son usuarios internos de SIMA (administradores del sistema); el resto (CLIENTE/SUBCONTRATISTA) son usuarios de clientes.
 
 **Decisión clave — `Usuario` es UNA sola entidad** para cualquier persona (cuenta de sistema y/o persona evaluada). El rol vive en `Usuario` de forma transitoria y migrará a `Vinculacion` en sprints futuros. Esto unifica los conceptos `User` y `Employee` que el prototipo modelaba por separado.
 
@@ -155,7 +157,7 @@ La barra de tabs y el breadcrumb `SIMA TRAINING › SIMA CHECK › {tab}` se ren
 ### Administración (Core)
 
 - **Clientes** — tabla + modal crear/editar + toggle activo/inactivo
-- **Usuarios** — tabla + modal crear/editar con roles (administrador/coordinador)
+- **Usuarios** — dos tabs (**SIMA** / **Clientes**), misma tabla/ABM. Un usuario es "SIMA" si su `organizacionId` apunta a una org `tipo = INTERNA`; el resto son de clientes. Al crear desde cada tab, la org se predefine a la correspondiente. El select del form filtra orgs por tab.
 
 ### Configuración *(placeholder)*
 

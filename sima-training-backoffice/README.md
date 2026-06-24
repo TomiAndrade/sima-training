@@ -1,18 +1,21 @@
 # SIMA TRAINING Backoffice
 
-Backoffice de la plataforma **SIMA TRAINING** de Ingeniería Sima. Administra empresas, usuarios, empleados y los productos del ecosistema. **SIMA CHECK** (capacitaciones y evaluaciones) es el primer producto integrado.
+Backoffice de la plataforma **SIMA TRAINING** de Ingeniería Sima. Administra clientes, usuarios, empleados y los productos del ecosistema. **SIMA CHECK** (capacitaciones y evaluaciones) es el primer producto integrado.
 
 ## Stack
 
 - Vite + React (sin router — navegación con `useState`)
 - Tailwind CSS v3
-- Sin backend ni base de datos — datos mockeados en `src/`
+- Consume la API real (`sima-training-api`) para **Usuarios**; el resto de las pantallas sigue con datos mockeados en `src/` (se migran ABM por ABM)
 
 ## Cómo correr
 
+Requiere el backend corriendo (ver [`../sima-training-api/README.md`](../sima-training-api/README.md)).
+
 ```bash
 npm install
-npm run dev   # → http://localhost:5173
+cp .env.example .env   # VITE_API_URL apunta al backend local
+npm run dev            # → http://localhost:5173
 ```
 
 ## Arquitectura de carpetas
@@ -20,8 +23,9 @@ npm run dev   # → http://localhost:5173
 ```
 src/
 ├── core/                        # Entidades compartidas por toda la plataforma
-│   ├── data/                    # companies.js · users.js · employees.js
-│   └── pages/                   # Companies.jsx · Users.jsx
+│   ├── api/                     # client.js · usuarios.js · organizaciones.js (capa HTTP)
+│   ├── data/                    # clients.js · users.js · employees.js (mock, en migración)
+│   └── pages/                   # Clients.jsx · Users.jsx (Users ya usa la API real)
 ├── sima-check/                  # Producto: capacitaciones y evaluaciones
 │   ├── data/                    # training-modules.js · training-assignments.js · evaluations.js
 │   └── pages/                   # TrainingModules.jsx · Questions.jsx · TrainingAssignments.jsx
@@ -35,7 +39,7 @@ src/
 | Sección | Páginas |
 |---|---|
 | (root) | Dashboard |
-| Administración | Empresas · Usuarios |
+| Administración | Clientes · Usuarios |
 | SIMA CHECK | Capacitaciones · Preguntas · Asignaciones |
 | Configuración | *(placeholder — Roles y Permisos futuros)* |
 
