@@ -4,6 +4,7 @@ import Button from '../../components/Button'
 import Modal from '../../components/Modal'
 import { usuariosApi } from '../api/usuarios'
 import { organizacionesApi } from '../api/organizaciones'
+import ImportUsuariosModal from '../components/ImportUsuariosModal'
 
 const ROLES = ['ADMINISTRADOR', 'COORDINADOR']
 
@@ -31,6 +32,7 @@ export default function Users() {
   const [form, setForm] = useState(emptyForm)
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState(null)
+  const [importOpen, setImportOpen] = useState(false)
 
   const fetchAll = async () => {
     const [us, orgs] = await Promise.all([
@@ -167,9 +169,18 @@ export default function Users() {
             {loading ? 'Cargando…' : `${usuarios.length} usuarios registrados`}
           </p>
         </div>
-        <Button onClick={openCreate} disabled={loading || !!loadError}>
-          + Nuevo usuario
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="secondary"
+            onClick={() => setImportOpen(true)}
+            disabled={loading || !!loadError}
+          >
+            Importar Excel
+          </Button>
+          <Button onClick={openCreate} disabled={loading || !!loadError}>
+            + Nuevo usuario
+          </Button>
+        </div>
       </div>
 
       {loadError && (
@@ -293,6 +304,11 @@ export default function Users() {
           </div>
         </div>
       </Modal>
+
+      <ImportUsuariosModal
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+      />
     </div>
   )
 }

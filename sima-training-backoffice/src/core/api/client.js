@@ -58,9 +58,33 @@ async function request(method, path, { body, auth = false } = {}) {
   return parse(res)
 }
 
+// Subida de archivos (multipart). No setea Content-Type: el browser agrega el
+// boundary. Adjunta el Bearer y reintenta el login una vez ante 401.
+async function upload(path, file, field = 'file') {
+  const doFetch = async () => {
+    if (!token) await login()
+    const formData = new FormData()
+    formData.append(field, file)
+    return fetch(`${BASE_URL}${path}`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body: formData,
+    })
+  }
+
+  let res = await doFetch()
+  if (res.status === 401) {
+    token = null
+    await login()
+    res = await doFetch()
+  }
+  return parse(res)
+}
+
 export const api = {
   get: (path) => request('GET', path),
   post: (path, body) => request('POST', path, { body, auth: true }),
   patch: (path, body) => request('PATCH', path, { body, auth: true }),
   del: (path) => request('DELETE', path, { auth: true }),
+  upload,
 }
