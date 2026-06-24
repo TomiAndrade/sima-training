@@ -6,7 +6,9 @@ import {
   ParseIntPipe,
   Patch,
   Post,
+  UseGuards,
 } from '@nestjs/common';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CreateOrganizacionDto } from './dto/create-organizacion.dto';
 import { UpdateOrganizacionDto } from './dto/update-organizacion.dto';
 import { OrganizacionesService } from './organizaciones.service';
@@ -16,6 +18,7 @@ export class OrganizacionesController {
   constructor(private readonly organizaciones: OrganizacionesService) {}
 
   @Post()
+  @UseGuards(JwtAuthGuard)
   create(@Body() dto: CreateOrganizacionDto) {
     return this.organizaciones.create(dto);
   }
@@ -31,6 +34,7 @@ export class OrganizacionesController {
   }
 
   @Patch(':id')
+  @UseGuards(JwtAuthGuard)
   update(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateOrganizacionDto,
