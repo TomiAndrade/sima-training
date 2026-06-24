@@ -1,5 +1,5 @@
 import StatCard from '../../components/StatCard'
-import { companies } from '../../core/data/companies'
+import { clients } from '../../core/data/clients'
 import { users } from '../../core/data/users'
 import { trainingModules as modules } from '../data/training-modules'
 import { evaluations } from '../data/evaluations'
@@ -48,7 +48,7 @@ function SectionHeader({ children }) {
 }
 
 export default function Overview() {
-  const activeCompanies = companies.filter((c) => c.active).length
+  const activeClients = clients.filter((c) => c.active).length
   const totalUsers = users.length
   const activeModules = modules.filter((m) => m.active).length
   const approvedPct = Math.round((evaluations.filter((e) => e.approved).length / evaluations.length) * 100)
@@ -64,7 +64,7 @@ export default function Overview() {
       <div>
         <SectionHeader>Métricas Operacionales</SectionHeader>
         <div className="grid grid-cols-2 xl:grid-cols-3 gap-3">
-          <StatCard label="Empresas activas" value={activeCompanies} delta="+1 este mes" deltaPositive />
+          <StatCard label="Clientes activos" value={activeClients} delta="+1 este mes" deltaPositive />
           <StatCard label="Usuarios registrados" value={totalUsers} delta="+3 este mes" deltaPositive />
           <StatCard label="Módulos activos" value={activeModules} />
           <StatCard label="% Aprobación general" value={`${approvedPct}%`} delta={approvedPct >= 70 ? 'Óptimo' : 'Por mejorar'} deltaPositive={approvedPct >= 70} />

@@ -155,7 +155,7 @@ export default function Users() {
     },
     {
       key: 'organizacionId',
-      label: 'Empresa',
+      label: 'Cliente',
       render: (id) => <span className="text-slate-700">{getOrgName(id)}</span>,
     },
   ]
@@ -288,7 +288,7 @@ export default function Users() {
             </select>
           </div>
           <div>
-            <label className="block text-slate-700 text-sm font-medium mb-1">Empresa</label>
+            <label className="block text-slate-700 text-sm font-medium mb-1">Cliente</label>
             <select
               className="w-full bg-white border border-slate-300 rounded px-3 py-2 text-slate-900 text-sm focus:outline-none focus:border-red-600"
               value={form.organizacionId}

@@ -2,11 +2,11 @@ import { useState } from 'react'
 import Table from '../../components/Table'
 import Button from '../../components/Button'
 import Modal from '../../components/Modal'
-import { companies as initialCompanies } from '../data/companies'
+import { clients as initialClients } from '../data/clients'
 import { users } from '../data/users'
 
-export default function Companies() {
-  const [companies, setCompanies] = useState(initialCompanies)
+export default function Clients() {
+  const [clients, setClients] = useState(initialClients)
   const [modal, setModal] = useState(null) // null | { mode: 'create'|'edit', data }
   const [form, setForm] = useState({ name: '', active: true })
 
@@ -15,26 +15,26 @@ export default function Companies() {
     setModal({ mode: 'create' })
   }
 
-  const openEdit = (company) => {
-    setForm({ name: company.name, active: company.active })
-    setModal({ mode: 'edit', data: company })
+  const openEdit = (client) => {
+    setForm({ name: client.name, active: client.active })
+    setModal({ mode: 'edit', data: client })
   }
 
   const handleSave = () => {
     if (!form.name.trim()) return
     if (modal.mode === 'create') {
-      setCompanies((prev) => [...prev, { id: Date.now(), ...form }])
+      setClients((prev) => [...prev, { id: Date.now(), ...form }])
     } else {
-      setCompanies((prev) => prev.map((c) => c.id === modal.data.id ? { ...c, ...form } : c))
+      setClients((prev) => prev.map((c) => c.id === modal.data.id ? { ...c, ...form } : c))
     }
     setModal(null)
   }
 
   const toggleActive = (id) => {
-    setCompanies((prev) => prev.map((c) => c.id === id ? { ...c, active: !c.active } : c))
+    setClients((prev) => prev.map((c) => c.id === id ? { ...c, active: !c.active } : c))
   }
 
-  const getUserCount = (companyId) => users.filter((u) => u.companyId === companyId).length
+  const getUserCount = (clientId) => users.filter((u) => u.clientId === clientId).length
 
   const columns = [
     { key: 'name', label: 'Nombre' },
@@ -58,15 +58,15 @@ export default function Companies() {
     <div className="space-y-5">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-slate-900 font-bold text-xl">Empresas</h2>
-          <p className="text-slate-400 text-sm">{companies.length} empresas registradas</p>
+          <h2 className="text-slate-900 font-bold text-xl">Clientes</h2>
+          <p className="text-slate-400 text-sm">{clients.length} clientes registrados</p>
         </div>
-        <Button onClick={openCreate}>+ Nueva empresa</Button>
+        <Button onClick={openCreate}>+ Nuevo cliente</Button>
       </div>
 
       <Table
         columns={columns}
-        data={companies}
+        data={clients}
         actions={(row) => (
           <>
             <Button variant="ghost" size="sm" onClick={() => openEdit(row)}>Editar</Button>
@@ -80,7 +80,7 @@ export default function Companies() {
       <Modal
         open={!!modal}
         onClose={() => setModal(null)}
-        title={modal?.mode === 'create' ? 'Nueva empresa' : 'Editar empresa'}
+        title={modal?.mode === 'create' ? 'Nuevo cliente' : 'Editar cliente'}
         footer={
           <>
             <Button variant="secondary" onClick={() => setModal(null)}>Cancelar</Button>
@@ -95,7 +95,7 @@ export default function Companies() {
               className="w-full bg-white border border-slate-300 rounded px-3 py-2 text-slate-900 text-sm focus:outline-none focus:border-red-600"
               value={form.name}
               onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-              placeholder="Nombre de la empresa"
+              placeholder="Nombre del cliente"
             />
           </div>
           <div className="flex items-center gap-3">

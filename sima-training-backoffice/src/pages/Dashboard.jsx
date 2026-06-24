@@ -1,4 +1,4 @@
-import { companies } from '../core/data/companies'
+import { clients } from '../core/data/clients'
 import { employees } from '../core/data/employees'
 import { trainingModules } from '../sima-check/data/training-modules'
 import { trainingAssignments } from '../sima-check/data/training-assignments'
@@ -9,7 +9,7 @@ const RECENT_ACTIVITY = [
   { date: '16/06', time: '11:30', user: 'C. Méndez', action: 'Usuario registrado', detail: 'López, R. — Coordinador' },
   { date: '15/06', time: '16:12', user: 'A. Torres', action: 'Asignación creada', detail: 'Romero, P. → Reglas de Oro' },
   { date: '15/06', time: '15:44', user: 'M. González', action: 'Evaluación completada', detail: 'Score: 67% — DESAPROBADO' },
-  { date: '15/06', time: '10:22', user: 'C. Méndez', action: 'Empresa activada', detail: 'Vista Energy → Activa' },
+  { date: '15/06', time: '10:22', user: 'C. Méndez', action: 'Cliente activado', detail: 'Vista Energy → Activa' },
 ]
 
 const SYSTEM_STATUS = [
@@ -35,7 +35,7 @@ function SectionHeader({ children }) {
 }
 
 export default function Dashboard({ navigate }) {
-  const activeCompanies = companies.filter((c) => c.active).length
+  const activeClients = clients.filter((c) => c.active).length
   const totalEmployees = employees.length
   const pendingAssignments = trainingAssignments.filter((a) => a.status === 'pending').length
   const completedAssignments = trainingAssignments.filter((a) => a.status === 'completed').length
@@ -49,7 +49,7 @@ export default function Dashboard({ navigate }) {
         <SectionHeader>Resumen Operacional</SectionHeader>
         <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
           {[
-            { label: 'Empresas Activas', value: activeCompanies },
+            { label: 'Clientes Activos', value: activeClients },
             { label: 'Empleados Registrados', value: totalEmployees },
             { label: 'Asignaciones Pendientes', value: pendingAssignments },
             { label: 'Capacitaciones Completadas', value: completedAssignments },

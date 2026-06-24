@@ -5,7 +5,7 @@ import Modal from '../../components/Modal'
 import { trainingAssignments as initialAssignments } from '../data/training-assignments'
 import { employees } from '../../core/data/employees'
 import { trainingModules as modules } from '../data/training-modules'
-import { companies } from '../../core/data/companies'
+import { clients } from '../../core/data/clients'
 import { users } from '../../core/data/users'
 
 const statusBadge = {
@@ -24,21 +24,21 @@ export default function TrainingAssignments() {
   const [modal, setModal] = useState(null)
   const [form, setForm] = useState({ employeeId: null, moduleId: modules[0]?.id ?? 1 })
   const [empSearch, setEmpSearch] = useState('')
-  const [empCompany, setEmpCompany] = useState('')
+  const [empClient, setEmpClient] = useState('')
   const [error, setError] = useState('')
   const [search, setSearch] = useState('')
-  const [filterCompany, setFilterCompany] = useState('')
+  const [filterClient, setFilterClient] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
 
   const getEmployee = (id) => employees.find((e) => e.id === id)
-  const getCompanyName = (id) => companies.find((c) => c.id === id)?.name ?? '—'
+  const getClientName = (id) => clients.find((c) => c.id === id)?.name ?? '—'
   const getModuleName = (id) => modules.find((m) => m.id === id)?.name ?? '—'
   const getAssignedBy = (id) => users.find((u) => u.id === id)?.name ?? '—'
 
   const openCreate = () => {
     setForm({ employeeId: null, moduleId: modules[0]?.id ?? 1 })
     setEmpSearch('')
-    setEmpCompany('')
+    setEmpClient('')
     setError('')
     setModal(true)
   }
@@ -78,10 +78,10 @@ export default function TrainingAssignments() {
       ),
     },
     {
-      key: '_empresa',
-      label: 'Empresa',
+      key: '_cliente',
+      label: 'Cliente',
       render: (_, row) => (
-        <span className="text-slate-600">{getCompanyName(getEmployee(row.employeeId)?.companyId)}</span>
+        <span className="text-slate-600">{getClientName(getEmployee(row.employeeId)?.clientId)}</span>
       ),
     },
     {
@@ -110,14 +110,14 @@ export default function TrainingAssignments() {
   ]
 
   const filteredEmployeesForModal = useMemo(() => {
-    const companyId = isCoord ? CURRENT_USER.companyId : (empCompany ? Number(empCompany) : null)
+    const clientId = isCoord ? CURRENT_USER.clientId : (empClient ? Number(empClient) : null)
     const q = empSearch.trim().toLowerCase()
     return employees.filter((e) => {
-      if (companyId && e.companyId !== companyId) return false
+      if (clientId && e.clientId !== clientId) return false
       if (q && !e.name.toLowerCase().includes(q) && !e.dni.includes(q)) return false
       return true
     })
-  }, [empSearch, empCompany, isCoord])
+  }, [empSearch, empClient, isCoord])
 
   const filteredAssignments = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -125,11 +125,11 @@ export default function TrainingAssignments() {
       const emp = getEmployee(a.employeeId)
       if (!emp) return false
       if (q && !emp.name.toLowerCase().includes(q) && !emp.dni.includes(q)) return false
-      if (filterCompany && emp.companyId !== Number(filterCompany)) return false
+      if (filterClient && emp.clientId !== Number(filterClient)) return false
       if (filterStatus && a.status !== filterStatus) return false
       return true
     })
-  }, [assignments, search, filterCompany, filterStatus])
+  }, [assignments, search, filterClient, filterStatus])
 
   const pending = assignments.filter((a) => a.status === 'pending').length
   const completed = assignments.filter((a) => a.status === 'completed').length
@@ -156,9 +156,9 @@ export default function TrainingAssignments() {
           onChange={(e) => setSearch(e.target.value)}
           className="bg-white border border-slate-300 rounded px-3 py-2 text-sm text-slate-700 placeholder-slate-400 focus:outline-none focus:border-red-600 w-64"
         />
-        <select value={filterCompany} onChange={(e) => setFilterCompany(e.target.value)} className={selectCls}>
-          <option value="">Todas las empresas</option>
-          {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+        <select value={filterClient} onChange={(e) => setFilterClient(e.target.value)} className={selectCls}>
+          <option value="">Todos los clientes</option>
+          {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
         <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className={selectCls}>
           <option value="">Todos los estados</option>
@@ -166,9 +166,9 @@ export default function TrainingAssignments() {
           <option value="completed">Completada</option>
           <option value="expired">Vencida</option>
         </select>
-        {(search || filterCompany || filterStatus) && (
+        {(search || filterClient || filterStatus) && (
           <button
-            onClick={() => { setSearch(''); setFilterCompany(''); setFilterStatus('') }}
+            onClick={() => { setSearch(''); setFilterClient(''); setFilterStatus('') }}
             className="text-sm text-slate-400 hover:text-slate-700 transition-colors"
           >
             Limpiar filtros
@@ -202,12 +202,12 @@ export default function TrainingAssignments() {
               />
               {!isCoord && (
                 <select
-                  value={empCompany}
-                  onChange={(e) => { setEmpCompany(e.target.value); setError('') }}
+                  value={empClient}
+                  onChange={(e) => { setEmpClient(e.target.value); setError('') }}
                   className="bg-white border border-slate-300 rounded px-3 py-2 text-sm text-slate-700 focus:outline-none focus:border-red-600"
                 >
-                  <option value="">Todas las empresas</option>
-                  {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  <option value="">Todos los clientes</option>
+                  {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
               )}
             </div>
@@ -228,7 +228,7 @@ export default function TrainingAssignments() {
                   <span className="font-medium truncate">{e.name}</span>
                   <div className="flex items-center gap-3 flex-shrink-0">
                     <span className="text-slate-400 font-mono text-xs">{e.dni}</span>
-                    {!isCoord && <span className="text-slate-400 text-xs">{getCompanyName(e.companyId)}</span>}
+                    {!isCoord && <span className="text-slate-400 text-xs">{getClientName(e.clientId)}</span>}
                   </div>
                 </button>
               ))}

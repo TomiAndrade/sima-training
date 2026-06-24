@@ -13,8 +13,8 @@ const NAV_SECTIONS = [
   {
     header: 'Administración',
     items: [
-      { id: 'companies', label: 'Empresas' },
-      { id: 'users',     label: 'Usuarios' },
+      { id: 'clients', label: 'Clientes' },
+      { id: 'users',   label: 'Usuarios' },
     ],
   },
   {

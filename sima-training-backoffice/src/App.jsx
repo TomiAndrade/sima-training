@@ -1,7 +1,7 @@
 import useNavigation from './hooks/useNavigation'
 import BackofficeLayout from './pages/BackofficeLayout'
 import Dashboard from './pages/Dashboard'
-import Companies from './core/pages/Companies'
+import Clients from './core/pages/Clients'
 import Users from './core/pages/Users'
 import Overview from './sima-check/pages/Overview'
 import TrainingModules from './sima-check/pages/TrainingModules'
@@ -9,7 +9,7 @@ import TrainingAssignments from './sima-check/pages/TrainingAssignments'
 
 const PAGES = {
   dashboard: Dashboard,
-  companies: Companies,
+  clients: Clients,
   users: Users,
   'sima-check-overview': Overview,
   'training-modules': TrainingModules,

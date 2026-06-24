@@ -40,7 +40,7 @@ npm install
 cp .env.example .env
 docker compose up -d db          # PostgreSQL local
 npx prisma migrate dev           # crea las tablas
-npx prisma db seed               # fixtures (5 empresas, 8 usuarios)
+npx prisma db seed               # fixtures (5 clientes, 8 usuarios)
 npm run start:dev                # → http://localhost:3000
 
 # 2. Backoffice
@@ -100,9 +100,9 @@ Monolito NestJS organizado por dominio. Detalle en [`sima-training-api/README.md
 
 | Entidad | Archivo | Campos |
 |---|---|---|
-| `Company` | `core/data/companies.js` | `id, name, active` |
-| `User` | `core/data/users.js` | `id, name, role, companyId` |
-| `Employee` | `core/data/employees.js` | `id, dni, name, companyId` |
+| `Client` | `core/data/clients.js` | `id, name, active` |
+| `User` | `core/data/users.js` | `id, name, role, clientId` |
+| `Employee` | `core/data/employees.js` | `id, dni, name, clientId` |
 
 ### SIMA CHECK — entidades del producto de capacitaciones
 
@@ -118,7 +118,7 @@ Monolito NestJS organizado por dominio. Detalle en [`sima-training-api/README.md
 
 | Rol | Acceso |
 |---|---|
-| `administrador` | Backoffice completo: empresas, usuarios, módulos, preguntas, asignaciones, métricas globales |
+| `administrador` | Backoffice completo: clientes, usuarios, módulos, preguntas, asignaciones, métricas globales |
 | `coordinador` | Backoffice limitado: asignaciones de su empresa, empleados de su empresa |
 | Empleado | Solo App SIMA CHECK (acceso por DNI) |
 
@@ -128,13 +128,13 @@ Monolito NestJS organizado por dominio. Detalle en [`sima-training-api/README.md
 
 Tres secciones:
 - **Panel Principal** → Dashboard de plataforma
-- **Administración** → Empresas, Usuarios
+- **Administración** → Clientes, Usuarios
 - **Productos** → SIMA CHECK (ítem único; resaltado en cualquier sub-página del producto)
 
 ### Dashboard (Panel Principal)
 
 Vista de plataforma con cuatro bloques:
-- KPIs operacionales: empresas activas, empleados registrados, asignaciones pendientes, completadas
+- KPIs operacionales: clientes activos, empleados registrados, asignaciones pendientes, completadas
 - Tabla de actividad reciente (mockeada): Fecha / Usuario / Acción / Detalle
 - Estado del sistema: indicadores OPERATIVO (emerald) / ADVERTENCIA (amber) por servicio
 - Product cards: SIMA CHECK (activo, con stats y botón de acceso) + SIMA INSPECTIONS y SIMA AUDITS (roadmap, con ETA)
@@ -154,7 +154,7 @@ La barra de tabs y el breadcrumb `SIMA TRAINING › SIMA CHECK › {tab}` se ren
 
 ### Administración (Core)
 
-- **Empresas** — tabla + modal crear/editar + toggle activo/inactivo
+- **Clientes** — tabla + modal crear/editar + toggle activo/inactivo
 - **Usuarios** — tabla + modal crear/editar con roles (administrador/coordinador)
 
 ### Configuración *(placeholder)*
@@ -180,7 +180,7 @@ Al finalizar una evaluación, la asignación cambia de `pending → completed` *
 
 ## Datos mockeados
 
-- **Empresas**: YPF, Pan American Energy, TotalEnergies, Pluspetrol, Vista Energy
+- **Clientes**: YPF, Pan American Energy, TotalEnergies, Pluspetrol, Vista Energy
 - **Usuarios**: 8 usuarios con roles `administrador` o `coordinador`
 - **Empleados**: 15 empleados con `id`, `dni`, `name`, `companyId` (y `company` para display en la app)
 - **Módulos de capacitación**: 4 módulos, ~10 preguntas cada uno (incluye preguntas reales de SIMA Avanzado)
@@ -208,8 +208,8 @@ sima-training-api/                (backend NestJS)
 sima-training-backoffice/src/
 ├── core/
 │   ├── api/           client.js · usuarios.js · organizaciones.js  ← capa HTTP
-│   ├── data/          companies.js · users.js · employees.js (mock, en migración)
-│   └── pages/         Companies.jsx · Users.jsx (Users ya usa la API real)
+│   ├── data/          clients.js · users.js · employees.js (mock, en migración)
+│   └── pages/         Clients.jsx · Users.jsx (Users ya usa la API real)
 ├── sima-check/
 │   ├── data/          training-modules.js · training-assignments.js · evaluations.js
 │   └── pages/         Overview.jsx · TrainingModules.jsx · Questions.jsx · TrainingAssignments.jsx
