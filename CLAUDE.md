@@ -2,37 +2,57 @@
 
 ## Qué es esto
 
-MVP navegable de alta fidelidad para validar la plataforma **SIMA TRAINING** de **Ingeniería Sima** ante clientes de la industria Oil & Gas. No tiene backend ni base de datos — todos los datos son mockeados. Sirve como demo comercial y base para evolucionar hacia producción.
+MVP de alta fidelidad para validar la plataforma **SIMA TRAINING** de **Ingeniería Sima** ante clientes de la industria Oil & Gas. Nació como demo navegable solo-frontend (datos mockeados) y desde el **Sprint 1** tiene un **backend real** (NestJS + PostgreSQL): el ABM de Usuarios del backoffice ya persiste contra base de datos. La app tablet sigue mockeada por ahora.
 
 **SIMA CHECK** (capacitaciones y evaluaciones industriales) es el primer producto integrado en la plataforma. La arquitectura está preparada para incorporar productos futuros (SIMA INSPECTIONS, SIMA AUDITS, etc.) sin reorganizaciones.
 
-## Dos proyectos independientes
+## Tres proyectos independientes
 
 | Proyecto | Descripción | Puerto dev |
 |---|---|---|
+| `sima-training-api/` | **Backend** NestJS + PostgreSQL + Prisma (Sprint 1) | 3000 |
 | `sima-training-backoffice/` | Backoffice de la plataforma SIMA TRAINING | 5173 |
 | `sima-check-app/` | App de evaluación para tablets industriales (producto SIMA CHECK) | 5174 |
 
 ## Stack técnico
 
-Ambos proyectos usan el mismo stack:
+**Frontends** (`sima-training-backoffice`, `sima-check-app`):
 - **Vite + React** (template react)
 - **Tailwind CSS v3** + PostCSS + Autoprefixer
 - Sin router (navegación con `useState`)
-- Sin backend, sin API, sin base de datos
+
+**Backend** (`sima-training-api`):
+- **NestJS 11** + TypeScript (monolito modular por dominio)
+- **PostgreSQL 16** (local vía Docker Compose)
+- **Prisma 6** (ORM + migraciones)
+- **JWT** para auth básica (sin roles todavía)
+
+> El backoffice ya consume la API real para **Usuarios** (ver `src/core/api/`). El resto de las pantallas sigue con datos mockeados; se migran ABM por ABM en sprints siguientes. La app tablet (`sima-check-app`) todavía no está conectada.
 
 ## Cómo correr
 
+Detalle completo del backend en [`sima-training-api/README.md`](sima-training-api/README.md).
+
 ```bash
-# Backoffice
+# 1. Backend (requiere Docker Desktop corriendo)
+cd TRAINING/sima-training-api
+npm install
+cp .env.example .env
+docker compose up -d db          # PostgreSQL local
+npx prisma migrate dev           # crea las tablas
+npx prisma db seed               # fixtures (5 empresas, 8 usuarios)
+npm run start:dev                # → http://localhost:3000
+
+# 2. Backoffice
 cd TRAINING/sima-training-backoffice
 npm install
-npm run dev   # → http://localhost:5173
+cp .env.example .env             # VITE_API_URL apunta al backend local
+npm run dev                      # → http://localhost:5173
 
-# App tablet
+# 3. App tablet (mockeada, sin backend aún)
 cd TRAINING/sima-check-app
 npm install
-npm run dev   # → http://localhost:5174
+npm run dev                      # → http://localhost:5174
 ```
 
 ## Paleta de colores
@@ -51,7 +71,30 @@ npm run dev   # → http://localhost:5174
 - Acento: `red-600`
 - Logo: siempre visible encima de la card, cargado desde `public/logo.png` en `App.jsx`
 
-## Modelo de dominio
+## Backend — `sima-training-api` (Sprint 1)
+
+Monolito NestJS organizado por dominio. Detalle en [`sima-training-api/README.md`](sima-training-api/README.md).
+
+### Entidades reales (Prisma — `prisma/schema.prisma`)
+
+| Entidad | Campos clave |
+|---|---|
+| `Usuario` | `id, nombre, apellido, dni` (único), `email?, rol` (ADMINISTRADOR/COORDINADOR), `organizacionId` (FK), `datos` (jsonb) + trazabilidad + `deletedAt` (soft-delete) |
+| `Organizacion` | `id, nombre, tipo` (CLIENTE/SUBCONTRATISTA), `organizacionPadreId` (FK self-referencial), `activa` + trazabilidad |
+
+**Decisión clave — `Usuario` es UNA sola entidad** para cualquier persona (cuenta de sistema y/o persona evaluada). El rol vive en `Usuario` de forma transitoria y migrará a `Vinculacion` en sprints futuros. Esto unifica los conceptos `User` y `Employee` que el prototipo modelaba por separado.
+
+### Endpoints
+
+`GET /health` · `POST /auth/login` · CRUD `/usuarios` (con soft-delete) · CRUD `/organizaciones` · `POST /import/usuarios/preview` (Excel, sin persistir). Lecturas abiertas; escrituras protegidas con JWT.
+
+### Módulos NestJS
+
+`auth/` (login JWT + guard) · `usuarios/` · `organizaciones/` · `import/` · `prisma/` (service global) · `health/`. Cada entidad futura (`Vinculacion`, `Modulo`, `Sesion`…) se agrega como módulo nuevo, no como cambio transversal.
+
+## Modelo de dominio (frontends mockeados)
+
+> El backoffice ya migró **Usuarios** a la API real. El resto de estas entidades sigue hardcodeado en archivos `.js` (se migran ABM por ABM).
 
 ### Core Platform — entidades compartidas por toda la plataforma
 
@@ -149,10 +192,24 @@ Las preguntas reales están en `sima-check/data/training-modules.js` del backoff
 ## Arquitectura de archivos
 
 ```
+sima-training-api/                (backend NestJS)
+├── prisma/            schema.prisma · seed.ts · migrations/
+├── src/
+│   ├── auth/          login JWT + jwt-auth.guard
+│   ├── usuarios/      controller · service · dto/
+│   ├── organizaciones/ controller · service · dto/
+│   ├── import/        preview de Excel (sin persistir)
+│   ├── prisma/        prisma.service.ts (global)
+│   ├── health/        health.controller.ts
+│   ├── app.module.ts
+│   └── main.ts
+├── docker-compose.yml · Dockerfile · render.yaml (deploy preparado, no activo)
+
 sima-training-backoffice/src/
 ├── core/
-│   ├── data/          companies.js · users.js · employees.js
-│   └── pages/         Companies.jsx · Users.jsx
+│   ├── api/           client.js · usuarios.js · organizaciones.js  ← capa HTTP
+│   ├── data/          companies.js · users.js · employees.js (mock, en migración)
+│   └── pages/         Companies.jsx · Users.jsx (Users ya usa la API real)
 ├── sima-check/
 │   ├── data/          training-modules.js · training-assignments.js · evaluations.js
 │   └── pages/         Overview.jsx · TrainingModules.jsx · Questions.jsx · TrainingAssignments.jsx
@@ -182,6 +239,16 @@ sima-check-app/src/
 - La pantalla Preguntas maneja su propia navegación interna (`selectedModuleId`) con `useState` — no requiere cambios en el router global.
 - El campo `image` en preguntas es una ruta relativa a `public/` (ej: `/images/cartel.png`). Se recomienda `public/images/` para organizar los assets de preguntas.
 - El tipo `image-options` usa las mismas rutas en `options[]` y `correctAnswer` — la comparación de respuesta correcta es por igualdad de string (misma ruta).
+
+### Backend (Sprint 1)
+
+- **Monolito modular por dominio**, no microservicios (un solo deploy). Cada entidad futura es un módulo NestJS nuevo, no un cambio transversal.
+- **`Usuario` es una sola entidad** para toda persona; el rol es transitorio en `Usuario` y migrará a `Vinculacion`. Unifica `User` + `Employee` del prototipo.
+- **Trazabilidad** (`created_at/updated_at/created_by/updated_by`) y **soft-delete** (`deleted_at`) desde el día 1 — barato ahora, caro de retrofittear.
+- **`datos` (jsonb)** en `Usuario` para nómina flexible hasta cerrar el mapeo del Excel real. El **mapeo de columnas del import queda abierto a propósito**.
+- **Auth básica sin roles**: el backoffice se autentica con credenciales de entorno (`AUTH_USER`/`AUTH_PASSWORD`); el cliente front hace auto-login y cachea el token (no hay pantalla de login todavía). Lecturas abiertas, escrituras con JWT.
+- **Deploy preparado, no activo**: `Dockerfile` + `render.yaml` listos; falta crear la cuenta cloud. CI (`.github/workflows/ci-sima-training.yml`) corre lint + build + test, sin deploy.
+- **Local-first**: PostgreSQL corre en Docker Compose; requiere Docker Desktop.
 
 ## Cómo agregar un producto futuro (ej: SIMA INSPECTIONS)
 
