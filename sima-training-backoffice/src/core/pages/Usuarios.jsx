@@ -6,17 +6,27 @@ import { usuariosApi } from '../api/usuarios'
 import { organizacionesApi } from '../api/organizaciones'
 import ImportUsuariosModal from '../components/ImportUsuariosModal'
 
-const ROLES = ['ADMINISTRADOR', 'COORDINADOR']
+const ROLES = ['ADMINISTRADOR', 'COORDINADOR', 'ALUMNO']
 
 const roleBadge = {
   ADMINISTRADOR: 'bg-red-50 text-red-600',
-  COORDINADOR: 'bg-blue-50 text-blue-600',
+  COORDINADOR:   'bg-blue-50 text-blue-600',
+  ALUMNO:        'bg-emerald-50 text-emerald-600',
 }
 
 const TABS = [
-  { id: 'sima',    label: 'SIMA' },
-  { id: 'clientes', label: 'Clientes' },
+  { id: 'todos',      label: 'Todos' },
+  { id: 'alumnos',    label: 'Alumnos' },
+  { id: 'operadores', label: 'Operadores' },
 ]
+
+const esAlumno = (u) => u.rol === 'ALUMNO'
+const esOperador = (u) => u.rol === 'ADMINISTRADOR' || u.rol === 'COORDINADOR'
+const matchTab = (u, t) =>
+  t === 'todos' ? true : t === 'alumnos' ? esAlumno(u) : esOperador(u)
+
+// Rol por defecto al crear, según la tab activa.
+const defaultRolParaTab = (t) => (t === 'alumnos' ? 'ALUMNO' : 'COORDINADOR')
 
 const emptyForm = {
   nombre: '',
@@ -25,20 +35,24 @@ const emptyForm = {
   email: '',
   rol: 'COORDINADOR',
   organizacionId: '',
+  legajo: '',
+  puesto: '',
+  sector: '',
 }
 
-export default function Users() {
+export default function Usuarios() {
   const [usuarios, setUsuarios] = useState([])
   const [organizaciones, setOrganizaciones] = useState([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(null)
-  const [tab, setTab] = useState('sima')
+  const [tab, setTab] = useState('todos')
 
   const [modal, setModal] = useState(null)
   const [form, setForm] = useState(emptyForm)
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState(null)
   const [importOpen, setImportOpen] = useState(false)
+  const [search, setSearch] = useState('')
 
   const fetchAll = async () => {
     const [us, orgs] = await Promise.all([
@@ -70,49 +84,51 @@ export default function Users() {
     return () => { active = false }
   }, [])
 
-  // Un usuario es "SIMA" si pertenece a una org de tipo INTERNA.
-  const isSima = (usuario) => {
-    const org = organizaciones.find((o) => o.id === usuario.organizacionId)
-    return org?.tipo === 'INTERNA'
-  }
-
-  const usuariosFiltrados = usuarios.filter((u) =>
-    tab === 'sima' ? isSima(u) : !isSima(u),
-  )
+  const usuariosFiltrados = usuarios
+    .filter((u) => matchTab(u, tab))
+    .filter((u) => {
+      const q = search.trim().toLowerCase()
+      if (!q) return true
+      return (
+        u.dni.toLowerCase().includes(q) ||
+        u.nombre.toLowerCase().includes(q) ||
+        u.apellido.toLowerCase().includes(q)
+      )
+    })
 
   const getOrgName = (id) =>
     organizaciones.find((o) => o.id === id)?.nombre ?? '—'
 
-  // Organizaciones disponibles según la tab activa para el select del form.
-  const orgsParaTab = organizaciones.filter((o) =>
-    tab === 'sima' ? o.tipo === 'INTERNA' : o.tipo !== 'INTERNA',
-  )
+  const isAlumnoForm = form.rol === 'ALUMNO'
 
   const openCreate = () => {
-    const defaultOrg = orgsParaTab[0]?.id ?? ''
-    setForm({ ...emptyForm, organizacionId: defaultOrg })
+    setForm({
+      ...emptyForm,
+      rol: defaultRolParaTab(tab),
+      organizacionId: organizaciones[0]?.id ?? '',
+    })
     setFormError(null)
     setModal({ mode: 'create' })
   }
 
-  const openEdit = (user) => {
+  const openEdit = (usuario) => {
+    const datos = usuario.datos ?? {}
     setForm({
-      nombre: user.nombre ?? '',
-      apellido: user.apellido ?? '',
-      dni: user.dni ?? '',
-      email: user.email ?? '',
-      rol: user.rol ?? 'COORDINADOR',
-      organizacionId: user.organizacionId ?? '',
+      nombre: usuario.nombre ?? '',
+      apellido: usuario.apellido ?? '',
+      dni: usuario.dni ?? '',
+      email: usuario.email ?? '',
+      rol: usuario.rol ?? 'COORDINADOR',
+      organizacionId: usuario.organizacionId ?? '',
+      legajo: datos.legajo ?? '',
+      puesto: datos.puesto ?? '',
+      sector: datos.sector ?? '',
     })
     setFormError(null)
-    setModal({ mode: 'edit', data: user })
+    setModal({ mode: 'edit', data: usuario })
   }
 
-  const handleSave = async () => {
-    if (!form.nombre.trim() || !form.apellido.trim() || !form.dni.trim()) {
-      setFormError('Nombre, apellido y DNI son obligatorios')
-      return
-    }
+  const buildPayload = () => {
     const payload = {
       nombre: form.nombre.trim(),
       apellido: form.apellido.trim(),
@@ -122,13 +138,29 @@ export default function Users() {
     }
     if (form.email.trim()) payload.email = form.email.trim()
 
+    // Datos de nómina solo para alumnos.
+    if (form.rol === 'ALUMNO') {
+      const datos = {}
+      if (form.legajo.trim()) datos.legajo = form.legajo.trim()
+      if (form.puesto.trim()) datos.puesto = form.puesto.trim()
+      if (form.sector.trim()) datos.sector = form.sector.trim()
+      payload.datos = datos
+    }
+    return payload
+  }
+
+  const handleSave = async () => {
+    if (!form.nombre.trim() || !form.apellido.trim() || !form.dni.trim()) {
+      setFormError('Nombre, apellido y DNI son obligatorios')
+      return
+    }
     setSaving(true)
     setFormError(null)
     try {
       if (modal.mode === 'create') {
-        await usuariosApi.create(payload)
+        await usuariosApi.create(buildPayload())
       } else {
-        await usuariosApi.update(modal.data.id, payload)
+        await usuariosApi.update(modal.data.id, buildPayload())
       }
       setModal(null)
       await loadData()
@@ -139,13 +171,13 @@ export default function Users() {
     }
   }
 
-  const handleDelete = async (user) => {
+  const handleDelete = async (usuario) => {
     const ok = window.confirm(
-      `¿Dar de baja a ${user.nombre} ${user.apellido}? Esta acción se puede revertir desde la base.`,
+      `¿Dar de baja a ${usuario.nombre} ${usuario.apellido}? Esta acción se puede revertir desde la base.`,
     )
     if (!ok) return
     try {
-      await usuariosApi.remove(user.id)
+      await usuariosApi.remove(usuario.id)
       await loadData()
     } catch (err) {
       window.alert(`No se pudo dar de baja: ${err.message}`)
@@ -172,8 +204,13 @@ export default function Users() {
     },
     {
       key: 'organizacionId',
-      label: tab === 'sima' ? 'Organización' : 'Cliente',
+      label: 'Organización',
       render: (id) => <span className="text-slate-700">{getOrgName(id)}</span>,
+    },
+    {
+      key: 'datos',
+      label: 'Puesto',
+      render: (datos) => <span className="text-slate-500">{datos?.puesto ?? '—'}</span>,
     },
   ]
 
@@ -205,9 +242,7 @@ export default function Users() {
       {/* Tabs */}
       <div className="flex border-b border-slate-200">
         {TABS.map((t) => {
-          const count = usuarios.filter((u) =>
-            t.id === 'sima' ? isSima(u) : !isSima(u),
-          ).length
+          const count = usuarios.filter((u) => matchTab(u, t.id)).length
           return (
             <button
               key={t.id}
@@ -231,6 +266,15 @@ export default function Users() {
         })}
       </div>
 
+      {/* Búsqueda */}
+      <input
+        type="text"
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        placeholder="Buscar por DNI, nombre o apellido…"
+        className="w-full max-w-sm bg-white border border-slate-300 rounded px-3 py-2 text-slate-900 text-sm focus:outline-none focus:border-red-600"
+      />
+
       {loadError && (
         <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded px-4 py-3 flex items-center justify-between">
           <span>No se pudo conectar con la API: {loadError}</span>
@@ -250,7 +294,7 @@ export default function Users() {
                 Editar
               </Button>
               <Button variant="danger" size="sm" onClick={() => handleDelete(row)}>
-                Eliminar
+                Dar de baja
               </Button>
             </>
           )}
@@ -336,28 +380,68 @@ export default function Users() {
             </select>
           </div>
           <div>
-            <label className="block text-slate-700 text-sm font-medium mb-1">
-              {tab === 'sima' ? 'Organización' : 'Cliente'}
-            </label>
+            <label className="block text-slate-700 text-sm font-medium mb-1">Organización</label>
             <select
               className="w-full bg-white border border-slate-300 rounded px-3 py-2 text-slate-900 text-sm focus:outline-none focus:border-red-600"
               value={form.organizacionId}
               onChange={(e) => setForm((f) => ({ ...f, organizacionId: e.target.value }))}
             >
               <option value="">— Sin organización —</option>
-              {orgsParaTab.map((o) => (
+              {organizaciones.map((o) => (
                 <option key={o.id} value={o.id}>
                   {o.nombre}
                 </option>
               ))}
             </select>
           </div>
+
+          {isAlumnoForm && (
+            <div className="border-t border-slate-200 pt-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-3">Datos de nómina</p>
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-slate-700 text-sm font-medium mb-1">
+                    Legajo <span className="text-slate-400 font-normal">(opcional)</span>
+                  </label>
+                  <input
+                    className="w-full bg-white border border-slate-300 rounded px-3 py-2 text-slate-900 text-sm font-mono focus:outline-none focus:border-red-600"
+                    value={form.legajo}
+                    onChange={(e) => setForm((f) => ({ ...f, legajo: e.target.value }))}
+                    placeholder="EJ-4521"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-700 text-sm font-medium mb-1">
+                    Puesto <span className="text-slate-400 font-normal">(opcional)</span>
+                  </label>
+                  <input
+                    className="w-full bg-white border border-slate-300 rounded px-3 py-2 text-slate-900 text-sm focus:outline-none focus:border-red-600"
+                    value={form.puesto}
+                    onChange={(e) => setForm((f) => ({ ...f, puesto: e.target.value }))}
+                    placeholder="Operador de Planta"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-700 text-sm font-medium mb-1">
+                    Sector <span className="text-slate-400 font-normal">(opcional)</span>
+                  </label>
+                  <input
+                    className="w-full bg-white border border-slate-300 rounded px-3 py-2 text-slate-900 text-sm focus:outline-none focus:border-red-600"
+                    value={form.sector}
+                    onChange={(e) => setForm((f) => ({ ...f, sector: e.target.value }))}
+                    placeholder="Producción"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </Modal>
 
       <ImportUsuariosModal
         open={importOpen}
         onClose={() => setImportOpen(false)}
+        onImported={loadData}
       />
     </div>
   )
