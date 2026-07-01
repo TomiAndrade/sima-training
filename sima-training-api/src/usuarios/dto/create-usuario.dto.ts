@@ -1,4 +1,4 @@
-import { RolUsuario } from '@prisma/client';
+import { ClasificacionAlumno, RolUsuario } from '@prisma/client';
 import {
   IsEmail,
   IsEnum,
@@ -29,6 +29,11 @@ export class CreateUsuarioDto {
   @IsOptional()
   @IsEnum(RolUsuario)
   rol?: RolUsuario;
+
+  // Clasificación del alumno (excluyente). Solo aplica a rol ALUMNO.
+  @IsOptional()
+  @IsEnum(ClasificacionAlumno)
+  clasificacion?: ClasificacionAlumno;
 
   @IsOptional()
   @IsInt()

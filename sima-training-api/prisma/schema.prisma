@@ -21,6 +21,16 @@ enum TipoOrganizacion {
 enum RolUsuario {
   ADMINISTRADOR
   COORDINADOR
+  ALUMNO
+}
+
+// Clasificación del alumno. Excluyente (un alumno tiene exactamente una).
+// Solo aplica a usuarios con rol ALUMNO; los operadores quedan en null.
+enum ClasificacionAlumno {
+  SIMA
+  SUBCONTRATISTA
+  CLIENTE
+  INVITADO
 }
 
 // Organizacion: clientes y subcontratistas. La jerarquía se modela con una
@@ -58,6 +68,9 @@ model Usuario {
   email     String?
   rol       RolUsuario @default(COORDINADOR)
 
+  // Clasificación del alumno (nullable: solo se setea para rol ALUMNO).
+  clasificacion ClasificacionAlumno?
+
   organizacionId Int?          @map("organizacion_id")
   organizacion   Organizacion? @relation(fields: [organizacionId], references: [id])
 
@@ -74,4 +87,128 @@ model Usuario {
   deletedAt DateTime? @map("deleted_at")
 
   @@map("usuarios")
+}
+
+// Tipo de pregunta. Mapeo con los tipos que ya usa el frontend mockeado
+// (sima-check/data/training-modules.js):
+//   truefalse     -> VERDADERO_FALSO
+//   multiple      -> OPCION_MULTIPLE
+//   image-options -> OPCIONES_IMAGEN
+// TEXTO_LIBRE no tiene equivalente en el mock; se agrega a futuro.
+enum TipoPregunta {
+  VERDADERO_FALSO
+  OPCION_MULTIPLE
+  OPCIONES_IMAGEN
+  TEXTO_LIBRE
+}
+
+enum CategoriaEtiqueta {
+  TEMA
+  AREA
+  NORMA
+  ROL
+}
+
+enum EstadoVersionModulo {
+  BORRADOR
+  ACTIVO
+  ARCHIVADO
+}
+
+// Pregunta: única, puede pertenecer a varios módulos (vía ModuloVersionPregunta).
+// Nunca se duplica el texto de una pregunta.
+model Pregunta {
+  id                String       @id @default(uuid())
+  texto             String
+  tipo              TipoPregunta
+  // Opciones (OPCION_MULTIPLE / OPCIONES_IMAGEN): array de strings (texto o rutas de imagen).
+  opciones          Json?
+  // Equivalente a `correctAnswer` del mock. Nullable: TEXTO_LIBRE puede no tener una fija.
+  respuestaCorrecta String?      @map("respuesta_correcta")
+  // Ruta relativa a public/, equivalente al campo `image` del mock.
+  imagen            String?
+  puntajeMax        Int?         @map("puntaje_max")
+  activa            Boolean      @default(true)
+
+  etiquetas PreguntaEtiqueta[]
+  versiones ModuloVersionPregunta[]
+
+  // Trazabilidad
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  createdBy String?  @map("created_by")
+
+  @@map("preguntas")
+}
+
+model Etiqueta {
+  id        String            @id @default(uuid())
+  nombre    String            @unique @db.VarChar(80)
+  categoria CategoriaEtiqueta
+  color     String?           @db.VarChar(7)
+
+  preguntas PreguntaEtiqueta[]
+
+  @@map("etiquetas")
+}
+
+// Pivot Pregunta <-> Etiqueta (N a N).
+model PreguntaEtiqueta {
+  preguntaId String @map("pregunta_id")
+  etiquetaId String @map("etiqueta_id")
+
+  pregunta Pregunta @relation(fields: [preguntaId], references: [id])
+  etiqueta Etiqueta @relation(fields: [etiquetaId], references: [id])
+
+  @@id([preguntaId, etiquetaId])
+  @@map("pregunta_etiquetas")
+}
+
+// Módulo: contenedor estable de versiones. El contenido real (preguntas)
+// vive en ModuloVersion, nunca acá directamente.
+model Modulo {
+  id          String  @id @default(uuid())
+  nombre      String  @db.VarChar(200)
+  descripcion String?
+
+  versiones ModuloVersion[]
+
+  // Trazabilidad
+  createdAt DateTime @default(now()) @map("created_at")
+  createdBy String?  @map("created_by")
+
+  @@map("modulos")
+}
+
+// Versión de un módulo. Editar un módulo activo crea una versión nueva;
+// las versiones anteriores quedan ARCHIVADO e inmutables (no se pierden).
+model ModuloVersion {
+  id            String              @id @default(uuid())
+  moduloId      String              @map("modulo_id")
+  numeroVersion Int                 @map("numero_version")
+  estado        EstadoVersionModulo @default(BORRADOR)
+
+  modulo    Modulo                  @relation(fields: [moduloId], references: [id])
+  preguntas ModuloVersionPregunta[]
+
+  // Trazabilidad
+  createdAt DateTime @default(now()) @map("created_at")
+  createdBy String?  @map("created_by")
+
+  @@unique([moduloId, numeroVersion])
+  @@map("modulo_versiones")
+}
+
+// Pivot ModuloVersion <-> Pregunta (N a N), con orden y obligatoriedad.
+model ModuloVersionPregunta {
+  moduloVersionId String  @map("modulo_version_id")
+  preguntaId      String  @map("pregunta_id")
+  orden           Int
+  obligatoria     Boolean @default(true)
+
+  moduloVersion ModuloVersion @relation(fields: [moduloVersionId], references: [id])
+  pregunta      Pregunta      @relation(fields: [preguntaId], references: [id])
+
+  @@id([moduloVersionId, preguntaId])
+  @@map("modulo_version_preguntas")
 }
