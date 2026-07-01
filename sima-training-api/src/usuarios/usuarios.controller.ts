@@ -9,10 +9,12 @@ import {
   ParseIntPipe,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CreateUsuarioDto } from './dto/create-usuario.dto';
+import { FindAllUsuariosDto } from './dto/find-all-usuarios.dto';
 import { UpdateUsuarioDto } from './dto/update-usuario.dto';
 import { UsuariosService } from './usuarios.service';
 
@@ -27,8 +29,8 @@ export class UsuariosController {
   }
 
   @Get()
-  findAll() {
-    return this.usuarios.findAll();
+  findAll(@Query() query: FindAllUsuariosDto) {
+    return this.usuarios.findAll(query);
   }
 
   @Get(':id')

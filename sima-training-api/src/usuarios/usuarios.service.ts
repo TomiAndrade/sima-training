@@ -7,6 +7,7 @@ import {
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateUsuarioDto } from './dto/create-usuario.dto';
+import { FindAllUsuariosDto } from './dto/find-all-usuarios.dto';
 import { UpdateUsuarioDto } from './dto/update-usuario.dto';
 
 @Injectable()
@@ -14,19 +15,52 @@ export class UsuariosService {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(dto: CreateUsuarioDto) {
-    await this.assertDniDisponible(dto.dni);
     await this.assertOrganizacionExiste(dto.organizacionId);
     const { datos, ...rest } = dto;
+
+    // Si existe una fila dada de baja con el mismo DNI, se reactiva (revive)
+    // en vez de crear una nueva: respeta el constraint @unique sobre dni y
+    // mantiene id e historial. El DNI lo ocupa la fila soft-deleted.
+    const dadoDeBaja = await this.prisma.usuario.findFirst({
+      where: { dni: dto.dni, deletedAt: { not: null } },
+    });
+    if (dadoDeBaja) {
+      return this.prisma.usuario.update({
+        where: { id: dadoDeBaja.id },
+        data: {
+          ...rest,
+          datos: (datos ?? {}) as Prisma.InputJsonValue,
+          deletedAt: null,
+        },
+      });
+    }
+
+    await this.assertDniDisponible(dto.dni);
     return this.prisma.usuario.create({
       data: { ...rest, datos: (datos ?? {}) as Prisma.InputJsonValue },
     });
   }
 
-  findAll() {
-    return this.prisma.usuario.findMany({
-      where: { deletedAt: null },
-      orderBy: { id: 'asc' },
-    });
+  async findAll(query: FindAllUsuariosDto) {
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 50;
+    const where: Prisma.UsuarioWhereInput = {
+      deletedAt: null,
+      ...(query.clasificacion ? { clasificacion: query.clasificacion } : {}),
+    };
+
+    const [data, total] = await Promise.all([
+      this.prisma.usuario.findMany({
+        where,
+        include: { organizacion: true },
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      this.prisma.usuario.count({ where }),
+    ]);
+
+    return { data, total, page, limit };
   }
 
   async findOne(id: number) {
