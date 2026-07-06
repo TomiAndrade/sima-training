@@ -79,20 +79,32 @@ Monolito NestJS organizado por dominio. Detalle en [`sima-training-api/README.md
 
 | Entidad | Campos clave |
 |---|---|
-| `Usuario` | `id, nombre, apellido, dni` (único), `email?, rol` (ADMINISTRADOR/COORDINADOR), `organizacionId` (FK), `datos` (jsonb) + trazabilidad + `deletedAt` (soft-delete) |
+| `Usuario` | `id, nombre, apellido, dni` (único), `email?, rol` (ADMINISTRADOR/COORDINADOR/ALUMNO), `clasificacion?` (SIMA/CLIENTE/SUBCONTRATISTA/INVITADO, solo si `rol = ALUMNO`), `organizacionId` (FK), `datos` (jsonb) + trazabilidad + `deletedAt` (soft-delete) |
 | `Organizacion` | `id, nombre, tipo` (CLIENTE/SUBCONTRATISTA/**INTERNA**), `organizacionPadreId` (FK self-referencial), `activa` + trazabilidad |
+| `Pregunta` | `id (uuid), texto, tipo` (VERDADERO_FALSO/OPCION_MULTIPLE/OPCIONES_IMAGEN/TEXTO_LIBRE), `opciones?` (jsonb), `respuestaCorrecta?, imagen?, puntajeMax?, activa` + trazabilidad. Única: se comparte entre módulos, nunca se duplica |
+| `Etiqueta` | `id (uuid), nombre` (único), `categoria` (TEMA/AREA/NORMA/ROL), `color?` — categoriza preguntas |
+| `Modulo` | `id (uuid), nombre, descripcion?` + trazabilidad. Contenedor estable; el contenido real vive en `ModuloVersion` |
+| `ModuloVersion` | `id (uuid), moduloId, numeroVersion, estado` (BORRADOR/ACTIVO/ARCHIVADO) + trazabilidad. Editar un módulo activo crea una versión nueva; las anteriores quedan `ARCHIVADO` e inmutables |
 
 **Tipo `INTERNA`:** La organización **"Ingeniería SIMA"** usa este tipo. Los usuarios que pertenecen a ella son usuarios internos de SIMA (administradores del sistema); el resto (CLIENTE/SUBCONTRATISTA) son usuarios de clientes.
 
-**Decisión clave — `Usuario` es UNA sola entidad** para cualquier persona (cuenta de sistema y/o persona evaluada). El rol vive en `Usuario` de forma transitoria y migrará a `Vinculacion` en sprints futuros. Esto unifica los conceptos `User` y `Employee` que el prototipo modelaba por separado.
+**Decisión clave — `Usuario` es UNA sola entidad** para cualquier persona (cuenta de sistema y/o persona evaluada). El rol vive en `Usuario` de forma transitoria y migrará a `Vinculacion` en sprints futuros. Esto unifica los conceptos `User` y `Employee` que el prototipo modelaba por separado. `rol = ALUMNO` es la persona evaluada (equivalente al `Employee`/"Empleado" del modelo de roles); ADMINISTRADOR/COORDINADOR son las cuentas de sistema del backoffice.
+
+**Clasificación de usuario (SIMA/CLIENTE/SUBCONTRATISTA/INVITADO):** persistida y editable en `Usuario.clasificacion`, **no derivada** de `Organizacion.tipo` al vuelo — decisión deliberada para permitir que un admin fuerce una excepción manual (ej. marcar a alguien como INVITADO aunque su organización sea CLIENTE). Al elegir la organización en el form se sugiere automáticamente la clasificación correspondiente, pero queda editable. Solo aplica a `rol = ALUMNO`.
+
+**Banco de preguntas y módulos versionados (SIMA CHECK):** `Pregunta` es única y reutilizable entre módulos vía el pivot `ModuloVersionPregunta` (N a N). `Modulo` nunca se edita en el lugar: cambiar su contenido crea una `ModuloVersion` nueva y la anterior queda archivada e inmutable — no se pierden versiones viejas. Los tipos de pregunta (`VERDADERO_FALSO`/`OPCION_MULTIPLE`/`OPCIONES_IMAGEN`) mapean 1:1 a los tipos del mock frontend (`truefalse`/`multiple`/`image-options`); `TEXTO_LIBRE` está en el enum para uso futuro, sin implementación todavía.
+
+**Baja lógica de preguntas por módulo:** una pregunta **no se edita, se activa/desactiva**. El pivot `ModuloVersionPregunta` tiene un flag `activa` (default `true`) que es la baja lógica **por módulo**: desactivar una pregunta la saca solo de ese módulo (togglea el flag en la versión vigente, in place — no crea versión nueva). Es distinto de `Pregunta.activa`, que es el flag global del banco. `GET /modulos/:id` devuelve todas las preguntas del módulo (activas e inactivas) para poder reactivarlas desde el backoffice.
 
 ### Endpoints
 
-`GET /health` · `POST /auth/login` · CRUD `/usuarios` (con soft-delete) · CRUD `/organizaciones` · `POST /import/usuarios/preview` (Excel, sin persistir). Lecturas abiertas; escrituras protegidas con JWT.
+`GET /health` · `POST /auth/login` · CRUD `/usuarios` (soft-delete, paginación `?page=`/`?limit=` y filtro `?clasificacion=`, responde `{ data, total, page, limit }`) · CRUD `/organizaciones` · `POST /import/usuarios/preview` (Excel, sin persistir) · `/etiquetas` (POST/GET) · `/preguntas` (POST/GET con filtros `?q=`/`?etiqueta=`/`?categoria=`, GET `/:id`) · `/modulos` (GET lista todos, POST crea con `ModuloVersion` v1 BORRADOR, GET `/:id` con versión activa/última + preguntas, GET `/:id/versiones`, POST `/:id/preguntas` asigna a la versión BORRADOR, PATCH `/:id/preguntas/:preguntaId` activa/desactiva la asignación de una pregunta en ese módulo). Lecturas abiertas; escrituras protegidas con JWT.
 
 ### Módulos NestJS
 
-`auth/` (login JWT + guard) · `usuarios/` · `organizaciones/` · `import/` · `prisma/` (service global) · `health/`. Cada entidad futura (`Vinculacion`, `Modulo`, `Sesion`…) se agrega como módulo nuevo, no como cambio transversal.
+`auth/` (login JWT + guard) · `usuarios/` · `organizaciones/` · `import/` · `etiquetas/` · `preguntas/` · `modulos/` · `prisma/` (service global) · `health/`. Cada entidad futura (`Vinculacion`, `Sesion`…) se agrega como módulo nuevo, no como cambio transversal.
+
+Pendiente para el próximo sprint: `PATCH /modulos/:id/aprobar` (aprobación de versión), AuditLog completo (ISO 9001), detección de duplicados de preguntas (pg_trgm/embeddings), y el arranque de `Vinculacion` (alumno vs operador).
 
 ## Modelo de dominio (frontends mockeados)
 
@@ -149,7 +161,7 @@ Al navegar a cualquier página de SIMA CHECK aparece una **barra de tabs** entre
 |---|---|---|
 | Resumen | `sima-check-overview` | Métricas: 6 StatCards + gráfico SVG de aprobación por módulo + lista de últimas evaluaciones |
 | Capacitaciones | `training-modules` | Tabla + modal crear/editar + toggle activo/inactivo |
-| Preguntas | `questions` | **Paso 1:** grid de 4 cards de módulos. **Paso 2:** tabla de preguntas + modal crear/editar. El modal soporta los 3 tipos: `truefalse`, `multiple`, `image-options`. Campo "Imagen" opcional con preview. Para `image-options` las opciones son rutas de imagen con thumbnails y la respuesta correcta se selecciona con click sobre el thumbnail. Badge de tipo: sky=V/F · violet=Múltiple · amber=Imágenes. |
+| Preguntas | `questions` | **100% backend** (sin mock). Un `<select>` de módulos (desde `GET /modulos`, primero por defecto) filtra la tabla de preguntas asignadas a ese módulo (`GET /modulos/:id`). Columnas: Enunciado · Tipo · Estado (badge Activa/Inactiva). **Las preguntas no se editan: se activan/desactivan** por módulo con un botón por fila (`PATCH /modulos/:id/preguntas/:preguntaId`). Crear/asignar preguntas sigue disponible vía `BancoAcciones` (Nueva pregunta / Asignar del banco). Badge de tipo: sky=V/F · violet=Múltiple · amber=Imágenes · slate=Texto libre. |
 | Asignaciones | `training-assignments` | Tabla (empleado, empresa, módulo, estado, asignado por, fecha) + modal crear con validación de duplicados |
 
 La barra de tabs y el breadcrumb `SIMA TRAINING › SIMA CHECK › {tab}` se renderizan en `BackofficeLayout.jsx` usando `SIMA_CHECK_PAGES` (Set) y `SIMA_CHECK_TABS` (array).
@@ -201,6 +213,9 @@ sima-training-api/                (backend NestJS)
 │   ├── usuarios/      controller · service · dto/
 │   ├── organizaciones/ controller · service · dto/
 │   ├── import/        preview de Excel (sin persistir)
+│   ├── etiquetas/     controller · service · dto/ (categorización de preguntas)
+│   ├── preguntas/     controller · service · dto/ (banco único, reutilizable entre módulos)
+│   ├── modulos/       controller · service · dto/ (Modulo + ModuloVersion + asignación de preguntas)
 │   ├── prisma/        prisma.service.ts (global)
 │   ├── health/        health.controller.ts
 │   ├── app.module.ts
@@ -251,6 +266,14 @@ sima-check-app/src/
 - **Auth básica sin roles**: el backoffice se autentica con credenciales de entorno (`AUTH_USER`/`AUTH_PASSWORD`); el cliente front hace auto-login y cachea el token (no hay pantalla de login todavía). Lecturas abiertas, escrituras con JWT.
 - **Deploy preparado, no activo**: `Dockerfile` + `render.yaml` listos; falta crear la cuenta cloud. CI (`.github/workflows/ci-sima-training.yml`) corre lint + build + test, sin deploy.
 - **Local-first**: PostgreSQL corre en Docker Compose; requiere Docker Desktop.
+
+### Backend (Sprint 2 — SIMA CHECK)
+
+- **`clasificacion` persistida, no derivada**: se decidió que `Usuario.clasificacion` sea una columna editable (con sugerencia automática desde `Organizacion.tipo`) en vez de calcularse al vuelo, para permitir que un admin marque excepciones manuales. Solo aplica a `rol = ALUMNO`.
+- **Banco de preguntas único**: `Pregunta` nunca se duplica; se comparte entre módulos vía el pivot `ModuloVersionPregunta`.
+- **Módulos versionados e inmutables**: `Modulo` es un contenedor estable; editar su contenido crea una `ModuloVersion` nueva, la anterior queda `ARCHIVADO` y no se modifica.
+- **Baja lógica de preguntas por módulo (no edición)**: regla de negocio deliberada — las preguntas no se editan, se activan/desactivan. Se agregó `activa` al pivot `ModuloVersionPregunta` (baja por módulo) en vez de reusar `Pregunta.activa` (global), para que desactivar afecte solo al módulo donde se hace. El toggle es in place sobre la versión vigente (no versiona): es la alternativa liviana explícita a editar contenido. La vista Preguntas del backoffice quedó 100% contra el backend (se eliminó el mock de esa pantalla; `training-modules.js` sigue para las demás, en migración).
+- **TODO explícito**: detección de preguntas duplicadas/similares (pg_trgm o embeddings) — comentado en `preguntas.service.ts`, fuera de alcance de este sprint.
 
 ## Cómo agregar un producto futuro (ej: SIMA INSPECTIONS)
 
