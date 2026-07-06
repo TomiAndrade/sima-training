@@ -23,6 +23,14 @@ export class ModulosService {
     });
   }
 
+  // Lista todos los módulos para poblar el filtro del backoffice.
+  findAll() {
+    return this.prisma.modulo.findMany({
+      orderBy: { createdAt: 'asc' },
+      select: { id: true, nombre: true, descripcion: true },
+    });
+  }
+
   async findOne(id: string) {
     const modulo = await this.prisma.modulo.findUnique({ where: { id } });
     if (!modulo) {
@@ -86,6 +94,42 @@ export class ModulosService {
       include: { pregunta: true },
       orderBy: { orden: 'asc' },
     });
+  }
+
+  // Baja lógica por módulo: activa/desactiva la asignación de la pregunta en la
+  // versión vigente (la misma que muestra findOne). No crea una versión nueva.
+  async setPreguntaActiva(
+    moduloId: string,
+    preguntaId: string,
+    activa: boolean,
+  ) {
+    const version = await this.ultimaOActivaVersion(moduloId);
+    if (!version) {
+      throw new NotFoundException(`El módulo ${moduloId} no tiene versiones`);
+    }
+
+    try {
+      return await this.prisma.moduloVersionPregunta.update({
+        where: {
+          moduloVersionId_preguntaId: {
+            moduloVersionId: version.id,
+            preguntaId,
+          },
+        },
+        data: { activa },
+        include: { pregunta: true },
+      });
+    } catch (err) {
+      if (
+        err instanceof Prisma.PrismaClientKnownRequestError &&
+        err.code === 'P2025'
+      ) {
+        throw new NotFoundException(
+          `La pregunta ${preguntaId} no está asignada a este módulo`,
+        );
+      }
+      throw err;
+    }
   }
 
   private async ultimaOActivaVersion(moduloId: string) {

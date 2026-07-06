@@ -205,6 +205,9 @@ model ModuloVersionPregunta {
   preguntaId      String  @map("pregunta_id")
   orden           Int
   obligatoria     Boolean @default(true)
+  // Baja lógica por módulo: una pregunta no se edita, se desactiva. Solo afecta
+  // a este módulo (el banco Pregunta.activa sigue siendo el flag global).
+  activa          Boolean @default(true)
 
   moduloVersion ModuloVersion @relation(fields: [moduloVersionId], references: [id])
   pregunta      Pregunta      @relation(fields: [preguntaId], references: [id])
