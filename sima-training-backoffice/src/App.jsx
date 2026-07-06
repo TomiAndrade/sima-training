@@ -6,6 +6,7 @@ import Usuarios from './core/pages/Usuarios'
 import Overview from './sima-check/pages/Overview'
 import TrainingModules from './sima-check/pages/TrainingModules'
 import TrainingAssignments from './sima-check/pages/TrainingAssignments'
+import Questions from './sima-check/pages/Questions'
 
 const PAGES = {
   dashboard: Dashboard,
@@ -13,6 +14,7 @@ const PAGES = {
   usuarios: Usuarios,
   'sima-check-overview': Overview,
   'training-modules': TrainingModules,
+  questions: Questions,
   'training-assignments': TrainingAssignments,
 }
 
