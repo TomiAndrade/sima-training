@@ -3,7 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { ModuloVersion, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AsignarPreguntaItemDto } from './dto/asignar-preguntas.dto';
 import { CreateModuloDto } from './dto/create-modulo.dto';
@@ -29,6 +29,30 @@ export class ModulosService {
       orderBy: { createdAt: 'asc' },
       select: { id: true, nombre: true, descripcion: true },
     });
+  }
+
+  // Batch de ultimaOActivaVersion: resuelve la versión vigente de cada módulo
+  // pedido en 2 queries fijas (no N+1). La usa PreguntasService para filtrar
+  // y enriquecer preguntas por pertenencia a módulos.
+  async versionesVigentesDe(moduloIds: string[]): Promise<ModuloVersion[]> {
+    if (moduloIds.length === 0) return [];
+
+    const activas = await this.prisma.moduloVersion.findMany({
+      where: { moduloId: { in: moduloIds }, estado: 'ACTIVO' },
+    });
+    const resueltos = new Set(activas.map((v) => v.moduloId));
+    const faltantes = moduloIds.filter((id) => !resueltos.has(id));
+    if (faltantes.length === 0) return activas;
+
+    const candidatas = await this.prisma.moduloVersion.findMany({
+      where: { moduloId: { in: faltantes } },
+      orderBy: { numeroVersion: 'desc' },
+    });
+    const porModulo = new Map<string, ModuloVersion>();
+    for (const v of candidatas) {
+      if (!porModulo.has(v.moduloId)) porModulo.set(v.moduloId, v);
+    }
+    return [...activas, ...porModulo.values()];
   }
 
   async findOne(id: string) {

@@ -4,6 +4,7 @@ import {
   Get,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
   Query,
   UseGuards,
@@ -11,6 +12,7 @@ import {
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CreatePreguntaDto } from './dto/create-pregunta.dto';
 import { FindAllPreguntasDto } from './dto/find-all-preguntas.dto';
+import { TogglePreguntaActivaDto } from './dto/toggle-pregunta-activa.dto';
 import { PreguntasService } from './preguntas.service';
 
 @Controller('preguntas')
@@ -31,5 +33,14 @@ export class PreguntasController {
   @Get(':id')
   findOne(@Param('id', ParseUUIDPipe) id: string) {
     return this.preguntas.findOne(id);
+  }
+
+  @Patch(':id')
+  @UseGuards(JwtAuthGuard)
+  setActiva(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: TogglePreguntaActivaDto,
+  ) {
+    return this.preguntas.setActiva(id, dto.activa);
   }
 }
