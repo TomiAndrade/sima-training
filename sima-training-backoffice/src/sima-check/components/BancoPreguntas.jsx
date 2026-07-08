@@ -225,8 +225,10 @@ export function AsignarPreguntaModal({ onClose, backendId, assignedIds, baseOrde
 
 const EMPTY_BACKEND_FORM = { texto: '', tipo: 'VERDADERO_FALSO', opciones: ['', '', '', ''], respuestaCorrecta: '', puntajeMax: '' }
 
-// Modal "Nueva pregunta": crea en el banco (POST /preguntas) y la asigna al
-// módulo actual en el mismo gesto (POST /modulos/:id/preguntas).
+// Modal "Nueva pregunta": crea en el banco (POST /preguntas) y, si se pasa un
+// backendId (módulo), la asigna en el mismo gesto (POST /modulos/:id/preguntas).
+// Sin backendId, la pregunta queda creada en el banco sin asignar (misma
+// semántica que "sin módulo destino" en la importación de Excel).
 // El padre solo la monta mientras está abierta (estado arranca limpio).
 export function NuevaPreguntaModal({ onClose, backendId, baseOrden, onAssigned }) {
   const [form, setForm] = useState(EMPTY_BACKEND_FORM)
@@ -251,9 +253,11 @@ export function NuevaPreguntaModal({ onClose, backendId, baseOrden, onAssigned }
         ...(necesitaOpciones ? { opciones: form.opciones.filter(Boolean) } : {}),
       }
       const pregunta = await preguntasApi.create(payload)
-      await modulosApi.asignarPreguntas(backendId, [
-        { preguntaId: pregunta.id, orden: baseOrden + 1, obligatoria: true },
-      ])
+      if (backendId) {
+        await modulosApi.asignarPreguntas(backendId, [
+          { preguntaId: pregunta.id, orden: (baseOrden ?? 0) + 1, obligatoria: true },
+        ])
+      }
       await onAssigned()
       onClose()
     } catch (err) {
@@ -271,7 +275,7 @@ export function NuevaPreguntaModal({ onClose, backendId, baseOrden, onAssigned }
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>Cancelar</Button>
-          <Button onClick={handleGuardar} disabled={saving}>{saving ? 'Guardando...' : 'Crear y asignar'}</Button>
+          <Button onClick={handleGuardar} disabled={saving}>{saving ? 'Guardando...' : backendId ? 'Crear y asignar' : 'Crear'}</Button>
         </>
       }
     >

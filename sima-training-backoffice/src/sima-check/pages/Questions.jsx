@@ -5,7 +5,7 @@ import MultiSelectFilter from '../../components/MultiSelectFilter'
 import { modulosApi } from '../../core/api/modulos'
 import { preguntasApi } from '../../core/api/preguntas'
 import { useBancoModulo, backendTypeBadge } from '../components/bancoModulo'
-import { BancoAcciones } from '../components/BancoPreguntas'
+import { BancoAcciones, NuevaPreguntaModal } from '../components/BancoPreguntas'
 import ImportPreguntasModal from '../../core/components/ImportPreguntasModal'
 
 // Opción sintética del multi-select de módulos: no es un id real de Modulo,
@@ -189,6 +189,7 @@ export default function Questions() {
   const [search, setSearch] = useState('')
   const [loadError, setLoadError] = useState(null)
   const [importOpen, setImportOpen] = useState(false)
+  const [nuevaOpen, setNuevaOpen] = useState(false)
   const [reloadKey, setReloadKey] = useState(0)
 
   useEffect(() => {
@@ -230,7 +231,12 @@ export default function Questions() {
           <div className="text-slate-400 text-[10px] font-semibold uppercase tracking-widest mb-1">Preguntas</div>
           <p className="text-slate-500 text-sm">Banco de preguntas. Activá/desactivá por módulo o enviá a la papelera global.</p>
         </div>
-        <Button variant="secondary" onClick={() => setImportOpen(true)}>Importar Excel</Button>
+        <div className="flex items-center gap-2">
+          {!usaCaminoModulo && (
+            <Button variant="secondary" onClick={() => setNuevaOpen(true)}>Nueva pregunta</Button>
+          )}
+          <Button variant="secondary" onClick={() => setImportOpen(true)}>Importar Excel</Button>
+        </div>
       </div>
 
       {loadError && <div className="bg-red-50 border border-red-200 text-red-700 text-xs rounded px-3 py-2">{loadError}</div>}
@@ -265,6 +271,16 @@ export default function Questions() {
         onClose={() => setImportOpen(false)}
         onImported={() => setReloadKey((k) => k + 1)}
       />
+
+      {nuevaOpen && (
+        <NuevaPreguntaModal
+          onClose={() => setNuevaOpen(false)}
+          onAssigned={() => {
+            setReloadKey((k) => k + 1)
+            setNuevaOpen(false)
+          }}
+        />
+      )}
     </div>
   )
 }
