@@ -7,6 +7,10 @@ import { preguntasApi } from '../../core/api/preguntas'
 import { useBancoModulo, backendTypeBadge } from '../components/bancoModulo'
 import { BancoAcciones } from '../components/BancoPreguntas'
 
+// Opción sintética del multi-select de módulos: no es un id real de Modulo,
+// se traduce a ?sinAsignar=true en vez de sumarse a moduloId[].
+const SIN_ASIGNAR_ID = '__sin_asignar__'
+
 function estadoBadge(activa) {
   return (
     <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${activa ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-500'}`}>
@@ -90,7 +94,7 @@ function QuestionsTableModulo({ moduleId }) {
 // Camino global: 0 o 2+ módulos seleccionados, o Papelera activa. Contra
 // GET /preguntas con activa/moduloId[]. Acción única: papelera/recuperar
 // (global, con cascada en el backend).
-function QuestionsTableGlobal({ selectedModuleIds, showActivas, showPapelera }) {
+function QuestionsTableGlobal({ selectedModuleIds, sinAsignar, showActivas, showPapelera, search }) {
   const [preguntas, setPreguntas] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
@@ -102,17 +106,17 @@ function QuestionsTableGlobal({ selectedModuleIds, showActivas, showPapelera }) 
     setLoading(true)
     setError(null)
     preguntasApi
-      .list({ activa: activaParam, moduloId: [...selectedModuleIds] })
+      .list({ q: search.trim() || undefined, activa: activaParam, moduloId: [...selectedModuleIds], sinAsignar })
       .then(setPreguntas)
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false))
   }
 
   useEffect(() => {
-    const t = setTimeout(load, 0)
+    const t = setTimeout(load, 300)
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedModuleIds, showActivas, showPapelera])
+  }, [selectedModuleIds, sinAsignar, showActivas, showPapelera, search])
 
   const handleToggle = async (row) => {
     setTogglingId(row.id)
@@ -181,13 +185,23 @@ export default function Questions() {
   const [selectedModuleIds, setSelectedModuleIds] = useState(new Set())
   const [showActivas, setShowActivas] = useState(true)
   const [showPapelera, setShowPapelera] = useState(false)
+  const [search, setSearch] = useState('')
   const [loadError, setLoadError] = useState(null)
 
   useEffect(() => {
     modulosApi.list().then(setModules).catch((err) => setLoadError(err.message))
   }, [])
 
-  const moduleOptions = useMemo(() => modules.map((m) => ({ id: m.id, label: m.nombre })), [modules])
+  const moduleOptions = useMemo(
+    () => [{ id: SIN_ASIGNAR_ID, label: '— Sin asignar —' }, ...modules.map((m) => ({ id: m.id, label: m.nombre }))],
+    [modules],
+  )
+
+  const sinAsignar = selectedModuleIds.has(SIN_ASIGNAR_ID)
+  const realModuleIds = useMemo(
+    () => new Set([...selectedModuleIds].filter((id) => id !== SIN_ASIGNAR_ID)),
+    [selectedModuleIds],
+  )
 
   // No permite apagar un chip si es el único encendido (evita "ambos off" =
   // "trae todo" sin que el usuario lo haya elegido explícitamente).
@@ -200,9 +214,11 @@ export default function Questions() {
     setShowPapelera((v) => !v)
   }
 
-  // Camino Story-2 solo con exactamente 1 módulo y papelera no forzada.
-  const usaCaminoModulo = selectedModuleIds.size === 1 && showActivas && !showPapelera
-  const soloModuleId = usaCaminoModulo ? [...selectedModuleIds][0] : null
+  // Camino Story-2 solo con exactamente 1 módulo REAL (no "Sin asignar"),
+  // papelera no forzada y sin búsqueda de texto (el buscador es universal →
+  // siempre usa el camino global).
+  const usaCaminoModulo = realModuleIds.size === 1 && !sinAsignar && showActivas && !showPapelera && !search.trim()
+  const soloModuleId = usaCaminoModulo ? [...realModuleIds][0] : null
 
   return (
     <div className="space-y-5 max-w-5xl">
@@ -214,6 +230,12 @@ export default function Questions() {
       {loadError && <div className="bg-red-50 border border-red-200 text-red-700 text-xs rounded px-3 py-2">{loadError}</div>}
 
       <div className="flex items-center gap-3 flex-wrap">
+        <input
+          className="bg-white border border-slate-300 rounded px-3 py-2 text-slate-900 text-sm focus:outline-none focus:border-red-600 min-w-[240px]"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Buscar por enunciado..."
+        />
         <MultiSelectFilter options={moduleOptions} selectedIds={selectedModuleIds} onChange={setSelectedModuleIds} placeholder="Todos los módulos" />
         <ChipToggle active={showActivas} onClick={toggleActivas}>Activas</ChipToggle>
         <ChipToggle active={showPapelera} onClick={togglePapelera}>Papelera</ChipToggle>
@@ -222,7 +244,13 @@ export default function Questions() {
       {usaCaminoModulo ? (
         <QuestionsTableModulo moduleId={soloModuleId} />
       ) : (
-        <QuestionsTableGlobal selectedModuleIds={selectedModuleIds} showActivas={showActivas} showPapelera={showPapelera} />
+        <QuestionsTableGlobal
+          selectedModuleIds={realModuleIds}
+          sinAsignar={sinAsignar}
+          showActivas={showActivas}
+          showPapelera={showPapelera}
+          search={search}
+        />
       )}
     </div>
   )

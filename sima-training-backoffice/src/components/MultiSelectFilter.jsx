@@ -39,7 +39,7 @@ export default function MultiSelectFilter({ options, selectedIds, onChange, plac
       ? placeholder
       : selectedIds.size === 1
         ? (options.find((o) => selectedIds.has(o.id))?.label ?? `${selectedIds.size} seleccionado`)
-        : `${selectedIds.size} módulos seleccionados`
+        : `${selectedIds.size} seleccionados`
 
   return (
     <div className="relative" ref={ref}>

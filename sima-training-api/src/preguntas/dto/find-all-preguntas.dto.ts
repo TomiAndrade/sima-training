@@ -38,4 +38,15 @@ export class FindAllPreguntasDto {
   @Transform(({ value }) => (Array.isArray(value) ? value : [value]))
   @IsUUID('4', { each: true })
   moduloId?: string[];
+
+  // ?sinAsignar=true — preguntas sin ninguna asignación a la versión vigente
+  // de ningún módulo. Se combina con moduloId como OR (ver PreguntasService).
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (value === 'true') return true;
+    if (value === 'false') return false;
+    return value;
+  })
+  @IsBoolean()
+  sinAsignar?: boolean;
 }

@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { ModuloVersion, Prisma } from '@prisma/client';
 import { ModulosService } from '../modulos/modulos.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreatePreguntaDto } from './dto/create-pregunta.dto';
@@ -33,12 +33,37 @@ export class PreguntasService {
   }
 
   async findAll(query: FindAllPreguntasDto) {
-    let versionIdsFiltro: string[] | undefined;
+    // Vigentes de TODOS los módulos: hace falta siempre para enriquecer la
+    // respuesta, y también para resolver moduloId/sinAsignar — se calcula acá
+    // una sola vez y se reutiliza, en vez de que cada filtro dispare su
+    // propia consulta.
+    const todosLosModulos = await this.modulos.findAll();
+    const todasLasVersionesVigentes = await this.modulos.versionesVigentesDe(
+      todosLosModulos.map((m) => m.id),
+    );
+
+    // moduloId y sinAsignar se combinan con OR entre sí (preguntas de tal
+    // módulo O sin asignar), y ese resultado se combina con AND con el resto
+    // de los filtros (texto, activa, etiqueta).
+    const filtrosModulo: Prisma.PreguntaWhereInput[] = [];
     if (query.moduloId?.length) {
-      const versiones = await this.modulos.versionesVigentesDe(
-        query.moduloId,
-      );
-      versionIdsFiltro = versiones.map((v) => v.id);
+      const idsSeleccionados = todasLasVersionesVigentes
+        .filter((v) => query.moduloId!.includes(v.moduloId))
+        .map((v) => v.id);
+      filtrosModulo.push({
+        versiones: { some: { moduloVersionId: { in: idsSeleccionados } } },
+      });
+    }
+    if (query.sinAsignar) {
+      filtrosModulo.push({
+        versiones: {
+          none: {
+            moduloVersionId: {
+              in: todasLasVersionesVigentes.map((v) => v.id),
+            },
+          },
+        },
+      });
     }
 
     const where: Prisma.PreguntaWhereInput = {
@@ -56,9 +81,11 @@ export class PreguntasService {
             },
           }
         : {}),
-      ...(versionIdsFiltro
-        ? { versiones: { some: { moduloVersionId: { in: versionIdsFiltro } } } }
-        : {}),
+      ...(filtrosModulo.length === 1
+        ? filtrosModulo[0]
+        : filtrosModulo.length > 1
+          ? { OR: filtrosModulo }
+          : {}),
     };
 
     const preguntas = await this.prisma.pregunta.findMany({
@@ -67,7 +94,7 @@ export class PreguntasService {
       orderBy: { createdAt: 'desc' },
     });
 
-    return this.enriquecerConModulos(preguntas);
+    return this.enriquecerConModulos(preguntas, todasLasVersionesVigentes);
   }
 
   async findOne(id: string) {
@@ -111,21 +138,18 @@ export class PreguntasService {
 
   // Enriquece cada pregunta con los módulos a los que está asignada
   // actualmente (versión vigente de cada módulo), para la columna "Módulos"
-  // del backoffice. Resuelve las versiones vigentes de TODOS los módulos una
-  // sola vez y hace una única query de pivots, para evitar N+1.
+  // del backoffice. Recibe las versiones vigentes ya resueltas por el
+  // llamador (findAll ya las necesita para sus propios filtros) y hace una
+  // única query de pivots, para evitar N+1.
   private async enriquecerConModulos<T extends { id: string }>(
     preguntas: T[],
+    versiones: ModuloVersion[],
   ): Promise<
     (T & {
       modulos: { moduloId: string; moduloNombre: string; activaEnModulo: boolean }[];
     })[]
   > {
     if (preguntas.length === 0) return [];
-
-    const todosLosModulos = await this.modulos.findAll();
-    const versiones = await this.modulos.versionesVigentesDe(
-      todosLosModulos.map((m) => m.id),
-    );
     if (versiones.length === 0) {
       return preguntas.map((p) => ({ ...p, modulos: [] }));
     }

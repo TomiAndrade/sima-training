@@ -9,6 +9,7 @@ function buildQuery(params) {
   if (params.moduloId?.length) {
     params.moduloId.forEach((id) => qs.append('moduloId', id))
   }
+  if (params.sinAsignar) qs.set('sinAsignar', 'true')
   const s = qs.toString()
   return s ? `?${s}` : ''
 }
