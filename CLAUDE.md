@@ -126,7 +126,7 @@ Pendiente para el próximo sprint: `PATCH /modulos/:id/aprobar` (aprobación de 
 
 | Entidad | Archivo | Campos |
 |---|---|---|
-| `TrainingModule` | `sima-check/data/training-modules.js` | `id, name, active, questions[]` · cada pregunta: `id, type, statement, correctAnswer, options[]?, image?, approvalRate?` |
+| `TrainingModule` | `sima-check/data/training-modules.js` | `id, backendId, name, active, questions[]`. **`questions[]` quedó vacío**: las preguntas mock se removieron; el banco real vive en backend (se opera vía `Questions.jsx` / `BancoAcciones` por `backendId`). El archivo hoy solo aporta metadata de módulo |
 | `TrainingAssignment` | `sima-check/data/training-assignments.js` | `id, employeeId, moduleId, assignedBy, assignedAt, status` |
 | `Evaluation` | `sima-check/data/evaluations.js` | `id, employeeName, moduleName, score, approved, date, companyId` |
 
@@ -205,7 +205,7 @@ Al finalizar una evaluación, la asignación cambia de `pending → completed` *
 - **Evaluaciones**: 20 registros históricos para el dashboard del backoffice
 - **Asignaciones**: 27 asignaciones mockeadas con `status: 'pending' | 'completed' | 'expired'`
 
-Las preguntas reales están en `sima-check/data/training-modules.js` del backoffice y `src/data/modules.js` de la app (módulo SIMA Avanzado, IDs 301–310).
+Las preguntas mock se retiraron del backoffice (`sima-check/data/training-modules.js` quedó con `questions: []`) antes de arrancar el trabajo real sobre el dominio de preguntas; el banco real vive en backend. La **app tablet** (`sima-check-app/src/data/modules.js`) **mantiene su mock de preguntas** (módulo SIMA Avanzado, IDs 301–310, etc.) hasta que se conecte al backend.
 
 ## Arquitectura de archivos
 
