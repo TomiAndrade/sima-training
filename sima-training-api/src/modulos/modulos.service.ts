@@ -92,12 +92,20 @@ export class ModulosService {
 
     await this.assertPreguntasExisten(items.map((i) => i.preguntaId));
 
+    // Los items sin `orden` se appendean al final de la versión: se resuelve el
+    // orden máximo actual y se incrementa por cada item sin orden explícito.
+    const agregado = await this.prisma.moduloVersionPregunta.aggregate({
+      where: { moduloVersionId: borrador.id },
+      _max: { orden: true },
+    });
+    let siguienteOrden = agregado._max.orden ?? 0;
+
     try {
       await this.prisma.moduloVersionPregunta.createMany({
         data: items.map((item) => ({
           moduloVersionId: borrador.id,
           preguntaId: item.preguntaId,
-          orden: item.orden,
+          orden: item.orden ?? (siguienteOrden += 1),
           obligatoria: item.obligatoria ?? true,
         })),
       });

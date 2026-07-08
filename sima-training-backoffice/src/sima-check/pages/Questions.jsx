@@ -5,7 +5,7 @@ import MultiSelectFilter from '../../components/MultiSelectFilter'
 import { modulosApi } from '../../core/api/modulos'
 import { preguntasApi } from '../../core/api/preguntas'
 import { useBancoModulo, backendTypeBadge } from '../components/bancoModulo'
-import { BancoAcciones, NuevaPreguntaModal } from '../components/BancoPreguntas'
+import { BancoAcciones, NuevaPreguntaModal, EditarModulosModal } from '../components/BancoPreguntas'
 import ImportPreguntasModal from '../../core/components/ImportPreguntasModal'
 
 // Opción sintética del multi-select de módulos: no es un id real de Modulo,
@@ -100,6 +100,7 @@ function QuestionsTableGlobal({ selectedModuleIds, sinAsignar, showActivas, show
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [togglingId, setTogglingId] = useState(null)
+  const [editRow, setEditRow] = useState(null)
 
   const activaParam = showActivas && showPapelera ? undefined : showActivas ? true : showPapelera ? false : undefined
 
@@ -172,11 +173,25 @@ function QuestionsTableGlobal({ selectedModuleIds, sinAsignar, showActivas, show
         columns={columns}
         data={preguntas}
         actions={(row) => (
-          <Button variant={row.activa ? 'danger' : 'secondary'} size="sm" disabled={togglingId === row.id} onClick={() => handleToggle(row)}>
-            {togglingId === row.id ? '...' : row.activa ? 'Enviar a papelera' : 'Recuperar'}
-          </Button>
+          <>
+            <Button variant="ghost" size="sm" onClick={() => setEditRow(row)}>Editar módulos</Button>
+            <Button variant={row.activa ? 'danger' : 'secondary'} size="sm" disabled={togglingId === row.id} onClick={() => handleToggle(row)}>
+              {togglingId === row.id ? '...' : row.activa ? 'Enviar a papelera' : 'Recuperar'}
+            </Button>
+          </>
         )}
       />
+
+      {editRow && (
+        <EditarModulosModal
+          pregunta={editRow}
+          onClose={() => setEditRow(null)}
+          onSaved={() => {
+            load()
+            setEditRow(null)
+          }}
+        />
+      )}
     </div>
   )
 }

@@ -8,7 +8,11 @@ describe('ModulosService', () => {
   let prisma: {
     modulo: { create: jest.Mock; findUnique: jest.Mock };
     moduloVersion: { findFirst: jest.Mock; findMany: jest.Mock };
-    moduloVersionPregunta: { createMany: jest.Mock; findMany: jest.Mock };
+    moduloVersionPregunta: {
+      createMany: jest.Mock;
+      findMany: jest.Mock;
+      aggregate: jest.Mock;
+    };
     pregunta: { count: jest.Mock };
   };
 
@@ -16,7 +20,11 @@ describe('ModulosService', () => {
     prisma = {
       modulo: { create: jest.fn(), findUnique: jest.fn() },
       moduloVersion: { findFirst: jest.fn(), findMany: jest.fn() },
-      moduloVersionPregunta: { createMany: jest.fn(), findMany: jest.fn() },
+      moduloVersionPregunta: {
+        createMany: jest.fn(),
+        findMany: jest.fn(),
+        aggregate: jest.fn().mockResolvedValue({ _max: { orden: 0 } }),
+      },
       pregunta: { count: jest.fn() },
     };
 
@@ -77,6 +85,28 @@ describe('ModulosService', () => {
           orden: 1,
           obligatoria: false,
         },
+      ],
+    });
+  });
+
+  it('asignarPreguntas appendea el orden cuando no viene explícito', async () => {
+    prisma.moduloVersion.findFirst.mockResolvedValue({ id: 'v1' });
+    prisma.pregunta.count.mockResolvedValue(2);
+    prisma.moduloVersionPregunta.aggregate.mockResolvedValue({
+      _max: { orden: 5 },
+    });
+    prisma.moduloVersionPregunta.createMany.mockResolvedValue({ count: 2 });
+    prisma.moduloVersionPregunta.findMany.mockResolvedValue([]);
+
+    await service.asignarPreguntas('m1', [
+      { preguntaId: 'p1' },
+      { preguntaId: 'p2' },
+    ]);
+
+    expect(prisma.moduloVersionPregunta.createMany).toHaveBeenCalledWith({
+      data: [
+        { moduloVersionId: 'v1', preguntaId: 'p1', orden: 6, obligatoria: true },
+        { moduloVersionId: 'v1', preguntaId: 'p2', orden: 7, obligatoria: true },
       ],
     });
   });

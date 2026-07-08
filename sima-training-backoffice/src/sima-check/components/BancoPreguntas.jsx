@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Button from '../../components/Button'
 import Modal from '../../components/Modal'
+import MultiSelectFilter from '../../components/MultiSelectFilter'
 import { preguntasApi } from '../../core/api/preguntas'
 import { etiquetasApi } from '../../core/api/etiquetas'
 import { modulosApi } from '../../core/api/modulos'
@@ -15,6 +16,41 @@ import { backendTypeBadge } from './bancoModulo'
 const inputCls = 'w-full bg-white border border-slate-300 rounded px-3 py-2 text-slate-900 text-sm focus:outline-none focus:border-red-600'
 
 const CATEGORIAS_ETIQUETA = ['TEMA', 'AREA', 'NORMA', 'ROL']
+
+// Picker de módulos inline (siempre abierto): buscador + lista de checkboxes.
+// Los tildados salen de `selectedIds`; togglear marca/desmarca. Mismo estilo que
+// la lista del banco en AsignarPreguntaModal.
+function ModulosPicker({ options, selectedIds, onChange }) {
+  const [q, setQ] = useState('')
+  const filtered = options.filter((o) => o.label.toLowerCase().includes(q.toLowerCase()))
+  const toggle = (id) => {
+    const next = new Set(selectedIds)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    onChange(next)
+  }
+  return (
+    <div className="space-y-2">
+      <input
+        className={inputCls}
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        placeholder="Buscar módulo..."
+      />
+      <div className="border border-slate-200 rounded max-h-64 overflow-y-auto divide-y divide-slate-100">
+        {filtered.length === 0 && (
+          <div className="px-3 py-4 text-center text-slate-400 text-xs font-mono">— Sin módulos —</div>
+        )}
+        {filtered.map((o) => (
+          <label key={o.id} className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-slate-50 text-sm">
+            <input type="checkbox" checked={selectedIds.has(o.id)} onChange={() => toggle(o.id)} />
+            <span className="text-slate-700 truncate">{o.label}</span>
+          </label>
+        ))}
+      </div>
+    </div>
+  )
+}
 
 // Botones de acción + ambos modales, listos para colocar en el header.
 export function BancoAcciones({ backendId, assignedIds, baseOrden, onChanged }) {
@@ -230,12 +266,25 @@ const EMPTY_BACKEND_FORM = { texto: '', tipo: 'VERDADERO_FALSO', opciones: ['', 
 // Sin backendId, la pregunta queda creada en el banco sin asignar (misma
 // semántica que "sin módulo destino" en la importación de Excel).
 // El padre solo la monta mientras está abierta (estado arranca limpio).
-export function NuevaPreguntaModal({ onClose, backendId, baseOrden, onAssigned }) {
+export function NuevaPreguntaModal({ onClose, backendId, onAssigned }) {
   const [form, setForm] = useState(EMPTY_BACKEND_FORM)
+  const [modules, setModules] = useState([])
+  // Si el modal se abre desde la vista por-módulo (backendId), ese módulo arranca
+  // preseleccionado y editable (se pueden sumar otros). Sin backendId, vacío.
+  const [selectedModuleIds, setSelectedModuleIds] = useState(() => new Set(backendId ? [backendId] : []))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
 
   const necesitaOpciones = form.tipo === 'OPCION_MULTIPLE' || form.tipo === 'OPCIONES_IMAGEN'
+
+  useEffect(() => {
+    modulosApi.list().then(setModules).catch(() => {})
+  }, [])
+
+  const moduleOptions = useMemo(
+    () => modules.map((m) => ({ id: m.id, label: m.nombre })),
+    [modules],
+  )
 
   const handleGuardar = async () => {
     if (!form.texto.trim()) {
@@ -253,9 +302,10 @@ export function NuevaPreguntaModal({ onClose, backendId, baseOrden, onAssigned }
         ...(necesitaOpciones ? { opciones: form.opciones.filter(Boolean) } : {}),
       }
       const pregunta = await preguntasApi.create(payload)
-      if (backendId) {
-        await modulosApi.asignarPreguntas(backendId, [
-          { preguntaId: pregunta.id, orden: (baseOrden ?? 0) + 1, obligatoria: true },
+      // Asigna a cada módulo elegido. El orden lo appendea el backend (sin orden).
+      for (const moduloId of selectedModuleIds) {
+        await modulosApi.asignarPreguntas(moduloId, [
+          { preguntaId: pregunta.id, obligatoria: true },
         ])
       }
       await onAssigned()
@@ -272,10 +322,11 @@ export function NuevaPreguntaModal({ onClose, backendId, baseOrden, onAssigned }
       open
       onClose={onClose}
       title="Nueva pregunta"
+      size="lg"
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>Cancelar</Button>
-          <Button onClick={handleGuardar} disabled={saving}>{saving ? 'Guardando...' : backendId ? 'Crear y asignar' : 'Crear'}</Button>
+          <Button onClick={handleGuardar} disabled={saving}>{saving ? 'Guardando...' : selectedModuleIds.size > 0 ? 'Crear y asignar' : 'Crear'}</Button>
         </>
       }
     >
@@ -369,6 +420,116 @@ export function NuevaPreguntaModal({ onClose, backendId, baseOrden, onAssigned }
             value={form.puntajeMax}
             onChange={(e) => setForm((f) => ({ ...f, puntajeMax: e.target.value }))}
             placeholder="10"
+          />
+        </div>
+
+        <div>
+          <label className="block text-slate-600 text-xs font-semibold uppercase tracking-widest mb-1.5">
+            Módulos <span className="normal-case font-normal text-slate-400">(opcional)</span>
+          </label>
+          <MultiSelectFilter
+            options={moduleOptions}
+            selectedIds={selectedModuleIds}
+            onChange={setSelectedModuleIds}
+            placeholder="Asignar a módulos..."
+          />
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
+// Modal "Editar módulos": edita a qué módulos está asignada una pregunta existente.
+// NO edita el contenido de la pregunta (regla: las preguntas no se editan).
+// Diff sobre la selección inicial (módulos activos):
+//   - tildado sin pivot        → asignar (nuevo pivot)
+//   - tildado con pivot inactivo → reactivar (setPreguntaActiva true; evita P2002)
+//   - destildado antes activo  → baja lógica por módulo (setPreguntaActiva false)
+// El padre solo la monta mientras está abierta (estado arranca limpio).
+export function EditarModulosModal({ pregunta, onClose, onSaved }) {
+  const [modules, setModules] = useState([])
+  const asignaciones = pregunta.modulos ?? []
+  const [selectedModuleIds, setSelectedModuleIds] = useState(
+    () => new Set(asignaciones.filter((m) => m.activaEnModulo).map((m) => m.moduloId)),
+  )
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState(null)
+
+  useEffect(() => {
+    modulosApi.list().then(setModules).catch(() => {})
+  }, [])
+
+  const moduleOptions = useMemo(
+    () => modules.map((m) => ({ id: m.id, label: m.nombre })),
+    [modules],
+  )
+
+  // Estado del pivot por módulo: true/false = existe (activo/inactivo);
+  // ausente = no hay pivot todavía.
+  const existentes = useMemo(
+    () => new Map(asignaciones.map((m) => [m.moduloId, m.activaEnModulo])),
+    [asignaciones],
+  )
+
+  const handleGuardar = async () => {
+    setSaving(true)
+    setError(null)
+    try {
+      // Agregar / reactivar los tildados.
+      for (const moduloId of selectedModuleIds) {
+        const estado = existentes.get(moduloId)
+        if (estado === undefined) {
+          await modulosApi.asignarPreguntas(moduloId, [
+            { preguntaId: pregunta.id, obligatoria: true },
+          ])
+        } else if (estado === false) {
+          await modulosApi.setPreguntaActiva(moduloId, pregunta.id, true)
+        }
+      }
+      // Quitar (baja lógica) los que estaban activos y ya no están tildados.
+      for (const [moduloId, activa] of existentes) {
+        if (activa && !selectedModuleIds.has(moduloId)) {
+          await modulosApi.setPreguntaActiva(moduloId, pregunta.id, false)
+        }
+      }
+      await onSaved()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title="Editar módulos de la pregunta"
+      size="lg"
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>Cancelar</Button>
+          <Button onClick={handleGuardar} disabled={saving}>{saving ? 'Guardando...' : 'Guardar'}</Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        {error && <div className="bg-red-50 border border-red-200 text-red-700 text-xs rounded px-3 py-2">{error}</div>}
+
+        <div>
+          <label className="block text-slate-600 text-xs font-semibold uppercase tracking-widest mb-1.5">Enunciado</label>
+          <div className="flex items-start gap-2">
+            {backendTypeBadge(pregunta.tipo)}
+            <p className="text-slate-700 text-sm">{pregunta.texto}</p>
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-slate-600 text-xs font-semibold uppercase tracking-widest mb-1.5">Módulos</label>
+          <ModulosPicker
+            options={moduleOptions}
+            selectedIds={selectedModuleIds}
+            onChange={setSelectedModuleIds}
           />
         </div>
       </div>
