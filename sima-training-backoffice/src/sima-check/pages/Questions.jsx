@@ -6,6 +6,7 @@ import { modulosApi } from '../../core/api/modulos'
 import { preguntasApi } from '../../core/api/preguntas'
 import { useBancoModulo, backendTypeBadge } from '../components/bancoModulo'
 import { BancoAcciones } from '../components/BancoPreguntas'
+import ImportPreguntasModal from '../../core/components/ImportPreguntasModal'
 
 // Opción sintética del multi-select de módulos: no es un id real de Modulo,
 // se traduce a ?sinAsignar=true en vez de sumarse a moduloId[].
@@ -187,6 +188,8 @@ export default function Questions() {
   const [showPapelera, setShowPapelera] = useState(false)
   const [search, setSearch] = useState('')
   const [loadError, setLoadError] = useState(null)
+  const [importOpen, setImportOpen] = useState(false)
+  const [reloadKey, setReloadKey] = useState(0)
 
   useEffect(() => {
     modulosApi.list().then(setModules).catch((err) => setLoadError(err.message))
@@ -222,9 +225,12 @@ export default function Questions() {
 
   return (
     <div className="space-y-5 max-w-5xl">
-      <div>
-        <div className="text-slate-400 text-[10px] font-semibold uppercase tracking-widest mb-1">Preguntas</div>
-        <p className="text-slate-500 text-sm">Banco de preguntas. Activá/desactivá por módulo o enviá a la papelera global.</p>
+      <div className="flex items-start justify-between flex-wrap gap-3">
+        <div>
+          <div className="text-slate-400 text-[10px] font-semibold uppercase tracking-widest mb-1">Preguntas</div>
+          <p className="text-slate-500 text-sm">Banco de preguntas. Activá/desactivá por módulo o enviá a la papelera global.</p>
+        </div>
+        <Button variant="secondary" onClick={() => setImportOpen(true)}>Importar Excel</Button>
       </div>
 
       {loadError && <div className="bg-red-50 border border-red-200 text-red-700 text-xs rounded px-3 py-2">{loadError}</div>}
@@ -242,9 +248,10 @@ export default function Questions() {
       </div>
 
       {usaCaminoModulo ? (
-        <QuestionsTableModulo moduleId={soloModuleId} />
+        <QuestionsTableModulo key={`m-${reloadKey}`} moduleId={soloModuleId} />
       ) : (
         <QuestionsTableGlobal
+          key={`g-${reloadKey}`}
           selectedModuleIds={realModuleIds}
           sinAsignar={sinAsignar}
           showActivas={showActivas}
@@ -252,6 +259,12 @@ export default function Questions() {
           search={search}
         />
       )}
+
+      <ImportPreguntasModal
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        onImported={() => setReloadKey((k) => k + 1)}
+      />
     </div>
   )
 }
