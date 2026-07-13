@@ -170,6 +170,12 @@ model Modulo {
   id          String  @id @default(uuid())
   nombre      String  @db.VarChar(200)
   descripcion String?
+  // Baja lógica del módulo entero (independiente del ciclo BORRADOR/ACTIVO/ARCHIVADO
+  // de sus versiones): el admin lo retira/reactiva a mano.
+  activo Boolean @default(true)
+  // Cada cuántos meses un alumno debe rendir de nuevo este módulo para seguir
+  // certificado. Nullable: módulos sin cadencia de recertificación definida.
+  vigenciaMeses Int? @map("vigencia_meses")
 
   versiones ModuloVersion[]
 

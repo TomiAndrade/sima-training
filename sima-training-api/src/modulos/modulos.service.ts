@@ -30,7 +30,13 @@ export class ModulosService {
   async findAll() {
     const modulos = await this.prisma.modulo.findMany({
       orderBy: { createdAt: 'asc' },
-      select: { id: true, nombre: true, descripcion: true },
+      select: {
+        id: true,
+        nombre: true,
+        descripcion: true,
+        activo: true,
+        vigenciaMeses: true,
+      },
     });
     if (modulos.length === 0) return [];
 

@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsInt, IsNotEmpty, IsOptional, IsString, Min, MaxLength } from 'class-validator';
 
 export class CreateModuloDto {
   @IsString()
@@ -9,4 +9,10 @@ export class CreateModuloDto {
   @IsOptional()
   @IsString()
   descripcion?: string;
+
+  // Cada cuántos meses debe recertificarse un alumno en este módulo. Opcional.
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  vigenciaMeses?: number;
 }
