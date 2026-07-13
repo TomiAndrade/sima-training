@@ -6,7 +6,30 @@ import { modulosApi } from '../../core/api/modulos'
 import { useBancoModulo, estadoVersionBadge, formatVersionNumero } from '../components/bancoModulo'
 import { BancoAcciones, PreguntasAsignadasPanel } from '../components/BancoPreguntas'
 
-const EMPTY_MODULE_FORM = { nombre: '', descripcion: '' }
+const EMPTY_MODULE_FORM = { nombre: '', descripcion: '', vigenciaMeses: '' }
+
+function ChipToggle({ active, onClick, children }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${
+        active ? 'bg-red-50 text-red-600 border-red-200' : 'bg-white text-slate-400 border-slate-200'
+      }`}
+    >
+      {children}
+    </button>
+  )
+}
+
+// Bucket de estado de un módulo para los chips de filtro. El toggle manual
+// `activo` pisa todo lo demás: un módulo desactivado a mano cae en "inactivo"
+// sin importar en qué estado esté su versión vigente.
+function estadoModulo(mod) {
+  if (mod.activo === false) return 'inactivo'
+  if (mod.vigente?.estado === 'BORRADOR') return 'borrador'
+  return 'activo'
+}
 
 // Calcula el número resultante de activar como actualización (esNuevaLinea=false,
 // sube MENOR) o como versión nueva (esNuevaLinea=true, sube MAYOR y resetea MENOR).
@@ -107,10 +130,16 @@ export default function TrainingModules() {
   const [error, setError] = useState(null)
   const [view, setView] = useState({ type: 'modules' })
 
-  // Module modal (metadata: nombre/descripcion). El contenido se edita por versión.
+  // Module modal (metadata: nombre/descripcion/vigencia + activo en edición). El
+  // contenido se edita por versión.
   const [moduleModal, setModuleModal] = useState(null)
   const [moduleForm, setModuleForm] = useState(EMPTY_MODULE_FORM)
   const [saving, setSaving] = useState(false)
+
+  // Chips de filtro por estado del módulo (activo/borrador/inactivo), combinables.
+  const [showActivos, setShowActivos] = useState(true)
+  const [showBorradores, setShowBorradores] = useState(true)
+  const [showInactivos, setShowInactivos] = useState(false)
 
   // Elección menor/mayor antes de crear el borrador (sólo cuando ya hay un ACTIVO).
   const [choiceModal, setChoiceModal] = useState(null)
@@ -181,6 +210,28 @@ export default function TrainingModules() {
     loadModules()
   }, [])
 
+  // No permite apagar un chip si es el único encendido (evita "los tres off" =
+  // "no mostrar nada" sin que el usuario lo haya elegido explícitamente).
+  const toggleActivos = () => {
+    if (showActivos && !showBorradores && !showInactivos) return
+    setShowActivos((v) => !v)
+  }
+  const toggleBorradores = () => {
+    if (showBorradores && !showActivos && !showInactivos) return
+    setShowBorradores((v) => !v)
+  }
+  const toggleInactivos = () => {
+    if (showInactivos && !showActivos && !showBorradores) return
+    setShowInactivos((v) => !v)
+  }
+
+  const modulosFiltrados = modules.filter((mod) => {
+    const estado = estadoModulo(mod)
+    if (estado === 'activo') return showActivos
+    if (estado === 'borrador') return showBorradores
+    return showInactivos
+  })
+
   // --- Module CRUD (metadata) ---
   const openCreateModule = () => {
     setModuleForm(EMPTY_MODULE_FORM)
@@ -188,7 +239,12 @@ export default function TrainingModules() {
   }
 
   const openEditModule = (mod) => {
-    setModuleForm({ nombre: mod.nombre, descripcion: mod.descripcion ?? '' })
+    setModuleForm({
+      nombre: mod.nombre,
+      descripcion: mod.descripcion ?? '',
+      vigenciaMeses: mod.vigenciaMeses != null ? String(mod.vigenciaMeses) : '',
+      activo: mod.activo !== false,
+    })
     setModuleModal({ mode: 'edit', data: mod })
   }
 
@@ -197,11 +253,16 @@ export default function TrainingModules() {
     setSaving(true)
     setError(null)
     try {
-      const payload = { nombre: moduleForm.nombre.trim(), descripcion: moduleForm.descripcion.trim() || undefined }
+      const vigenciaMeses = moduleForm.vigenciaMeses.trim() ? Number(moduleForm.vigenciaMeses) : undefined
+      const payload = {
+        nombre: moduleForm.nombre.trim(),
+        descripcion: moduleForm.descripcion.trim() || undefined,
+        vigenciaMeses,
+      }
       if (moduleModal.mode === 'create') {
         await modulosApi.create(payload)
       } else {
-        await modulosApi.update(moduleModal.data.id, payload)
+        await modulosApi.update(moduleModal.data.id, { ...payload, activo: moduleForm.activo })
       }
       loadModules()
       setModuleModal(null)
@@ -438,11 +499,23 @@ export default function TrainingModules() {
     {
       key: 'vigente',
       label: 'Estado',
-      render: (vigente) => (
+      render: (vigente, row) => (
         <div className="flex items-center gap-2">
+          {row.activo === false && (
+            <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-500">Inactivo</span>
+          )}
           {estadoVersionBadge(vigente?.estado)}
           <span className="text-slate-400 text-xs font-mono">{formatVersionNumero(vigente)}</span>
         </div>
+      ),
+    },
+    {
+      key: 'vigenciaMeses',
+      label: 'Vigencia',
+      render: (vigenciaMeses) => (
+        <span className="text-slate-500 text-xs font-mono">
+          {vigenciaMeses != null ? `Cada ${vigenciaMeses} mes${vigenciaMeses !== 1 ? 'es' : ''}` : '—'}
+        </span>
       ),
     },
   ]
@@ -452,7 +525,7 @@ export default function TrainingModules() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-slate-900 font-bold text-xl">Capacitaciones</h2>
-          <p className="text-slate-400 text-sm">{modules.length} módulos</p>
+          <p className="text-slate-400 text-sm">{modulosFiltrados.length} módulos</p>
         </div>
         <div className="flex items-center gap-2">
           <Button onClick={openCreateModule}>+ Nuevo módulo</Button>
@@ -462,9 +535,15 @@ export default function TrainingModules() {
       {error && <div className="bg-red-50 border border-red-200 text-red-700 text-xs rounded px-3 py-2">{error}</div>}
       {loading && <div className="text-slate-400 text-xs font-mono">Cargando...</div>}
 
+      <div className="flex items-center gap-2 flex-wrap">
+        <ChipToggle active={showActivos} onClick={toggleActivos}>Activos</ChipToggle>
+        <ChipToggle active={showBorradores} onClick={toggleBorradores}>Borradores</ChipToggle>
+        <ChipToggle active={showInactivos} onClick={toggleInactivos}>Inactivos</ChipToggle>
+      </div>
+
       <Table
         columns={moduleColumns}
-        data={modules}
+        data={modulosFiltrados}
         actions={(row) => {
           const nuncaPublicado = row.vigente?.estado === 'BORRADOR'
           return (
@@ -521,6 +600,29 @@ export default function TrainingModules() {
               placeholder="Descripción del módulo"
             />
           </div>
+          <div>
+            <label className="block text-slate-700 text-sm font-medium mb-1">
+              Vigencia (meses) <span className="text-slate-400 font-normal">(opcional)</span>
+            </label>
+            <input
+              type="number"
+              min="1"
+              className="w-full bg-white border border-slate-300 rounded px-3 py-2 text-slate-900 text-sm focus:outline-none focus:border-red-600"
+              value={moduleForm.vigenciaMeses}
+              onChange={(e) => setModuleForm((f) => ({ ...f, vigenciaMeses: e.target.value }))}
+              placeholder="Cada cuántos meses debe recertificarse un alumno"
+            />
+          </div>
+          {moduleModal?.mode === 'edit' && (
+            <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={moduleForm.activo}
+                onChange={(e) => setModuleForm((f) => ({ ...f, activo: e.target.checked }))}
+              />
+              Módulo activo
+            </label>
+          )}
         </div>
       </Modal>
 
