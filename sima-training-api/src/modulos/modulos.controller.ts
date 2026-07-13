@@ -74,6 +74,17 @@ export class ModulosController {
     return this.modulos.activar(id);
   }
 
+  // Cambia si el borrador en curso se publicará como actualización o versión
+  // nueva, sin tocar sus preguntas. Reusa CrearVersionDto: misma forma de body.
+  @Patch(':id/borrador')
+  @UseGuards(JwtAuthGuard)
+  actualizarEleccionBorrador(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CrearVersionDto,
+  ) {
+    return this.modulos.actualizarEleccionBorrador(id, dto.esNuevaLinea);
+  }
+
   @Post(':id/preguntas')
   @UseGuards(JwtAuthGuard)
   asignarPreguntas(

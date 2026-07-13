@@ -19,4 +19,9 @@ export const modulosApi = {
   activar: (id) => api.patch(`/modulos/${id}/activar`, {}),
   versiones: (id) => api.get(`/modulos/${id}/versiones`),
   versionDetalle: (id, versionId) => api.get(`/modulos/${id}/versiones/${versionId}`),
+  // Cambia si el borrador en curso se publica como actualización o versión
+  // nueva, sin tocar sus preguntas (ej. al aceptar la recomendación de subir
+  // a versión nueva por haber hecho muchos cambios).
+  actualizarEleccionBorrador: (id, esNuevaLinea) =>
+    api.patch(`/modulos/${id}/borrador`, { esNuevaLinea }),
 }

@@ -24,6 +24,28 @@ function previewActivacion(vigenteBase, esNuevaLinea) {
   return { anio: anioActual, mayor, menor: 0 }
 }
 
+// Umbral para recomendar "versión nueva" en vez de "actualización": si el
+// borrador acumula muchos cambios de preguntas respecto a la base de la que
+// partió, seguir publicando como "actualización" (misma línea) podría terminar
+// en un módulo completamente distinto sin que eso quede reflejado en el
+// versionado — nadie elige nunca "versión nueva" y la línea mayor no avanza.
+const RECOMENDAR_MIN_CAMBIOS = 2
+const RECOMENDAR_PORCENTAJE = 0.3
+
+function contarCambios(baseAsignadas, actualesAsignadas) {
+  const base = new Set(baseAsignadas.filter((a) => a.activa).map((a) => a.preguntaId))
+  const actuales = new Set(actualesAsignadas.filter((a) => a.activa).map((a) => a.preguntaId))
+  const agregadas = [...actuales].filter((id) => !base.has(id)).length
+  const quitadas = [...base].filter((id) => !actuales.has(id)).length
+  return { total: agregadas + quitadas, baseSize: base.size }
+}
+
+function deberiaRecomendarVersionNueva({ total, baseSize }) {
+  if (total < RECOMENDAR_MIN_CAMBIOS) return false
+  if (baseSize === 0) return true
+  return total / baseSize >= RECOMENDAR_PORCENTAJE
+}
+
 // Modal: al editar contenido de un módulo con ACTIVO, elegir si el borrador se
 // publicará como actualización (sube MENOR) o como versión nueva (sube MAYOR).
 function VersionChoiceModal({ mod, onClose, onCreated }) {
@@ -103,6 +125,13 @@ export default function TrainingModules() {
   const [versionesLoading, setVersionesLoading] = useState(false)
   const [versionesError, setVersionesError] = useState(null)
 
+  // Toggle Activar/Desactivar de una pregunta dentro del borrador que se edita.
+  const [togglingId, setTogglingId] = useState(null)
+  const [toggleError, setToggleError] = useState(null)
+
+  // Cambiar la elección menor/mayor de un borrador ya creado (recomendación).
+  const [cambiandoLinea, setCambiandoLinea] = useState(false)
+
   // Banco de preguntas de la versión abierta en la vista "questions": la vigente
   // por default, o una versión puntual (el borrador, o una del historial) si
   // view.versionId la especifica. El hook se llama incondicionalmente; con
@@ -110,6 +139,16 @@ export default function TrainingModules() {
   const questionsView = view.type === 'questions' ? view : null
   const questionsModule = questionsView ? modules.find((m) => m.id === questionsView.moduleId) : null
   const banco = useBancoModulo(questionsView?.moduleId, questionsView?.versionId)
+
+  // Base de la que partió el borrador (el ACTIVO al momento de crearlo), sólo
+  // para comparar cuántas preguntas cambiaron y recomendar "versión nueva" si
+  // son muchas. Inerte (no pide nada) salvo estando en un borrador editable
+  // con un ACTIVO publicado del cual partir.
+  const quiereCompararBase = !!questionsView && !questionsView.readOnly && questionsModule?.vigente?.estado === 'ACTIVO'
+  const baseBanco = useBancoModulo(
+    quiereCompararBase ? questionsView.moduleId : undefined,
+    quiereCompararBase ? questionsModule.vigente.id : undefined,
+  )
 
   const versionsView = view.type === 'versions' ? view : null
   const versionsModule = versionsView ? modules.find((m) => m.id === versionsView.moduleId) : null
@@ -204,6 +243,33 @@ export default function TrainingModules() {
     setView({ type: 'questions', moduleId: mod.id, versionId, readOnly: true, from: 'versions' })
   }
 
+  // --- Activar/desactivar una pregunta dentro del borrador en edición ---
+  const handleTogglePregunta = async (mvp) => {
+    setTogglingId(mvp.preguntaId)
+    setToggleError(null)
+    try {
+      await modulosApi.setPreguntaActiva(questionsView.moduleId, mvp.preguntaId, !mvp.activa)
+      await banco.refresh()
+    } catch (err) {
+      setToggleError(err.message)
+    } finally {
+      setTogglingId(null)
+    }
+  }
+
+  // --- Aceptar la recomendación de pasar a "versión nueva" ---
+  const handleCambiarALinea = async () => {
+    setCambiandoLinea(true)
+    try {
+      await modulosApi.actualizarEleccionBorrador(questionsView.moduleId, true)
+      await banco.refresh()
+    } catch (err) {
+      setToggleError(err.message)
+    } finally {
+      setCambiandoLinea(false)
+    }
+  }
+
   // --- Activar (publicar) el borrador de la vista actual ---
   const handleActivar = async () => {
     setActivando(true)
@@ -225,6 +291,10 @@ export default function TrainingModules() {
     const activarPreview = banco.version
       ? formatVersionNumero(previewActivacion(questionsModule?.vigente ?? null, banco.version.esNuevaLinea))
       : null
+
+    const cambios = quiereCompararBase ? contarCambios(baseBanco.asignadas, banco.asignadas) : null
+    const recomendarVersionNueva =
+      quiereCompararBase && banco.version?.esNuevaLinea === false && cambios && deberiaRecomendarVersionNueva(cambios)
 
     return (
       <div className="space-y-5 max-w-5xl">
@@ -272,7 +342,27 @@ export default function TrainingModules() {
           </div>
         )}
 
-        <PreguntasAsignadasPanel asignadas={banco.asignadas} error={banco.error} />
+        {recomendarVersionNueva && (
+          <div className="bg-amber-50 border border-amber-200 text-amber-700 text-xs rounded px-3 py-2 flex items-center justify-between gap-3 flex-wrap">
+            <span>
+              Hiciste {cambios.total} cambio{cambios.total !== 1 ? 's' : ''} de preguntas respecto a la versión publicada
+              ({formatVersionNumero(questionsModule?.vigente)}). Con tantos cambios, capaz conviene activar esto como
+              <strong> versión nueva</strong> en vez de actualización, así no termina siendo un módulo distinto sin que quede reflejado.
+            </span>
+            <Button variant="secondary" size="sm" onClick={handleCambiarALinea} disabled={cambiandoLinea}>
+              {cambiandoLinea ? 'Cambiando...' : 'Cambiar a versión nueva'}
+            </Button>
+          </div>
+        )}
+
+        {toggleError && <div className="bg-red-50 border border-red-200 text-red-700 text-xs rounded px-3 py-2">{toggleError}</div>}
+
+        <PreguntasAsignadasPanel
+          asignadas={banco.asignadas}
+          error={banco.error}
+          onToggle={view.readOnly ? undefined : handleTogglePregunta}
+          togglingId={togglingId}
+        />
 
         <Modal
           open={!!activarModal}

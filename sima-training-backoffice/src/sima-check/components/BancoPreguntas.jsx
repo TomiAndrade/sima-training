@@ -84,7 +84,11 @@ export function BancoAcciones({ backendId, assignedIds, baseOrden, onChanged }) 
 }
 
 // Panel con las preguntas ya asignadas desde el banco (feedback del backend).
-export function PreguntasAsignadasPanel({ asignadas, error }) {
+// `onToggle` es opcional: si se pasa, cada fila suma un botón Activar/Desactivar
+// (baja lógica por módulo, PATCH /modulos/:id/preguntas/:preguntaId) y las
+// preguntas desactivadas se muestran atenuadas. Sin `onToggle` el panel queda
+// puramente de lectura (usado por las vistas read-only del historial/vigente).
+export function PreguntasAsignadasPanel({ asignadas, error, onToggle, togglingId }) {
   return (
     <div className="border border-slate-200 rounded bg-white">
       <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between">
@@ -104,10 +108,25 @@ export function PreguntasAsignadasPanel({ asignadas, error }) {
           {[...asignadas]
             .sort((a, b) => a.orden - b.orden)
             .map((mvp) => (
-              <div key={mvp.preguntaId} className="px-4 py-2.5 flex items-center gap-3">
+              <div key={mvp.preguntaId} className={`px-4 py-2.5 flex items-center gap-3 ${mvp.activa === false ? 'opacity-50' : ''}`}>
                 <span className="text-slate-400 text-xs font-mono w-6">{mvp.orden}</span>
                 {backendTypeBadge(mvp.pregunta.tipo)}
-                <span className="text-slate-700 text-sm line-clamp-1">{mvp.pregunta.texto}</span>
+                <span className="text-slate-700 text-sm line-clamp-1 flex-1">{mvp.pregunta.texto}</span>
+                {mvp.activa === false && (
+                  <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-slate-100 text-slate-400 flex-shrink-0">
+                    Inactiva
+                  </span>
+                )}
+                {onToggle && (
+                  <Button
+                    variant={mvp.activa ? 'danger' : 'secondary'}
+                    size="sm"
+                    disabled={togglingId === mvp.preguntaId}
+                    onClick={() => onToggle(mvp)}
+                  >
+                    {togglingId === mvp.preguntaId ? '...' : mvp.activa ? 'Desactivar' : 'Activar'}
+                  </Button>
+                )}
               </div>
             ))}
         </div>

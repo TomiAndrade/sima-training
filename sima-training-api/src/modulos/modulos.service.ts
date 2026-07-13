@@ -99,7 +99,7 @@ export class ModulosService {
       throw new NotFoundException(`Módulo ${id} no encontrado`);
     }
 
-    const version = await this.ultimaOActivaVersion(id);
+    const version = await this.versionParaEditar(id);
     const preguntas = version
       ? await this.prisma.moduloVersionPregunta.findMany({
           where: { moduloVersionId: version.id },
@@ -308,13 +308,14 @@ export class ModulosService {
   }
 
   // Baja lógica por módulo: activa/desactiva la asignación de la pregunta en la
-  // versión vigente (la misma que muestra findOne). No crea una versión nueva.
+  // versión que se está editando (la misma que muestra findOne: el BORRADOR si
+  // hay uno en curso, si no la vigente publicada). No crea una versión nueva.
   async setPreguntaActiva(
     moduloId: string,
     preguntaId: string,
     activa: boolean,
   ) {
-    const version = await this.ultimaOActivaVersion(moduloId);
+    const version = await this.versionParaEditar(moduloId);
     if (!version) {
       throw new NotFoundException(`El módulo ${moduloId} no tiene versiones`);
     }
@@ -341,6 +342,25 @@ export class ModulosService {
       }
       throw err;
     }
+  }
+
+  // Cambia la elección de numeración (actualización/versión nueva) de un
+  // borrador ya creado, sin tocar sus preguntas. Pensado para cuando el
+  // backoffice recomienda pasar de "actualización" a "versión nueva" porque
+  // el borrador acumuló muchos cambios respecto a la base de la que partió.
+  async actualizarEleccionBorrador(moduloId: string, esNuevaLinea: boolean) {
+    const borrador = await this.prisma.moduloVersion.findFirst({
+      where: { moduloId, estado: 'BORRADOR' },
+    });
+    if (!borrador) {
+      throw new NotFoundException(
+        `El módulo ${moduloId} no tiene un borrador en curso`,
+      );
+    }
+    return this.prisma.moduloVersion.update({
+      where: { id: borrador.id },
+      data: { esNuevaLinea },
+    });
   }
 
   // Calcula el número público al activar el borrador.
@@ -380,6 +400,26 @@ export class ModulosService {
     return (agg._max.mayor ?? 0) + 1;
   }
 
+  // Versión que se está editando ahora mismo: el BORRADOR en curso si existe,
+  // si no la vigente publicada. La usan findOne/setPreguntaActiva para que
+  // cualquier edición (agregar, desactivar) caiga siempre sobre el borrador
+  // cuando hay uno — antes de esto, con un ACTIVO y un BORRADOR coexistiendo,
+  // togglear una pregunta desde la vista de Preguntas afectaba por error a la
+  // versión publicada en vez de al borrador que se estaba armando.
+  private async versionParaEditar(moduloId: string) {
+    const borrador = await this.prisma.moduloVersion.findFirst({
+      where: { moduloId, estado: 'BORRADOR' },
+    });
+    if (borrador) return borrador;
+
+    return this.ultimaOActivaVersion(moduloId);
+  }
+
+  // Vigente "publicado": el ACTIVO si existe, si no la última versión creada
+  // (incluye un BORRADOR si el módulo nunca se publicó). A diferencia de
+  // versionParaEditar, ignora si hay un borrador en curso — la usan reportes
+  // y enriquecimiento (versionesVigentesDe) donde interesa lo publicado, no
+  // el trabajo en progreso.
   private async ultimaOActivaVersion(moduloId: string) {
     const activa = await this.prisma.moduloVersion.findFirst({
       where: { moduloId, estado: 'ACTIVO' },

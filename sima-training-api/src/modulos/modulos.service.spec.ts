@@ -18,6 +18,7 @@ describe('ModulosService', () => {
       createMany: jest.Mock;
       findMany: jest.Mock;
       aggregate: jest.Mock;
+      update: jest.Mock;
     };
     pregunta: { count: jest.Mock };
     $transaction: jest.Mock;
@@ -37,6 +38,7 @@ describe('ModulosService', () => {
         createMany: jest.fn(),
         findMany: jest.fn(),
         aggregate: jest.fn().mockResolvedValue({ _max: { orden: 0 } }),
+        update: jest.fn(),
       },
       pregunta: { count: jest.fn() },
       $transaction: jest.fn((cb) => cb(prisma)),
@@ -273,5 +275,70 @@ describe('ModulosService', () => {
       { id: 'v1', numeroVersion: 1, estado: 'ARCHIVADO', preguntasCount: 3 },
       { id: 'v2', numeroVersion: 2, estado: 'ACTIVO', preguntasCount: 5 },
     ]);
+  });
+
+  it('findOne muestra el BORRADOR en curso, no el ACTIVO, cuando ambos coexisten', async () => {
+    prisma.modulo.findUnique.mockResolvedValue({ id: 'm1' });
+    prisma.moduloVersion.findFirst.mockImplementation(({ where }) =>
+      where.estado === 'BORRADOR' ? { id: 'v-borrador' } : { id: 'v-activo' },
+    );
+    prisma.moduloVersionPregunta.findMany.mockResolvedValue([{ preguntaId: 'p1' }]);
+
+    const result = await service.findOne('m1');
+
+    expect(result.version).toEqual({ id: 'v-borrador' });
+    expect(prisma.moduloVersionPregunta.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { moduloVersionId: 'v-borrador' } }),
+    );
+  });
+
+  it('setPreguntaActiva togglea sobre el BORRADOR en curso, no sobre el ACTIVO publicado', async () => {
+    prisma.moduloVersion.findFirst.mockImplementation(({ where }) =>
+      where.estado === 'BORRADOR' ? { id: 'v-borrador' } : { id: 'v-activo' },
+    );
+    prisma.moduloVersionPregunta.update.mockResolvedValue({ preguntaId: 'p1', activa: false });
+
+    await service.setPreguntaActiva('m1', 'p1', false);
+
+    expect(prisma.moduloVersionPregunta.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { moduloVersionId_preguntaId: { moduloVersionId: 'v-borrador', preguntaId: 'p1' } },
+        data: { activa: false },
+      }),
+    );
+  });
+
+  it('setPreguntaActiva togglea sobre el ACTIVO cuando no hay borrador en curso', async () => {
+    prisma.moduloVersion.findFirst.mockImplementation(({ where }) =>
+      where.estado === 'BORRADOR' ? null : { id: 'v-activo' },
+    );
+    prisma.moduloVersionPregunta.update.mockResolvedValue({ preguntaId: 'p1', activa: false });
+
+    await service.setPreguntaActiva('m1', 'p1', false);
+
+    expect(prisma.moduloVersionPregunta.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { moduloVersionId_preguntaId: { moduloVersionId: 'v-activo', preguntaId: 'p1' } },
+      }),
+    );
+  });
+
+  it('actualizarEleccionBorrador rechaza si no hay borrador en curso', async () => {
+    prisma.moduloVersion.findFirst.mockResolvedValue(null);
+    await expect(
+      service.actualizarEleccionBorrador('m1', true),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('actualizarEleccionBorrador cambia esNuevaLinea del borrador en curso', async () => {
+    prisma.moduloVersion.findFirst.mockResolvedValue({ id: 'v-borrador' });
+    prisma.moduloVersion.update.mockResolvedValue({ id: 'v-borrador', esNuevaLinea: true });
+
+    await service.actualizarEleccionBorrador('m1', true);
+
+    expect(prisma.moduloVersion.update).toHaveBeenCalledWith({
+      where: { id: 'v-borrador' },
+      data: { esNuevaLinea: true },
+    });
   });
 });
