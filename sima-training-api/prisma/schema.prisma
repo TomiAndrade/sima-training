@@ -185,8 +185,21 @@ model Modulo {
 model ModuloVersion {
   id            String              @id @default(uuid())
   moduloId      String              @map("modulo_id")
+  // Contador monotónico interno (orden de creación). El número público es anio.mayor.menor.
   numeroVersion Int                 @map("numero_version")
   estado        EstadoVersionModulo @default(BORRADOR)
+
+  // Número público AÑO.MAYOR.MENOR (ej. 2026.01.00). Se asigna al Activar (publicar);
+  // un BORRADOR sin publicar los tiene en null y se muestra como "Borrador".
+  // MAYOR = secuencia por módulo por año; MENOR = revisión dentro de esa línea.
+  anio  Int? @map("anio")
+  mayor Int?
+  menor Int?
+  // Timestamp de publicación (para ordenar el historial).
+  activadaEn DateTime? @map("activada_en")
+  // Elección guardada en el borrador: true = versión nueva (sube MAYOR), false = actualización
+  // (sube MENOR). null para v1 / primera publicación (no hay de qué derivar).
+  esNuevaLinea Boolean? @map("es_nueva_linea")
 
   modulo    Modulo                  @relation(fields: [moduloId], references: [id])
   preguntas ModuloVersionPregunta[]
@@ -196,6 +209,7 @@ model ModuloVersion {
   createdBy String?  @map("created_by")
 
   @@unique([moduloId, numeroVersion])
+  @@unique([moduloId, anio, mayor, menor])
   @@map("modulo_versiones")
 }
 

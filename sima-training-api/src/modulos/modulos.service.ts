@@ -7,6 +7,7 @@ import { ModuloVersion, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AsignarPreguntaItemDto } from './dto/asignar-preguntas.dto';
 import { CreateModuloDto } from './dto/create-modulo.dto';
+import { UpdateModuloDto } from './dto/update-modulo.dto';
 
 @Injectable()
 export class ModulosService {
@@ -23,11 +24,48 @@ export class ModulosService {
     });
   }
 
-  // Lista todos los módulos para poblar el filtro del backoffice.
-  findAll() {
-    return this.prisma.modulo.findMany({
+  // Lista todos los módulos con su versión vigente (estado + número) y el id del
+  // borrador en curso, si hay uno. Los campos extra son aditivos (PreguntasService
+  // y el multi-select del backoffice sólo leen id/nombre).
+  async findAll() {
+    const modulos = await this.prisma.modulo.findMany({
       orderBy: { createdAt: 'asc' },
       select: { id: true, nombre: true, descripcion: true },
+    });
+    if (modulos.length === 0) return [];
+
+    const versiones = await this.prisma.moduloVersion.findMany({
+      where: { moduloId: { in: modulos.map((m) => m.id) } },
+    });
+    const porModulo = new Map<string, ModuloVersion[]>();
+    for (const v of versiones) {
+      const arr = porModulo.get(v.moduloId) ?? [];
+      arr.push(v);
+      porModulo.set(v.moduloId, arr);
+    }
+
+    return modulos.map((m) => {
+      const vs = porModulo.get(m.id) ?? [];
+      const activo = vs.find((v) => v.estado === 'ACTIVO');
+      const ultima = vs.reduce<ModuloVersion | null>(
+        (acc, v) => (!acc || v.numeroVersion > acc.numeroVersion ? v : acc),
+        null,
+      );
+      const vigente = activo ?? ultima;
+      const borrador = vs.find((v) => v.estado === 'BORRADOR');
+      return {
+        ...m,
+        vigente: vigente
+          ? {
+              id: vigente.id,
+              estado: vigente.estado,
+              anio: vigente.anio,
+              mayor: vigente.mayor,
+              menor: vigente.menor,
+            }
+          : null,
+        borradorId: borrador?.id ?? null,
+      };
     });
   }
 
@@ -73,10 +111,151 @@ export class ModulosService {
     return { ...modulo, version, preguntas };
   }
 
-  findVersiones(id: string) {
-    return this.prisma.moduloVersion.findMany({
+  // Historial de versiones del módulo, con la cantidad de preguntas de cada una
+  // (para la columna "Preguntas" del historial en el backoffice).
+  async findVersiones(id: string) {
+    const versiones = await this.prisma.moduloVersion.findMany({
       where: { moduloId: id },
       orderBy: { numeroVersion: 'asc' },
+      include: { _count: { select: { preguntas: true } } },
+    });
+    return versiones.map(({ _count, ...version }) => ({
+      ...version,
+      preguntasCount: _count.preguntas,
+    }));
+  }
+
+  // Detalle de una versión puntual + sus preguntas (para el historial).
+  async findVersionOne(moduloId: string, versionId: string) {
+    const version = await this.prisma.moduloVersion.findFirst({
+      where: { id: versionId, moduloId },
+    });
+    if (!version) {
+      throw new NotFoundException(
+        `Versión ${versionId} no encontrada en el módulo ${moduloId}`,
+      );
+    }
+    const preguntas = await this.prisma.moduloVersionPregunta.findMany({
+      where: { moduloVersionId: version.id },
+      include: { pregunta: true },
+      orderBy: { orden: 'asc' },
+    });
+    return { ...version, preguntas };
+  }
+
+  // Edición de metadata del módulo (nombre/descripcion).
+  async update(moduloId: string, dto: UpdateModuloDto) {
+    try {
+      return await this.prisma.modulo.update({
+        where: { id: moduloId },
+        data: dto,
+      });
+    } catch (err) {
+      if (
+        err instanceof Prisma.PrismaClientKnownRequestError &&
+        err.code === 'P2025'
+      ) {
+        throw new NotFoundException(`Módulo ${moduloId} no encontrado`);
+      }
+      throw err;
+    }
+  }
+
+  // Crea un BORRADOR nuevo copiando las preguntas del ACTIVO. `esNuevaLinea` se
+  // guarda para saber cómo numerar al Activar (true = sube MAYOR, false = sube MENOR).
+  async crearVersion(moduloId: string, esNuevaLinea: boolean) {
+    const modulo = await this.prisma.modulo.findUnique({
+      where: { id: moduloId },
+    });
+    if (!modulo) {
+      throw new NotFoundException(`Módulo ${moduloId} no encontrado`);
+    }
+
+    const borrador = await this.prisma.moduloVersion.findFirst({
+      where: { moduloId, estado: 'BORRADOR' },
+    });
+    if (borrador) {
+      throw new ConflictException(
+        'El módulo ya tiene un borrador en curso; activalo o descartalo antes de crear otra versión',
+      );
+    }
+
+    const base = await this.prisma.moduloVersion.findFirst({
+      where: { moduloId, estado: 'ACTIVO' },
+    });
+    if (!base) {
+      throw new ConflictException(
+        'El módulo no tiene una versión activa desde la cual crear un borrador',
+      );
+    }
+
+    const agg = await this.prisma.moduloVersion.aggregate({
+      where: { moduloId },
+      _max: { numeroVersion: true },
+    });
+    const numeroVersion = (agg._max.numeroVersion ?? 0) + 1;
+
+    const pivots = await this.prisma.moduloVersionPregunta.findMany({
+      where: { moduloVersionId: base.id },
+    });
+
+    return this.prisma.moduloVersion.create({
+      data: {
+        moduloId,
+        numeroVersion,
+        estado: 'BORRADOR',
+        esNuevaLinea,
+        createdBy: 'backoffice',
+        preguntas: {
+          create: pivots.map((p) => ({
+            preguntaId: p.preguntaId,
+            orden: p.orden,
+            obligatoria: p.obligatoria,
+            activa: p.activa,
+          })),
+        },
+      },
+      include: {
+        preguntas: { include: { pregunta: true }, orderBy: { orden: 'asc' } },
+      },
+    });
+  }
+
+  // Publica el BORRADOR: pasa a ACTIVO con su número AÑO.MAYOR.MENOR y archiva el
+  // ACTIVO anterior. Transacción para no dejar dos ACTIVO simultáneos.
+  async activar(moduloId: string) {
+    const borrador = await this.prisma.moduloVersion.findFirst({
+      where: { moduloId, estado: 'BORRADOR' },
+    });
+    if (!borrador) {
+      throw new NotFoundException(
+        `El módulo ${moduloId} no tiene un borrador para activar`,
+      );
+    }
+
+    const activo = await this.prisma.moduloVersion.findFirst({
+      where: { moduloId, estado: 'ACTIVO' },
+    });
+
+    const numero = await this.calcularNumero(moduloId, borrador, activo);
+
+    return this.prisma.$transaction(async (tx) => {
+      if (activo) {
+        await tx.moduloVersion.update({
+          where: { id: activo.id },
+          data: { estado: 'ARCHIVADO' },
+        });
+      }
+      return tx.moduloVersion.update({
+        where: { id: borrador.id },
+        data: {
+          estado: 'ACTIVO',
+          anio: numero.anio,
+          mayor: numero.mayor,
+          menor: numero.menor,
+          activadaEn: new Date(),
+        },
+      });
     });
   }
 
@@ -162,6 +341,43 @@ export class ModulosService {
       }
       throw err;
     }
+  }
+
+  // Calcula el número público al activar el borrador.
+  private async calcularNumero(
+    moduloId: string,
+    borrador: ModuloVersion,
+    activo: ModuloVersion | null,
+  ) {
+    const anioActual = new Date().getFullYear();
+
+    // Primera publicación (sin ACTIVO base con número) → AÑO.<sig mayor>.00.
+    if (
+      !activo ||
+      activo.anio == null ||
+      activo.mayor == null ||
+      activo.menor == null
+    ) {
+      const mayor = await this.siguienteMayor(moduloId, anioActual);
+      return { anio: anioActual, mayor, menor: 0 };
+    }
+
+    // Actualización (misma versión) → sube MENOR en la línea del ACTIVO.
+    if (borrador.esNuevaLinea === false) {
+      return { anio: activo.anio, mayor: activo.mayor, menor: activo.menor + 1 };
+    }
+
+    // Versión nueva → sube MAYOR (secuencia por año), MENOR a 0.
+    const mayor = await this.siguienteMayor(moduloId, anioActual);
+    return { anio: anioActual, mayor, menor: 0 };
+  }
+
+  private async siguienteMayor(moduloId: string, anio: number) {
+    const agg = await this.prisma.moduloVersion.aggregate({
+      where: { moduloId, anio },
+      _max: { mayor: true },
+    });
+    return (agg._max.mayor ?? 0) + 1;
   }
 
   private async ultimaOActivaVersion(moduloId: string) {

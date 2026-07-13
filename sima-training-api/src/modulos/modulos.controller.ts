@@ -12,7 +12,9 @@ import {
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AsignarPreguntaItemDto } from './dto/asignar-preguntas.dto';
 import { CreateModuloDto } from './dto/create-modulo.dto';
+import { CrearVersionDto } from './dto/crear-version.dto';
 import { TogglePreguntaDto } from './dto/toggle-pregunta.dto';
+import { UpdateModuloDto } from './dto/update-modulo.dto';
 import { ModulosService } from './modulos.service';
 
 @Controller('modulos')
@@ -38,6 +40,38 @@ export class ModulosController {
   @Get(':id/versiones')
   findVersiones(@Param('id', ParseUUIDPipe) id: string) {
     return this.modulos.findVersiones(id);
+  }
+
+  @Get(':id/versiones/:versionId')
+  findVersionOne(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('versionId', ParseUUIDPipe) versionId: string,
+  ) {
+    return this.modulos.findVersionOne(id, versionId);
+  }
+
+  @Patch(':id')
+  @UseGuards(JwtAuthGuard)
+  update(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateModuloDto,
+  ) {
+    return this.modulos.update(id, dto);
+  }
+
+  @Post(':id/versiones')
+  @UseGuards(JwtAuthGuard)
+  crearVersion(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CrearVersionDto,
+  ) {
+    return this.modulos.crearVersion(id, dto.esNuevaLinea);
+  }
+
+  @Patch(':id/activar')
+  @UseGuards(JwtAuthGuard)
+  activar(@Param('id', ParseUUIDPipe) id: string) {
+    return this.modulos.activar(id);
   }
 
   @Post(':id/preguntas')
