@@ -34,6 +34,17 @@ const ROL_MAP: Record<string, RolUsuario> = {
   coordinador: RolUsuario.COORDINADOR,
 };
 
+// sima-check/data/training-modules.js (mock del backoffice) → Modulo real.
+// Ids fijos: el backoffice los usa como `backendId` para poder llamar a
+// /preguntas y /modulos/:id/preguntas mientras el Paso 1 (grid de módulos)
+// sigue mockeado (se migra en un sprint futuro).
+const MODULOS = [
+  { id: '15e3d3b9-858c-44d2-8f8e-10b9be3b2c3a', nombre: 'SIMA Básico' },
+  { id: '0372fc38-1092-4f3c-87d2-ae1be3bb2981', nombre: 'SIMA Intermedio' },
+  { id: 'ca6d4904-af84-4691-bea9-692cc8e22084', nombre: 'SIMA Avanzado' },
+  { id: '2d902814-e83a-4c8d-9f1e-5b1239ec8d76', nombre: 'Reglas de Oro Industria Petrolera' },
+];
+
 function splitNombre(full: string): { nombre: string; apellido: string } {
   const parts = full.trim().split(/\s+/);
   const apellido = parts.length > 1 ? parts.pop()! : '';
@@ -44,6 +55,11 @@ async function main() {
   // Idempotente: limpiar respetando la FK (usuarios → organizaciones).
   await prisma.usuario.deleteMany();
   await prisma.organizacion.deleteMany();
+
+  // Idempotente: limpiar respetando la FK (modulo_version_preguntas → modulo_versiones/preguntas).
+  await prisma.moduloVersionPregunta.deleteMany();
+  await prisma.moduloVersion.deleteMany();
+  await prisma.modulo.deleteMany();
 
   // 1) Organización interna de Ingeniería SIMA.
   const simaOrg = await prisma.organizacion.create({
@@ -100,10 +116,24 @@ async function main() {
     });
   }
 
+  // 5) Módulos reales (uno por módulo mockeado del backoffice), con su
+  // ModuloVersion v1 en BORRADOR para poder asignarles preguntas.
+  for (const m of MODULOS) {
+    await prisma.modulo.create({
+      data: {
+        id: m.id,
+        nombre: m.nombre,
+        createdBy: 'seed',
+        versiones: { create: { numeroVersion: 1, createdBy: 'seed' } },
+      },
+    });
+  }
+
   const orgs = await prisma.organizacion.count();
   const usuarios = await prisma.usuario.count();
+  const modulos = await prisma.modulo.count();
   // eslint-disable-next-line no-console
-  console.log(`Seed completo: ${orgs} organizaciones, ${usuarios} usuarios.`);
+  console.log(`Seed completo: ${orgs} organizaciones, ${usuarios} usuarios, ${modulos} módulos.`);
 }
 
 main()
