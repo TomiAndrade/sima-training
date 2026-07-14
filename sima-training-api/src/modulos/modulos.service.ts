@@ -326,6 +326,23 @@ export class ModulosService {
       throw new NotFoundException(`El módulo ${moduloId} no tiene versiones`);
     }
 
+    // No se puede reactivar la asignación de una pregunta que sigue en la
+    // papelera global: quedaría "activa" en este módulo mientras el banco la
+    // sigue mostrando dada de baja. Hay que recuperarla desde Preguntas primero.
+    if (activa) {
+      const pregunta = await this.prisma.pregunta.findUnique({
+        where: { id: preguntaId },
+      });
+      if (!pregunta) {
+        throw new NotFoundException(`Pregunta ${preguntaId} no encontrada`);
+      }
+      if (!pregunta.activa) {
+        throw new ConflictException(
+          `La pregunta ${preguntaId} está en la papelera global. Recuperala desde Preguntas antes de reactivarla en un módulo.`,
+        );
+      }
+    }
+
     try {
       return await this.prisma.moduloVersionPregunta.update({
         where: {

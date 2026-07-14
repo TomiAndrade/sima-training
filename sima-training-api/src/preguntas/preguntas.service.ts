@@ -108,9 +108,12 @@ export class PreguntasService {
     return pregunta;
   }
 
-  // Papelera global. activa=false: cascada a todos los pivots de la pregunta
-  // (todas sus asignaciones, cualquier módulo). activa=true: NO restaura los
-  // pivots (asimetría intencional; el admin reactiva módulo por módulo).
+  // Papelera global. activa=false: cascada a los pivots de la pregunta en
+  // versiones BORRADOR/ACTIVO (todas sus asignaciones vigentes, cualquier
+  // módulo) — nunca ARCHIVADO, esas versiones son inmutables y no deben
+  // mutarse aunque sea para dar de baja una pregunta. activa=true: NO
+  // restaura los pivots (asimetría intencional; el admin reactiva módulo por
+  // módulo).
   async setActiva(id: string, activa: boolean) {
     await this.findOne(id);
 
@@ -122,7 +125,10 @@ export class PreguntasService {
           include: { etiquetas: { include: { etiqueta: true } } },
         });
         await tx.moduloVersionPregunta.updateMany({
-          where: { preguntaId: id },
+          where: {
+            preguntaId: id,
+            moduloVersion: { estado: { not: 'ARCHIVADO' } },
+          },
           data: { activa: false },
         });
         return pregunta;
@@ -146,7 +152,13 @@ export class PreguntasService {
     versiones: ModuloVersion[],
   ): Promise<
     (T & {
-      modulos: { moduloId: string; moduloNombre: string; activaEnModulo: boolean }[];
+      modulos: {
+        moduloId: string;
+        moduloNombre: string;
+        activaEnModulo: boolean;
+        estadoModulo: string;
+        totalActivasEnModulo: number;
+      }[];
     })[]
   > {
     if (preguntas.length === 0) return [];
@@ -162,9 +174,29 @@ export class PreguntasService {
       include: { moduloVersion: { include: { modulo: true } } },
     });
 
+    // Cuántas preguntas activas quedan en cada versión de módulo — para que
+    // el backoffice pueda avisar si mandar una a papelera deja el módulo en 0.
+    const conteos = await this.prisma.moduloVersionPregunta.groupBy({
+      by: ['moduloVersionId'],
+      where: {
+        moduloVersionId: { in: [...new Set(pivots.map((p) => p.moduloVersionId))] },
+        activa: true,
+      },
+      _count: { _all: true },
+    });
+    const activasPorVersion = new Map(
+      conteos.map((c) => [c.moduloVersionId, c._count._all]),
+    );
+
     const mapa = new Map<
       string,
-      { moduloId: string; moduloNombre: string; activaEnModulo: boolean }[]
+      {
+        moduloId: string;
+        moduloNombre: string;
+        activaEnModulo: boolean;
+        estadoModulo: string;
+        totalActivasEnModulo: number;
+      }[]
     >();
     for (const pivot of pivots) {
       const lista = mapa.get(pivot.preguntaId) ?? [];
@@ -172,6 +204,8 @@ export class PreguntasService {
         moduloId: pivot.moduloVersion.modulo.id,
         moduloNombre: pivot.moduloVersion.modulo.nombre,
         activaEnModulo: pivot.activa,
+        estadoModulo: pivot.moduloVersion.estado,
+        totalActivasEnModulo: activasPorVersion.get(pivot.moduloVersionId) ?? 0,
       });
       mapa.set(pivot.preguntaId, lista);
     }

@@ -11,7 +11,14 @@ describe('PreguntasService', () => {
       create: jest.Mock;
       findMany: jest.Mock;
       findUnique: jest.Mock;
+      update: jest.Mock;
     };
+    moduloVersionPregunta: {
+      updateMany: jest.Mock;
+      findMany: jest.Mock;
+      groupBy: jest.Mock;
+    };
+    $transaction: jest.Mock;
   };
   let modulos: {
     findAll: jest.Mock;
@@ -24,7 +31,14 @@ describe('PreguntasService', () => {
         create: jest.fn(),
         findMany: jest.fn(),
         findUnique: jest.fn(),
+        update: jest.fn(),
       },
+      moduloVersionPregunta: {
+        updateMany: jest.fn(),
+        findMany: jest.fn(),
+        groupBy: jest.fn(),
+      },
+      $transaction: jest.fn((cb) => cb(prisma)),
     };
     modulos = {
       findAll: jest.fn().mockResolvedValue([]),
@@ -67,5 +81,44 @@ describe('PreguntasService', () => {
     await expect(service.findOne('inexistente')).rejects.toBeInstanceOf(
       NotFoundException,
     );
+  });
+
+  it('findAll enriquece modulos[] con estadoModulo y totalActivasEnModulo', async () => {
+    modulos.findAll.mockResolvedValue([{ id: 'm1' }]);
+    modulos.versionesVigentesDe.mockResolvedValue([{ id: 'v1', moduloId: 'm1' }]);
+    prisma.pregunta.findMany.mockResolvedValue([{ id: 'p1' }]);
+    prisma.moduloVersionPregunta.findMany.mockResolvedValue([
+      {
+        preguntaId: 'p1',
+        moduloVersionId: 'v1',
+        activa: true,
+        moduloVersion: { estado: 'ACTIVO', modulo: { id: 'm1', nombre: 'Modulo 1' } },
+      },
+    ]);
+    prisma.moduloVersionPregunta.groupBy.mockResolvedValue([
+      { moduloVersionId: 'v1', _count: { _all: 1 } },
+    ]);
+
+    const [pregunta] = await service.findAll({});
+
+    expect(pregunta.modulos).toEqual([
+      {
+        moduloId: 'm1',
+        moduloNombre: 'Modulo 1',
+        activaEnModulo: true,
+        estadoModulo: 'ACTIVO',
+        totalActivasEnModulo: 1,
+      },
+    ]);
+  });
+
+  it('setActiva(false) cascadea solo a pivots BORRADOR/ACTIVO, nunca ARCHIVADO', async () => {
+    prisma.pregunta.findUnique.mockResolvedValue({ id: '1' });
+    prisma.pregunta.update.mockResolvedValue({ id: '1', activa: false });
+    await service.setActiva('1', false);
+    expect(prisma.moduloVersionPregunta.updateMany).toHaveBeenCalledWith({
+      where: { preguntaId: '1', moduloVersion: { estado: { not: 'ARCHIVADO' } } },
+      data: { activa: false },
+    });
   });
 });

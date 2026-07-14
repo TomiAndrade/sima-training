@@ -20,7 +20,7 @@ describe('ModulosService', () => {
       aggregate: jest.Mock;
       update: jest.Mock;
     };
-    pregunta: { count: jest.Mock };
+    pregunta: { count: jest.Mock; findUnique: jest.Mock };
     $transaction: jest.Mock;
   };
 
@@ -40,7 +40,7 @@ describe('ModulosService', () => {
         aggregate: jest.fn().mockResolvedValue({ _max: { orden: 0 } }),
         update: jest.fn(),
       },
-      pregunta: { count: jest.fn() },
+      pregunta: { count: jest.fn(), findUnique: jest.fn() },
       $transaction: jest.fn((cb) => cb(prisma)),
     };
 
@@ -320,6 +320,28 @@ describe('ModulosService', () => {
       expect.objectContaining({
         where: { moduloVersionId_preguntaId: { moduloVersionId: 'v-activo', preguntaId: 'p1' } },
       }),
+    );
+  });
+
+  it('setPreguntaActiva(true) rechaza si la pregunta está en la papelera global', async () => {
+    prisma.moduloVersion.findFirst.mockResolvedValue({ id: 'v-borrador' });
+    prisma.pregunta.findUnique.mockResolvedValue({ id: 'p1', activa: false });
+
+    await expect(service.setPreguntaActiva('m1', 'p1', true)).rejects.toBeInstanceOf(
+      ConflictException,
+    );
+    expect(prisma.moduloVersionPregunta.update).not.toHaveBeenCalled();
+  });
+
+  it('setPreguntaActiva(true) reactiva el pivot cuando la pregunta no está en papelera', async () => {
+    prisma.moduloVersion.findFirst.mockResolvedValue({ id: 'v-borrador' });
+    prisma.pregunta.findUnique.mockResolvedValue({ id: 'p1', activa: true });
+    prisma.moduloVersionPregunta.update.mockResolvedValue({ preguntaId: 'p1', activa: true });
+
+    await service.setPreguntaActiva('m1', 'p1', true);
+
+    expect(prisma.moduloVersionPregunta.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { activa: true } }),
     );
   });
 
