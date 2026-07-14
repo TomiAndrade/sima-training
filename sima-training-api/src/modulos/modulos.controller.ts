@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseArrayPipe,
@@ -83,6 +84,14 @@ export class ModulosController {
     @Body() dto: CrearVersionDto,
   ) {
     return this.modulos.actualizarEleccionBorrador(id, dto.esNuevaLinea);
+  }
+
+  // Descarta el borrador en curso. Si el módulo nunca se publicó (el borrador
+  // era su única versión), esto elimina el módulo entero.
+  @Delete(':id/borrador')
+  @UseGuards(JwtAuthGuard)
+  cancelarBorrador(@Param('id', ParseUUIDPipe) id: string) {
+    return this.modulos.cancelarBorrador(id);
   }
 
   @Post(':id/preguntas')

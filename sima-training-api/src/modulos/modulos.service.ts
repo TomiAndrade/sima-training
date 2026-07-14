@@ -386,6 +386,39 @@ export class ModulosService {
     });
   }
 
+  // Descarta el BORRADOR en curso sin publicarlo. Si el módulo ya tiene un
+  // ACTIVO, vuelve a ese estado (como si la edición nunca hubiera empezado).
+  // Si el borrador era su única versión (el módulo nunca se publicó), no
+  // tiene sentido dejar un módulo sin ninguna versión, así que se elimina el
+  // módulo entero junto con el borrador.
+  async cancelarBorrador(moduloId: string) {
+    const borrador = await this.prisma.moduloVersion.findFirst({
+      where: { moduloId, estado: 'BORRADOR' },
+    });
+    if (!borrador) {
+      throw new NotFoundException(
+        `El módulo ${moduloId} no tiene un borrador en curso`,
+      );
+    }
+
+    const activo = await this.prisma.moduloVersion.findFirst({
+      where: { moduloId, estado: 'ACTIVO' },
+    });
+
+    return this.prisma.$transaction(async (tx) => {
+      await tx.moduloVersionPregunta.deleteMany({
+        where: { moduloVersionId: borrador.id },
+      });
+      await tx.moduloVersion.delete({ where: { id: borrador.id } });
+
+      if (!activo) {
+        await tx.modulo.delete({ where: { id: moduloId } });
+        return { moduloEliminado: true };
+      }
+      return { moduloEliminado: false };
+    });
+  }
+
   // Calcula el número público al activar el borrador.
   private async calcularNumero(
     moduloId: string,

@@ -6,19 +6,21 @@ import { ModulosService } from './modulos.service';
 describe('ModulosService', () => {
   let service: ModulosService;
   let prisma: {
-    modulo: { create: jest.Mock; findUnique: jest.Mock; update: jest.Mock };
+    modulo: { create: jest.Mock; findUnique: jest.Mock; update: jest.Mock; delete: jest.Mock };
     moduloVersion: {
       findFirst: jest.Mock;
       findMany: jest.Mock;
       create: jest.Mock;
       update: jest.Mock;
       aggregate: jest.Mock;
+      delete: jest.Mock;
     };
     moduloVersionPregunta: {
       createMany: jest.Mock;
       findMany: jest.Mock;
       aggregate: jest.Mock;
       update: jest.Mock;
+      deleteMany: jest.Mock;
     };
     pregunta: { count: jest.Mock; findUnique: jest.Mock };
     $transaction: jest.Mock;
@@ -26,19 +28,21 @@ describe('ModulosService', () => {
 
   beforeEach(async () => {
     prisma = {
-      modulo: { create: jest.fn(), findUnique: jest.fn(), update: jest.fn() },
+      modulo: { create: jest.fn(), findUnique: jest.fn(), update: jest.fn(), delete: jest.fn() },
       moduloVersion: {
         findFirst: jest.fn(),
         findMany: jest.fn(),
         create: jest.fn(),
         update: jest.fn(),
         aggregate: jest.fn().mockResolvedValue({ _max: { numeroVersion: 0, mayor: 0 } }),
+        delete: jest.fn(),
       },
       moduloVersionPregunta: {
         createMany: jest.fn(),
         findMany: jest.fn(),
         aggregate: jest.fn().mockResolvedValue({ _max: { orden: 0 } }),
         update: jest.fn(),
+        deleteMany: jest.fn(),
       },
       pregunta: { count: jest.fn(), findUnique: jest.fn() },
       $transaction: jest.fn((cb) => cb(prisma)),
@@ -343,6 +347,40 @@ describe('ModulosService', () => {
     expect(prisma.moduloVersionPregunta.update).toHaveBeenCalledWith(
       expect.objectContaining({ data: { activa: true } }),
     );
+  });
+
+  it('cancelarBorrador rechaza si no hay borrador en curso', async () => {
+    prisma.moduloVersion.findFirst.mockResolvedValue(null);
+    await expect(service.cancelarBorrador('m1')).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+  });
+
+  it('cancelarBorrador borra el borrador y deja el módulo si hay un ACTIVO', async () => {
+    prisma.moduloVersion.findFirst.mockImplementation(({ where }) =>
+      where.estado === 'BORRADOR' ? { id: 'v-borrador' } : { id: 'v-activo' },
+    );
+
+    const resultado = await service.cancelarBorrador('m1');
+
+    expect(prisma.moduloVersionPregunta.deleteMany).toHaveBeenCalledWith({
+      where: { moduloVersionId: 'v-borrador' },
+    });
+    expect(prisma.moduloVersion.delete).toHaveBeenCalledWith({ where: { id: 'v-borrador' } });
+    expect(prisma.modulo.delete).not.toHaveBeenCalled();
+    expect(resultado).toEqual({ moduloEliminado: false });
+  });
+
+  it('cancelarBorrador elimina el módulo entero si el borrador era su única versión', async () => {
+    prisma.moduloVersion.findFirst.mockImplementation(({ where }) =>
+      where.estado === 'BORRADOR' ? { id: 'v-borrador' } : null,
+    );
+
+    const resultado = await service.cancelarBorrador('m1');
+
+    expect(prisma.moduloVersion.delete).toHaveBeenCalledWith({ where: { id: 'v-borrador' } });
+    expect(prisma.modulo.delete).toHaveBeenCalledWith({ where: { id: 'm1' } });
+    expect(resultado).toEqual({ moduloEliminado: true });
   });
 
   it('actualizarEleccionBorrador rechaza si no hay borrador en curso', async () => {
