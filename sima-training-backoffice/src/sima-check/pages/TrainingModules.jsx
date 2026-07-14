@@ -130,11 +130,20 @@ export default function TrainingModules() {
   const [error, setError] = useState(null)
   const [view, setView] = useState({ type: 'modules' })
 
-  // Module modal (metadata: nombre/descripcion/vigencia + activo en edición). El
-  // contenido se edita por versión.
+  // Modal de creación (metadata: nombre/descripcion/vigencia). Un módulo ya
+  // creado no permite editar estos campos — solo se definen al crearlo.
   const [moduleModal, setModuleModal] = useState(null)
   const [moduleForm, setModuleForm] = useState(EMPTY_MODULE_FORM)
   const [saving, setSaving] = useState(false)
+
+  // Modal de solo lectura "Ver detalles" de un módulo existente.
+  const [detalleModal, setDetalleModal] = useState(null)
+
+  // Confirmación de Activar/Desactivar el módulo entero (baja lógica, separada
+  // de la edición de metadata).
+  const [desactivarModal, setDesactivarModal] = useState(null)
+  const [desactivando, setDesactivando] = useState(false)
+  const [desactivarError, setDesactivarError] = useState(null)
 
   // Chips de filtro por estado del módulo (activo/borrador/inactivo), combinables.
   const [showActivos, setShowActivos] = useState(true)
@@ -232,20 +241,14 @@ export default function TrainingModules() {
     return showInactivos
   })
 
-  // --- Module CRUD (metadata) ---
+  // --- Module CRUD (metadata, solo al crear) ---
   const openCreateModule = () => {
     setModuleForm(EMPTY_MODULE_FORM)
     setModuleModal({ mode: 'create' })
   }
 
-  const openEditModule = (mod) => {
-    setModuleForm({
-      nombre: mod.nombre,
-      descripcion: mod.descripcion ?? '',
-      vigenciaMeses: mod.vigenciaMeses != null ? String(mod.vigenciaMeses) : '',
-      activo: mod.activo !== false,
-    })
-    setModuleModal({ mode: 'edit', data: mod })
+  const openDetalleModulo = (mod) => {
+    setDetalleModal(mod)
   }
 
   const handleSaveModule = async () => {
@@ -259,17 +262,28 @@ export default function TrainingModules() {
         descripcion: moduleForm.descripcion.trim() || undefined,
         vigenciaMeses,
       }
-      if (moduleModal.mode === 'create') {
-        await modulosApi.create(payload)
-      } else {
-        await modulosApi.update(moduleModal.data.id, { ...payload, activo: moduleForm.activo })
-      }
+      await modulosApi.create(payload)
       loadModules()
       setModuleModal(null)
     } catch (err) {
       setError(err.message)
     } finally {
       setSaving(false)
+    }
+  }
+
+  // --- Activar/desactivar el módulo entero (baja lógica) ---
+  const handleToggleActivo = async () => {
+    setDesactivando(true)
+    setDesactivarError(null)
+    try {
+      await modulosApi.update(desactivarModal.id, { activo: desactivarModal.activo === false })
+      await loadModules()
+      setDesactivarModal(null)
+    } catch (err) {
+      setDesactivarError(err.message)
+    } finally {
+      setDesactivando(false)
     }
   }
 
@@ -561,7 +575,14 @@ export default function TrainingModules() {
                 </>
               )}
               <Button variant="ghost" size="sm" onClick={() => verHistorial(row)}>Historial</Button>
-              <Button variant="ghost" size="sm" onClick={() => openEditModule(row)}>Editar</Button>
+              <Button variant="ghost" size="sm" onClick={() => openDetalleModulo(row)}>Ver detalles</Button>
+              <Button
+                variant={row.activo === false ? 'ghost' : 'danger'}
+                size="sm"
+                onClick={() => setDesactivarModal(row)}
+              >
+                {row.activo === false ? 'Activar' : 'Desactivar'}
+              </Button>
             </>
           )
         }}
@@ -570,7 +591,7 @@ export default function TrainingModules() {
       <Modal
         open={!!moduleModal}
         onClose={() => setModuleModal(null)}
-        title={moduleModal?.mode === 'create' ? 'Nuevo módulo' : 'Editar módulo'}
+        title="Nuevo módulo"
         footer={
           <>
             <Button variant="secondary" onClick={() => setModuleModal(null)}>Cancelar</Button>
@@ -613,15 +634,77 @@ export default function TrainingModules() {
               placeholder="Cada cuántos meses debe recertificarse un alumno"
             />
           </div>
-          {moduleModal?.mode === 'edit' && (
-            <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={moduleForm.activo}
-                onChange={(e) => setModuleForm((f) => ({ ...f, activo: e.target.checked }))}
-              />
-              Módulo activo
-            </label>
+        </div>
+      </Modal>
+
+      <Modal
+        open={!!detalleModal}
+        onClose={() => setDetalleModal(null)}
+        title="Detalles del módulo"
+        footer={<Button variant="secondary" onClick={() => setDetalleModal(null)}>Cerrar</Button>}
+      >
+        {detalleModal && (
+          <div className="space-y-4">
+            <div>
+              <div className="text-slate-400 text-xs font-medium mb-1">Nombre</div>
+              <div className="text-slate-900 text-sm">{detalleModal.nombre}</div>
+            </div>
+            <div>
+              <div className="text-slate-400 text-xs font-medium mb-1">Descripción</div>
+              <div className="text-slate-900 text-sm whitespace-pre-wrap">{detalleModal.descripcion || '—'}</div>
+            </div>
+            <div>
+              <div className="text-slate-400 text-xs font-medium mb-1">Vigencia</div>
+              <div className="text-slate-900 text-sm font-mono">
+                {detalleModal.vigenciaMeses != null
+                  ? `Cada ${detalleModal.vigenciaMeses} mes${detalleModal.vigenciaMeses !== 1 ? 'es' : ''}`
+                  : '—'}
+              </div>
+            </div>
+            <div>
+              <div className="text-slate-400 text-xs font-medium mb-1">Estado</div>
+              <div className="text-slate-900 text-sm">{detalleModal.activo === false ? 'Inactivo' : 'Activo'}</div>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      <Modal
+        open={!!desactivarModal}
+        onClose={() => setDesactivarModal(null)}
+        title={desactivarModal?.activo === false ? 'Activar módulo' : 'Desactivar módulo'}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setDesactivarModal(null)}>Cancelar</Button>
+            <Button
+              variant={desactivarModal?.activo === false ? 'primary' : 'danger'}
+              onClick={handleToggleActivo}
+              disabled={desactivando}
+            >
+              {desactivando
+                ? 'Guardando...'
+                : desactivarModal?.activo === false
+                  ? 'Activar'
+                  : 'Desactivar'}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          {desactivarError && (
+            <div className="bg-red-50 border border-red-200 text-red-700 text-xs rounded px-3 py-2">{desactivarError}</div>
+          )}
+          {desactivarModal?.activo === false ? (
+            <p className="text-slate-600 text-sm">
+              Vas a reactivar el módulo <span className="font-semibold">{desactivarModal?.nombre}</span>. Vuelve a estar
+              disponible para los usuarios que lo tengan asignado.
+            </p>
+          ) : (
+            <p className="text-slate-600 text-sm">
+              Vas a desactivar el módulo <span className="font-semibold">{desactivarModal?.nombre}</span>. Los usuarios
+              que lo tengan asignado van a dejar de verlo, pero el módulo <strong>no se elimina</strong> y podés
+              reactivarlo cuando quieras.
+            </p>
           )}
         </div>
       </Modal>
