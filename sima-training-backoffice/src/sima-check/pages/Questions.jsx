@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import Table from '../../components/Table'
 import Button from '../../components/Button'
+import Modal from '../../components/Modal'
 import MultiSelectFilter from '../../components/MultiSelectFilter'
 import { modulosApi } from '../../core/api/modulos'
 import { preguntasApi } from '../../core/api/preguntas'
-import { useBancoModulo, backendTypeBadge } from '../components/bancoModulo'
+import { useBancoModulo, backendTypeBadge, estadoVersionBadge } from '../components/bancoModulo'
 import { BancoAcciones, NuevaPreguntaModal, EditarModulosModal } from '../components/BancoPreguntas'
 import ImportPreguntasModal from '../../core/components/ImportPreguntasModal'
 
@@ -16,6 +17,17 @@ function estadoBadge(activa) {
   return (
     <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${activa ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-500'}`}>
       {activa ? 'Activa' : 'Inactiva'}
+    </span>
+  )
+}
+
+// Estado global del banco (papelera), distinto de la baja lógica por módulo:
+// activa=false a este nivel significa que está en la papelera, no solo
+// desactivada en un módulo puntual.
+function estadoPapeleraBadge(activa) {
+  return (
+    <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${activa ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}`}>
+      {activa ? 'Activa' : 'En papelera'}
     </span>
   )
 }
@@ -68,7 +80,11 @@ function QuestionsTableModulo({ moduleId }) {
       ),
     },
     { key: 'tipo', label: 'Tipo', render: (_, row) => backendTypeBadge(row.pregunta.tipo) },
-    { key: 'estado', label: 'Estado', render: (_, row) => estadoBadge(row.activa) },
+    {
+      key: 'estado',
+      label: 'Estado',
+      render: (_, row) => (row.pregunta.activa === false ? estadoPapeleraBadge(false) : estadoBadge(row.activa)),
+    },
   ]
 
   return (
@@ -82,11 +98,15 @@ function QuestionsTableModulo({ moduleId }) {
       <Table
         columns={columns}
         data={rows}
-        actions={(row) => (
-          <Button variant={row.activa ? 'danger' : 'secondary'} size="sm" disabled={togglingId === row.preguntaId} onClick={() => handleToggle(row)}>
-            {togglingId === row.preguntaId ? '...' : row.activa ? 'Desactivar' : 'Activar'}
-          </Button>
-        )}
+        actions={(row) =>
+          row.pregunta.activa === false ? (
+            <span className="text-slate-400 text-xs">Recuperala desde Preguntas</span>
+          ) : (
+            <Button variant={row.activa ? 'danger' : 'secondary'} size="sm" disabled={togglingId === row.preguntaId} onClick={() => handleToggle(row)}>
+              {togglingId === row.preguntaId ? '...' : row.activa ? 'Desactivar' : 'Activar'}
+            </Button>
+          )
+        }
       />
     </div>
   )
@@ -101,6 +121,9 @@ function QuestionsTableGlobal({ selectedModuleIds, sinAsignar, showActivas, show
   const [error, setError] = useState(null)
   const [togglingId, setTogglingId] = useState(null)
   const [editRow, setEditRow] = useState(null)
+  const [trashModal, setTrashModal] = useState(null)
+  const [trashing, setTrashing] = useState(false)
+  const [trashError, setTrashError] = useState(null)
 
   const activaParam = showActivas && showPapelera ? undefined : showActivas ? true : showPapelera ? false : undefined
 
@@ -120,7 +143,17 @@ function QuestionsTableGlobal({ selectedModuleIds, sinAsignar, showActivas, show
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedModuleIds, sinAsignar, showActivas, showPapelera, search])
 
+  // Recuperar es instantáneo (no cascadea a otros módulos). Enviar a
+  // papelera sí cascadea, así que pide confirmación — salvo que la pregunta
+  // no esté asignada activamente a ningún módulo, donde no hay nada que advertir.
   const handleToggle = async (row) => {
+    const modulosAfectados = (row.modulos ?? []).filter((m) => m.activaEnModulo)
+    if (row.activa && modulosAfectados.length > 0) {
+      setTrashError(null)
+      setTrashModal(row)
+      return
+    }
+
     setTogglingId(row.id)
     setError(null)
     try {
@@ -130,6 +163,20 @@ function QuestionsTableGlobal({ selectedModuleIds, sinAsignar, showActivas, show
       setError(err.message)
     } finally {
       setTogglingId(null)
+    }
+  }
+
+  const confirmarPapelera = async () => {
+    setTrashing(true)
+    setTrashError(null)
+    try {
+      await preguntasApi.setActiva(trashModal.id, false)
+      setTrashModal(null)
+      load()
+    } catch (err) {
+      setTrashError(err.message)
+    } finally {
+      setTrashing(false)
     }
   }
 
@@ -162,7 +209,7 @@ function QuestionsTableGlobal({ selectedModuleIds, sinAsignar, showActivas, show
         </div>
       ),
     },
-    { key: 'estado', label: 'Estado', render: (_, row) => estadoBadge(row.activa) },
+    { key: 'estado', label: 'Estado', render: (_, row) => estadoPapeleraBadge(row.activa) },
   ]
 
   return (
@@ -192,6 +239,45 @@ function QuestionsTableGlobal({ selectedModuleIds, sinAsignar, showActivas, show
           }}
         />
       )}
+
+      <Modal
+        open={!!trashModal}
+        onClose={() => setTrashModal(null)}
+        title="Enviar a papelera"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setTrashModal(null)}>Cancelar</Button>
+            <Button variant="danger" onClick={confirmarPapelera} disabled={trashing}>
+              {trashing ? 'Guardando...' : 'Enviar a papelera'}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          {trashError && (
+            <div className="bg-red-50 border border-red-200 text-red-700 text-xs rounded px-3 py-2">{trashError}</div>
+          )}
+          <p className="text-slate-600 text-sm line-clamp-2">
+            Vas a enviar a papelera: <span className="font-semibold">{trashModal?.texto}</span>
+          </p>
+          <p className="text-slate-500 text-xs">Se desactiva en los siguientes módulos:</p>
+          <ul className="space-y-1.5">
+            {(trashModal?.modulos ?? [])
+              .filter((m) => m.activaEnModulo)
+              .map((m) => (
+                <li key={m.moduloId} className="flex items-center justify-between gap-2 bg-slate-50 border border-slate-200 rounded px-3 py-2">
+                  <div>
+                    <div className="text-slate-800 text-sm font-medium">{m.moduloNombre}</div>
+                    {m.totalActivasEnModulo === 1 && (
+                      <div className="text-red-600 text-xs font-semibold">Se queda sin preguntas activas</div>
+                    )}
+                  </div>
+                  {estadoVersionBadge(m.estadoModulo)}
+                </li>
+              ))}
+          </ul>
+        </div>
+      </Modal>
     </div>
   )
 }

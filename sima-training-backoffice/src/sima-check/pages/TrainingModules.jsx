@@ -3,8 +3,8 @@ import Table from '../../components/Table'
 import Button from '../../components/Button'
 import Modal from '../../components/Modal'
 import { modulosApi } from '../../core/api/modulos'
-import { useBancoModulo, estadoVersionBadge, formatVersionNumero } from '../components/bancoModulo'
-import { BancoAcciones, PreguntasAsignadasPanel } from '../components/BancoPreguntas'
+import { useBancoModulo, estadoVersionBadge, formatVersionNumero, estadoModulo } from '../components/bancoModulo'
+import { BancoAcciones, PreguntasAsignadasPanel, PreguntaBancoPicker } from '../components/BancoPreguntas'
 
 const EMPTY_MODULE_FORM = { nombre: '', descripcion: '', vigenciaMeses: '' }
 
@@ -20,15 +20,6 @@ function ChipToggle({ active, onClick, children }) {
       {children}
     </button>
   )
-}
-
-// Bucket de estado de un módulo para los chips de filtro. El toggle manual
-// `activo` pisa todo lo demás: un módulo desactivado a mano cae en "inactivo"
-// sin importar en qué estado esté su versión vigente.
-function estadoModulo(mod) {
-  if (mod.activo === false) return 'inactivo'
-  if (mod.vigente?.estado === 'BORRADOR') return 'borrador'
-  return 'activo'
 }
 
 // Calcula el número resultante de activar como actualización (esNuevaLinea=false,
@@ -134,6 +125,7 @@ export default function TrainingModules() {
   // creado no permite editar estos campos — solo se definen al crearlo.
   const [moduleModal, setModuleModal] = useState(null)
   const [moduleForm, setModuleForm] = useState(EMPTY_MODULE_FORM)
+  const [modulePreguntaIds, setModulePreguntaIds] = useState(new Set())
   const [saving, setSaving] = useState(false)
 
   // Modal de solo lectura "Ver detalles" de un módulo existente.
@@ -244,7 +236,17 @@ export default function TrainingModules() {
   // --- Module CRUD (metadata, solo al crear) ---
   const openCreateModule = () => {
     setModuleForm(EMPTY_MODULE_FORM)
+    setModulePreguntaIds(new Set())
     setModuleModal({ mode: 'create' })
+  }
+
+  const toggleModulePregunta = (id) => {
+    setModulePreguntaIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
   }
 
   const openDetalleModulo = (mod) => {
@@ -262,7 +264,11 @@ export default function TrainingModules() {
         descripcion: moduleForm.descripcion.trim() || undefined,
         vigenciaMeses,
       }
-      await modulosApi.create(payload)
+      const modulo = await modulosApi.create(payload)
+      if (modulePreguntaIds.size > 0) {
+        const items = [...modulePreguntaIds].map((preguntaId) => ({ preguntaId, obligatoria: true }))
+        await modulosApi.asignarPreguntas(modulo.id, items)
+      }
       loadModules()
       setModuleModal(null)
     } catch (err) {
@@ -538,7 +544,7 @@ export default function TrainingModules() {
     <div className="space-y-5">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-slate-900 font-bold text-xl">Capacitaciones</h2>
+          <h2 className="text-slate-900 font-bold text-xl">Módulos</h2>
           <p className="text-slate-400 text-sm">{modulosFiltrados.length} módulos</p>
         </div>
         <div className="flex items-center gap-2">
@@ -592,10 +598,16 @@ export default function TrainingModules() {
         open={!!moduleModal}
         onClose={() => setModuleModal(null)}
         title="Nuevo módulo"
+        size="lg"
         footer={
           <>
+            <span className="text-slate-500 text-xs font-mono mr-auto">
+              {modulePreguntaIds.size} pregunta{modulePreguntaIds.size !== 1 ? 's' : ''} seleccionada{modulePreguntaIds.size !== 1 ? 's' : ''}
+            </span>
             <Button variant="secondary" onClick={() => setModuleModal(null)}>Cancelar</Button>
-            <Button onClick={handleSaveModule} disabled={saving}>{saving ? 'Guardando...' : 'Guardar'}</Button>
+            <Button onClick={handleSaveModule} disabled={saving}>
+              {saving ? 'Guardando...' : modulePreguntaIds.size > 0 ? 'Crear y asignar' : 'Crear'}
+            </Button>
           </>
         }
       >
@@ -633,6 +645,12 @@ export default function TrainingModules() {
               onChange={(e) => setModuleForm((f) => ({ ...f, vigenciaMeses: e.target.value }))}
               placeholder="Cada cuántos meses debe recertificarse un alumno"
             />
+          </div>
+          <div>
+            <label className="block text-slate-700 text-sm font-medium mb-1">
+              Preguntas <span className="text-slate-400 font-normal">(opcional — el módulo queda como borrador igual)</span>
+            </label>
+            <PreguntaBancoPicker selectedIds={modulePreguntaIds} onToggle={toggleModulePregunta} />
           </div>
         </div>
       </Modal>

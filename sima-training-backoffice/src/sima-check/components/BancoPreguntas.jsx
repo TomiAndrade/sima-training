@@ -107,48 +107,58 @@ export function PreguntasAsignadasPanel({ asignadas, error, onToggle, togglingId
         <div className="divide-y divide-slate-100">
           {[...asignadas]
             .sort((a, b) => a.orden - b.orden)
-            .map((mvp) => (
-              <div key={mvp.preguntaId} className={`px-4 py-2.5 flex items-center gap-3 ${mvp.activa === false ? 'opacity-50' : ''}`}>
-                <span className="text-slate-400 text-xs font-mono w-6">{mvp.orden}</span>
-                {backendTypeBadge(mvp.pregunta.tipo)}
-                <span className="text-slate-700 text-sm line-clamp-1 flex-1">{mvp.pregunta.texto}</span>
-                {mvp.activa === false && (
-                  <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-slate-100 text-slate-400 flex-shrink-0">
-                    Inactiva
-                  </span>
-                )}
-                {onToggle && (
-                  <Button
-                    variant={mvp.activa ? 'danger' : 'secondary'}
-                    size="sm"
-                    disabled={togglingId === mvp.preguntaId}
-                    onClick={() => onToggle(mvp)}
-                  >
-                    {togglingId === mvp.preguntaId ? '...' : mvp.activa ? 'Desactivar' : 'Activar'}
-                  </Button>
-                )}
-              </div>
-            ))}
+            .map((mvp) => {
+              const enPapelera = mvp.pregunta.activa === false
+              return (
+                <div key={mvp.preguntaId} className={`px-4 py-2.5 flex items-center gap-3 ${mvp.activa === false ? 'opacity-50' : ''}`}>
+                  <span className="text-slate-400 text-xs font-mono w-6">{mvp.orden}</span>
+                  {backendTypeBadge(mvp.pregunta.tipo)}
+                  <span className="text-slate-700 text-sm line-clamp-1 flex-1">{mvp.pregunta.texto}</span>
+                  {enPapelera ? (
+                    <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-amber-50 text-amber-600 flex-shrink-0">
+                      En papelera
+                    </span>
+                  ) : mvp.activa === false && (
+                    <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-slate-100 text-slate-400 flex-shrink-0">
+                      Inactiva
+                    </span>
+                  )}
+                  {onToggle && (
+                    enPapelera ? (
+                      <span className="text-slate-400 text-[11px] flex-shrink-0">Recuperala desde Preguntas</span>
+                    ) : (
+                      <Button
+                        variant={mvp.activa ? 'danger' : 'secondary'}
+                        size="sm"
+                        disabled={togglingId === mvp.preguntaId}
+                        onClick={() => onToggle(mvp)}
+                      >
+                        {togglingId === mvp.preguntaId ? '...' : mvp.activa ? 'Desactivar' : 'Activar'}
+                      </Button>
+                    )
+                  )}
+                </div>
+              )
+            })}
         </div>
       )}
     </div>
   )
 }
 
-// Modal "Asignar pregunta": banco compartido de /preguntas con checkboxes,
-// deshabilita las que ya están asignadas a este módulo.
-// El padre solo la monta mientras está abierta, así el estado arranca
-// limpio en cada apertura sin necesidad de resetearlo en un efecto.
-export function AsignarPreguntaModal({ onClose, backendId, assignedIds, baseOrden, onAssigned }) {
+// Picker embebido del banco: buscador + filtros (etiqueta/categoría) + lista
+// con checkboxes contra GET /preguntas. Lo usan tanto `AsignarPreguntaModal`
+// (sumar preguntas a un módulo ya creado, con `excludeIds` de las ya
+// asignadas) como el modal "Nuevo módulo" de TrainingModules.jsx (arrancar
+// el borrador ya con preguntas elegidas, sin exclusiones porque el módulo
+// todavía no existe).
+export function PreguntaBancoPicker({ selectedIds, onToggle, excludeIds }) {
   const [q, setQ] = useState('')
   const [etiquetaId, setEtiquetaId] = useState('')
   const [categoria, setCategoria] = useState('')
   const [etiquetas, setEtiquetas] = useState([])
   const [banco, setBanco] = useState([])
-  const [selected, setSelected] = useState(new Set())
   const [loading, setLoading] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState(null)
 
   useEffect(() => {
     etiquetasApi.list().then(setEtiquetas).catch(() => {})
@@ -165,6 +175,81 @@ export function AsignarPreguntaModal({ onClose, backendId, assignedIds, baseOrde
     }, 300)
     return () => clearTimeout(t)
   }, [q, etiquetaId, categoria])
+
+  return (
+    <div className="space-y-3">
+      <input
+        className={inputCls}
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        placeholder="Buscar por texto..."
+      />
+      <div className="grid grid-cols-2 gap-2">
+        <select className={inputCls} value={etiquetaId} onChange={(e) => setEtiquetaId(e.target.value)}>
+          <option value="">Todas las etiquetas</option>
+          {etiquetas.map((et) => <option key={et.id} value={et.id}>{et.nombre}</option>)}
+        </select>
+        <select className={inputCls} value={categoria} onChange={(e) => setCategoria(e.target.value)}>
+          <option value="">Todas las categorías</option>
+          {CATEGORIAS_ETIQUETA.map((c) => <option key={c} value={c}>{c}</option>)}
+        </select>
+      </div>
+
+      <div className="border border-slate-200 rounded max-h-72 overflow-y-auto divide-y divide-slate-100">
+        {loading && <div className="px-3 py-6 text-center text-slate-400 text-xs font-mono">Buscando...</div>}
+        {!loading && banco.length === 0 && (
+          <div className="px-3 py-6 text-center text-slate-400 text-xs font-mono">— Sin resultados —</div>
+        )}
+        {!loading && banco.map((p) => {
+          const yaAsignada = excludeIds?.has(p.id)
+          return (
+            <label
+              key={p.id}
+              className={`flex items-start gap-3 px-3 py-2.5 ${yaAsignada ? 'opacity-50 cursor-not-allowed bg-slate-50' : 'cursor-pointer hover:bg-slate-50'}`}
+            >
+              <input
+                type="checkbox"
+                className="mt-1"
+                disabled={yaAsignada}
+                checked={selectedIds.has(p.id)}
+                onChange={() => onToggle(p.id)}
+              />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  {backendTypeBadge(p.tipo)}
+                  {yaAsignada && (
+                    <span className="px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-slate-200 text-slate-500">
+                      Ya asignada
+                    </span>
+                  )}
+                </div>
+                <div className="text-slate-700 text-sm mt-1 line-clamp-2">{p.texto}</div>
+                {p.etiquetas?.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {p.etiquetas.map((pe) => (
+                      <span key={pe.etiquetaId} className="px-1.5 py-0.5 rounded text-[10px] bg-slate-100 text-slate-500">
+                        {pe.etiqueta.nombre}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </label>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// Modal "Asignar pregunta": el picker del banco de arriba + acción para
+// asignar las tildadas a un módulo ya creado, deshabilitando las que ya
+// están asignadas. El padre solo la monta mientras está abierta, así el
+// estado arranca limpio en cada apertura sin necesidad de resetearlo en un efecto.
+export function AsignarPreguntaModal({ onClose, backendId, assignedIds, baseOrden, onAssigned }) {
+  const [selected, setSelected] = useState(new Set())
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState(null)
 
   const toggle = (id) => {
     setSelected((prev) => {
@@ -213,66 +298,7 @@ export function AsignarPreguntaModal({ onClose, backendId, assignedIds, baseOrde
     >
       <div className="space-y-3">
         {error && <div className="bg-red-50 border border-red-200 text-red-700 text-xs rounded px-3 py-2">{error}</div>}
-        <input
-          className={inputCls}
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Buscar por texto..."
-        />
-        <div className="grid grid-cols-2 gap-2">
-          <select className={inputCls} value={etiquetaId} onChange={(e) => setEtiquetaId(e.target.value)}>
-            <option value="">Todas las etiquetas</option>
-            {etiquetas.map((et) => <option key={et.id} value={et.id}>{et.nombre}</option>)}
-          </select>
-          <select className={inputCls} value={categoria} onChange={(e) => setCategoria(e.target.value)}>
-            <option value="">Todas las categorías</option>
-            {CATEGORIAS_ETIQUETA.map((c) => <option key={c} value={c}>{c}</option>)}
-          </select>
-        </div>
-
-        <div className="border border-slate-200 rounded max-h-72 overflow-y-auto divide-y divide-slate-100">
-          {loading && <div className="px-3 py-6 text-center text-slate-400 text-xs font-mono">Buscando...</div>}
-          {!loading && banco.length === 0 && (
-            <div className="px-3 py-6 text-center text-slate-400 text-xs font-mono">— Sin resultados —</div>
-          )}
-          {!loading && banco.map((p) => {
-            const yaAsignada = assignedIds.has(p.id)
-            return (
-              <label
-                key={p.id}
-                className={`flex items-start gap-3 px-3 py-2.5 ${yaAsignada ? 'opacity-50 cursor-not-allowed bg-slate-50' : 'cursor-pointer hover:bg-slate-50'}`}
-              >
-                <input
-                  type="checkbox"
-                  className="mt-1"
-                  disabled={yaAsignada}
-                  checked={selected.has(p.id)}
-                  onChange={() => toggle(p.id)}
-                />
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    {backendTypeBadge(p.tipo)}
-                    {yaAsignada && (
-                      <span className="px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-slate-200 text-slate-500">
-                        Ya asignada
-                      </span>
-                    )}
-                  </div>
-                  <div className="text-slate-700 text-sm mt-1 line-clamp-2">{p.texto}</div>
-                  {p.etiquetas?.length > 0 && (
-                    <div className="flex flex-wrap gap-1 mt-1">
-                      {p.etiquetas.map((pe) => (
-                        <span key={pe.etiquetaId} className="px-1.5 py-0.5 rounded text-[10px] bg-slate-100 text-slate-500">
-                          {pe.etiqueta.nombre}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </label>
-            )
-          })}
-        </div>
+        <PreguntaBancoPicker selectedIds={selected} onToggle={toggle} excludeIds={assignedIds} />
       </div>
     </Modal>
   )

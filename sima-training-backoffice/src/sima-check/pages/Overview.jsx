@@ -1,9 +1,11 @@
+import { useEffect, useState } from 'react'
 import StatCard from '../../components/StatCard'
 import { clients } from '../../core/data/clients'
 import { users } from '../../core/data/users'
-import { trainingModules as modules } from '../data/training-modules'
 import { evaluations } from '../data/evaluations'
 import { trainingAssignments as assignments } from '../data/training-assignments'
+import { modulosApi } from '../../core/api/modulos'
+import { estadoModulo } from '../components/bancoModulo'
 
 const moduleNames = ['SIMA Básico', 'SIMA Intermedio', 'SIMA Avanzado', 'Reglas de Oro Industria Petrolera']
 const shortNames = ['Básico', 'Intermedio', 'Avanzado', 'Reglas de Oro']
@@ -48,9 +50,15 @@ function SectionHeader({ children }) {
 }
 
 export default function Overview() {
+  const [modulos, setModulos] = useState([])
+
+  useEffect(() => {
+    modulosApi.list().then(setModulos).catch(() => setModulos([]))
+  }, [])
+
   const activeClients = clients.filter((c) => c.active).length
   const totalUsers = users.length
-  const activeModules = modules.filter((m) => m.active).length
+  const activeModules = modulos.filter((m) => estadoModulo(m) === 'activo').length
   const approvedPct = Math.round((evaluations.filter((e) => e.approved).length / evaluations.length) * 100)
   const pendingAssignments = assignments.filter((a) => a.status === 'pending').length
   const completedAssignments = assignments.filter((a) => a.status === 'completed').length

@@ -21,6 +21,15 @@ export function formatVersionNumero(v) {
   return `${v.anio}.${pad(v.mayor)}.${pad(v.menor)}`
 }
 
+// Bucket de estado de un módulo (para chips de filtro y conteos). El toggle
+// manual `activo` pisa todo lo demás: un módulo desactivado a mano cae en
+// "inactivo" sin importar en qué estado esté su versión vigente.
+export function estadoModulo(mod) {
+  if (mod.activo === false) return 'inactivo'
+  if (mod.vigente?.estado === 'BORRADOR') return 'borrador'
+  return 'activo'
+}
+
 // Badge de ciclo de vida de una ModuloVersion: BORRADOR (ámbar) / ACTIVO
 // (esmeralda) / ARCHIVADO (slate).
 export function estadoVersionBadge(estado) {
