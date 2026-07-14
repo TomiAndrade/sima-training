@@ -137,6 +137,12 @@ export default function TrainingModules() {
   const [desactivando, setDesactivando] = useState(false)
   const [desactivarError, setDesactivarError] = useState(null)
 
+  // Confirmación de cancelar el borrador en curso (descarta cambios sin
+  // publicar; si el módulo nunca se publicó, elimina el módulo entero).
+  const [cancelarBorradorModal, setCancelarBorradorModal] = useState(null)
+  const [cancelandoBorrador, setCancelandoBorrador] = useState(false)
+  const [cancelarBorradorError, setCancelarBorradorError] = useState(null)
+
   // Chips de filtro por estado del módulo (activo/borrador/inactivo), combinables.
   const [showActivos, setShowActivos] = useState(true)
   const [showBorradores, setShowBorradores] = useState(true)
@@ -293,6 +299,24 @@ export default function TrainingModules() {
     }
   }
 
+  // --- Cancelar el borrador en curso (descartar sin publicar) ---
+  const handleCancelarBorrador = async () => {
+    setCancelandoBorrador(true)
+    setCancelarBorradorError(null)
+    try {
+      await modulosApi.cancelarBorrador(cancelarBorradorModal.id)
+      await loadModules()
+      setCancelarBorradorModal(null)
+      if (view.type === 'questions' && view.moduleId === cancelarBorradorModal.id) {
+        setView({ type: 'modules' })
+      }
+    } catch (err) {
+      setCancelarBorradorError(err.message)
+    } finally {
+      setCancelandoBorrador(false)
+    }
+  }
+
   // --- Navegación a la vista de contenido ---
   const verVigente = (mod) => {
     setView({ type: 'questions', moduleId: mod.id, versionId: mod.vigente?.id, readOnly: true })
@@ -410,6 +434,9 @@ export default function TrainingModules() {
                 baseOrden={banco.baseOrden}
                 onChanged={banco.refresh}
               />
+              <Button variant="danger" onClick={() => setCancelarBorradorModal(questionsModule)}>
+                {questionsModule?.vigente?.estado === 'BORRADOR' ? 'Eliminar módulo' : 'Cancelar borrador'}
+              </Button>
               <Button onClick={() => setActivarModal({ preview: activarPreview })}>Activar</Button>
             </div>
           )}
@@ -569,12 +596,18 @@ export default function TrainingModules() {
           return (
             <>
               {nuncaPublicado ? (
-                <Button variant="ghost" size="sm" onClick={() => editarSinPublicar(row)}>Editar contenido</Button>
+                <>
+                  <Button variant="ghost" size="sm" onClick={() => editarSinPublicar(row)}>Editar contenido</Button>
+                  <Button variant="danger" size="sm" onClick={() => setCancelarBorradorModal(row)}>Eliminar módulo</Button>
+                </>
               ) : (
                 <>
                   <Button variant="ghost" size="sm" onClick={() => verVigente(row)}>Ver preguntas</Button>
                   {row.borradorId ? (
-                    <Button variant="ghost" size="sm" onClick={() => continuarBorrador(row)}>Continuar borrador</Button>
+                    <>
+                      <Button variant="ghost" size="sm" onClick={() => continuarBorrador(row)}>Continuar borrador</Button>
+                      <Button variant="danger" size="sm" onClick={() => setCancelarBorradorModal(row)}>Cancelar borrador</Button>
+                    </>
                   ) : (
                     <Button variant="ghost" size="sm" onClick={() => setChoiceModal(row)}>Editar contenido</Button>
                   )}
@@ -722,6 +755,42 @@ export default function TrainingModules() {
               Vas a desactivar el módulo <span className="font-semibold">{desactivarModal?.nombre}</span>. Los usuarios
               que lo tengan asignado van a dejar de verlo, pero el módulo <strong>no se elimina</strong> y podés
               reactivarlo cuando quieras.
+            </p>
+          )}
+        </div>
+      </Modal>
+
+      <Modal
+        open={!!cancelarBorradorModal}
+        onClose={() => setCancelarBorradorModal(null)}
+        title={cancelarBorradorModal?.vigente?.estado === 'BORRADOR' ? 'Eliminar módulo' : 'Cancelar borrador'}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setCancelarBorradorModal(null)}>Volver</Button>
+            <Button variant="danger" onClick={handleCancelarBorrador} disabled={cancelandoBorrador}>
+              {cancelandoBorrador
+                ? 'Guardando...'
+                : cancelarBorradorModal?.vigente?.estado === 'BORRADOR'
+                  ? 'Eliminar módulo'
+                  : 'Cancelar borrador'}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          {cancelarBorradorError && (
+            <div className="bg-red-50 border border-red-200 text-red-700 text-xs rounded px-3 py-2">{cancelarBorradorError}</div>
+          )}
+          {cancelarBorradorModal?.vigente?.estado === 'BORRADOR' ? (
+            <p className="text-slate-600 text-sm">
+              El módulo <span className="font-semibold">{cancelarBorradorModal?.nombre}</span> nunca se publicó — es
+              solo este borrador. Eliminarlo <strong>borra el módulo entero</strong> y no se puede deshacer.
+            </p>
+          ) : (
+            <p className="text-slate-600 text-sm">
+              Vas a descartar el borrador en curso de <span className="font-semibold">{cancelarBorradorModal?.nombre}</span>.
+              Se pierden los cambios sin publicar y el módulo vuelve a mostrar la última versión activa. Esta acción no
+              se puede deshacer.
             </p>
           )}
         </div>

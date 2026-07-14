@@ -24,4 +24,7 @@ export const modulosApi = {
   // a versión nueva por haber hecho muchos cambios).
   actualizarEleccionBorrador: (id, esNuevaLinea) =>
     api.patch(`/modulos/${id}/borrador`, { esNuevaLinea }),
+  // Descarta el borrador en curso. Si era la única versión (módulo nunca
+  // publicado), el backend elimina el módulo entero junto con el borrador.
+  cancelarBorrador: (id) => api.del(`/modulos/${id}/borrador`),
 }
