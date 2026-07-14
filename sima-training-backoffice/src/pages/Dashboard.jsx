@@ -1,5 +1,5 @@
 import { clients } from '../core/data/clients'
-import { employees } from '../core/data/employees'
+import { usuariosMock } from '../core/data/usuarios-mock'
 import { trainingModules } from '../sima-check/data/training-modules'
 import { trainingAssignments } from '../sima-check/data/training-assignments'
 
@@ -36,7 +36,7 @@ function SectionHeader({ children }) {
 
 export default function Dashboard({ navigate }) {
   const activeClients = clients.filter((c) => c.active).length
-  const totalEmployees = employees.length
+  const totalUsuarios = usuariosMock.length
   const pendingAssignments = trainingAssignments.filter((a) => a.status === 'pending').length
   const completedAssignments = trainingAssignments.filter((a) => a.status === 'completed').length
   const activeModules = trainingModules.filter((m) => m.active).length
@@ -50,7 +50,7 @@ export default function Dashboard({ navigate }) {
         <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
           {[
             { label: 'Clientes Activos', value: activeClients },
-            { label: 'Empleados Registrados', value: totalEmployees },
+            { label: 'Usuarios Registrados', value: totalUsuarios },
             { label: 'Asignaciones Pendientes', value: pendingAssignments },
             { label: 'Capacitaciones Completadas', value: completedAssignments },
           ].map((kpi) => (

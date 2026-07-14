@@ -3,7 +3,7 @@ import Table from '../../components/Table'
 import Button from '../../components/Button'
 import Modal from '../../components/Modal'
 import { trainingAssignments as initialAssignments } from '../data/training-assignments'
-import { employees } from '../../core/data/employees'
+import { usuariosMock } from '../../core/data/usuarios-mock'
 import { trainingModules as modules } from '../data/training-modules'
 import { clients } from '../../core/data/clients'
 import { users } from '../../core/data/users'
@@ -22,44 +22,44 @@ export default function TrainingAssignments() {
 
   const [assignments, setAssignments] = useState(initialAssignments)
   const [modal, setModal] = useState(null)
-  const [form, setForm] = useState({ employeeId: null, moduleId: modules[0]?.id ?? 1 })
-  const [empSearch, setEmpSearch] = useState('')
-  const [empClient, setEmpClient] = useState('')
+  const [form, setForm] = useState({ usuarioId: null, moduleId: modules[0]?.id ?? 1 })
+  const [usuarioSearch, setUsuarioSearch] = useState('')
+  const [usuarioClient, setUsuarioClient] = useState('')
   const [error, setError] = useState('')
   const [search, setSearch] = useState('')
   const [filterClient, setFilterClient] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
 
-  const getEmployee = (id) => employees.find((e) => e.id === id)
+  const getUsuario = (id) => usuariosMock.find((u) => u.id === id)
   const getClientName = (id) => clients.find((c) => c.id === id)?.name ?? '—'
   const getModuleName = (id) => modules.find((m) => m.id === id)?.name ?? '—'
   const getAssignedBy = (id) => users.find((u) => u.id === id)?.name ?? '—'
 
   const openCreate = () => {
-    setForm({ employeeId: null, moduleId: modules[0]?.id ?? 1 })
-    setEmpSearch('')
-    setEmpClient('')
+    setForm({ usuarioId: null, moduleId: modules[0]?.id ?? 1 })
+    setUsuarioSearch('')
+    setUsuarioClient('')
     setError('')
     setModal(true)
   }
 
   const handleSave = () => {
-    if (!form.employeeId) {
-      setError('Seleccioná un empleado.')
+    if (!form.usuarioId) {
+      setError('Seleccioná un usuario.')
       return
     }
     const duplicate = assignments.some(
-      (a) => a.employeeId === form.employeeId && a.moduleId === form.moduleId
+      (a) => a.employeeId === form.usuarioId && a.moduleId === form.moduleId
     )
     if (duplicate) {
-      setError('Este empleado ya tiene ese módulo asignado.')
+      setError('Este usuario ya tiene ese módulo asignado.')
       return
     }
     setAssignments((prev) => [
       ...prev,
       {
         id: Date.now(),
-        employeeId: form.employeeId,
+        employeeId: form.usuarioId,
         moduleId: form.moduleId,
         assignedBy: 1,
         assignedAt: new Date().toISOString().split('T')[0],
@@ -72,16 +72,16 @@ export default function TrainingAssignments() {
   const columns = [
     {
       key: 'employeeId',
-      label: 'Empleado',
+      label: 'Usuario',
       render: (id) => (
-        <span className="text-slate-900 font-medium">{getEmployee(id)?.name ?? '—'}</span>
+        <span className="text-slate-900 font-medium">{getUsuario(id)?.name ?? '—'}</span>
       ),
     },
     {
       key: '_cliente',
       label: 'Cliente',
       render: (_, row) => (
-        <span className="text-slate-600">{getClientName(getEmployee(row.employeeId)?.clientId)}</span>
+        <span className="text-slate-600">{getClientName(getUsuario(row.employeeId)?.clientId)}</span>
       ),
     },
     {
@@ -109,23 +109,23 @@ export default function TrainingAssignments() {
     },
   ]
 
-  const filteredEmployeesForModal = useMemo(() => {
-    const clientId = isCoord ? CURRENT_USER.clientId : (empClient ? Number(empClient) : null)
-    const q = empSearch.trim().toLowerCase()
-    return employees.filter((e) => {
-      if (clientId && e.clientId !== clientId) return false
-      if (q && !e.name.toLowerCase().includes(q) && !e.dni.includes(q)) return false
+  const filteredUsuariosForModal = useMemo(() => {
+    const clientId = isCoord ? CURRENT_USER.clientId : (usuarioClient ? Number(usuarioClient) : null)
+    const q = usuarioSearch.trim().toLowerCase()
+    return usuariosMock.filter((u) => {
+      if (clientId && u.clientId !== clientId) return false
+      if (q && !u.name.toLowerCase().includes(q) && !u.dni.includes(q)) return false
       return true
     })
-  }, [empSearch, empClient, isCoord])
+  }, [usuarioSearch, usuarioClient, isCoord])
 
   const filteredAssignments = useMemo(() => {
     const q = search.trim().toLowerCase()
     return assignments.filter((a) => {
-      const emp = getEmployee(a.employeeId)
-      if (!emp) return false
-      if (q && !emp.name.toLowerCase().includes(q) && !emp.dni.includes(q)) return false
-      if (filterClient && emp.clientId !== Number(filterClient)) return false
+      const u = getUsuario(a.employeeId)
+      if (!u) return false
+      if (q && !u.name.toLowerCase().includes(q) && !u.dni.includes(q)) return false
+      if (filterClient && u.clientId !== Number(filterClient)) return false
       if (filterStatus && a.status !== filterStatus) return false
       return true
     })
@@ -191,19 +191,19 @@ export default function TrainingAssignments() {
       >
         <div className="space-y-4">
           <div className="space-y-2">
-            <label className="block text-slate-600 text-xs font-semibold uppercase tracking-widest">Empleado</label>
+            <label className="block text-slate-600 text-xs font-semibold uppercase tracking-widest">Usuario</label>
             <div className="flex gap-2">
               <input
                 type="text"
                 placeholder="Buscar por nombre o DNI…"
-                value={empSearch}
-                onChange={(e) => { setEmpSearch(e.target.value); setError('') }}
+                value={usuarioSearch}
+                onChange={(e) => { setUsuarioSearch(e.target.value); setError('') }}
                 className="flex-1 bg-white border border-slate-300 rounded px-3 py-2 text-slate-900 text-sm placeholder-slate-400 focus:outline-none focus:border-red-600"
               />
               {!isCoord && (
                 <select
-                  value={empClient}
-                  onChange={(e) => { setEmpClient(e.target.value); setError('') }}
+                  value={usuarioClient}
+                  onChange={(e) => { setUsuarioClient(e.target.value); setError('') }}
                   className="bg-white border border-slate-300 rounded px-3 py-2 text-sm text-slate-700 focus:outline-none focus:border-red-600"
                 >
                   <option value="">Todos los clientes</option>
@@ -212,23 +212,23 @@ export default function TrainingAssignments() {
               )}
             </div>
             <div className="border border-slate-200 rounded overflow-hidden max-h-44 overflow-y-auto">
-              {filteredEmployeesForModal.length === 0 ? (
+              {filteredUsuariosForModal.length === 0 ? (
                 <div className="px-3 py-4 text-slate-400 text-sm text-center">Sin resultados</div>
-              ) : filteredEmployeesForModal.map((e) => (
+              ) : filteredUsuariosForModal.map((u) => (
                 <button
-                  key={e.id}
+                  key={u.id}
                   type="button"
-                  onClick={() => { setForm((f) => ({ ...f, employeeId: e.id })); setError('') }}
+                  onClick={() => { setForm((f) => ({ ...f, usuarioId: u.id })); setError('') }}
                   className={`w-full text-left px-3 py-2.5 text-sm flex items-center justify-between gap-3 border-b border-slate-100 last:border-0 transition-colors ${
-                    form.employeeId === e.id
+                    form.usuarioId === u.id
                       ? 'bg-red-50 text-red-700'
                       : 'text-slate-700 hover:bg-slate-50'
                   }`}
                 >
-                  <span className="font-medium truncate">{e.name}</span>
+                  <span className="font-medium truncate">{u.name}</span>
                   <div className="flex items-center gap-3 flex-shrink-0">
-                    <span className="text-slate-400 font-mono text-xs">{e.dni}</span>
-                    {!isCoord && <span className="text-slate-400 text-xs">{getClientName(e.clientId)}</span>}
+                    <span className="text-slate-400 font-mono text-xs">{u.dni}</span>
+                    {!isCoord && <span className="text-slate-400 text-xs">{getClientName(u.clientId)}</span>}
                   </div>
                 </button>
               ))}
