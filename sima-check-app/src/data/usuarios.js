@@ -1,0 +1,17 @@
+export const usuarios = [
+  { id: 1, dni: '28541367', name: 'Martín Guerrero', company: 'YPF S.A.', companyId: 1 },
+  { id: 2, dni: '31782094', name: 'Ana Fernández', company: 'Pan American Energy', companyId: 2 },
+  { id: 3, dni: '29643018', name: 'Nicolás Palacios', company: 'Pan American Energy', companyId: 2 },
+  { id: 4, dni: '33915427', name: 'Valentina Cruz', company: 'TotalEnergies Argentina', companyId: 3 },
+  { id: 5, dni: '27856103', name: 'Diego Morales', company: 'Vista Energy', companyId: 5 },
+  { id: 6, dni: '30124785', name: 'Jorge Aguirre', company: 'YPF S.A.', companyId: 1 },
+  { id: 7, dni: '32567841', name: 'Lorena Soto', company: 'Pan American Energy', companyId: 2 },
+  { id: 8, dni: '34209563', name: 'Esteban Ruiz', company: 'TotalEnergies Argentina', companyId: 3 },
+  { id: 9, dni: '26934712', name: 'Gabriela Paz', company: 'Vista Energy', companyId: 5 },
+  { id: 10, dni: '35471290', name: 'Sebastián Núñez', company: 'YPF S.A.', companyId: 1 },
+  { id: 11, dni: '31048926', name: 'Marcela Ibáñez', company: 'Pan American Energy', companyId: 2 },
+  { id: 12, dni: '29315874', name: 'Facundo Romero', company: 'YPF S.A.', companyId: 1 },
+  { id: 13, dni: '36082541', name: 'Carolina Vega', company: 'TotalEnergies Argentina', companyId: 3 },
+  { id: 14, dni: '28790634', name: 'Leandro Muñoz', company: 'Vista Energy', companyId: 5 },
+  { id: 15, dni: '33624908', name: 'Florencia Acosta', company: 'YPF S.A.', companyId: 1 },
+]

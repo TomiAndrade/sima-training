@@ -1,16 +1,16 @@
 import { useState } from 'react'
 import { pickRandomQuestions, calculateScore } from './utils/evaluation'
 import { assignments as initialAssignments } from './data/assignments'
-import EmployeeSelection from './pages/EmployeeSelection'
+import UsuarioSelection from './pages/UsuarioSelection'
 import ModuleSelection from './pages/ModuleSelection'
 import Evaluation from './pages/Evaluation'
 import Results from './pages/Results'
 
-const STEPS = { employee: 'employee', module: 'module', evaluation: 'evaluation', results: 'results' }
+const STEPS = { usuario: 'usuario', module: 'module', evaluation: 'evaluation', results: 'results' }
 
 export default function App() {
-  const [step, setStep] = useState(STEPS.employee)
-  const [employee, setEmployee] = useState(null)
+  const [step, setStep] = useState(STEPS.usuario)
+  const [usuario, setUsuario] = useState(null)
   const [module, setModule] = useState(null)
   const [questions, setQuestions] = useState([])
   const [result, setResult] = useState(null)
@@ -29,7 +29,7 @@ export default function App() {
     if (score.approved) {
       setAssignments((prev) =>
         prev.map((a) =>
-          a.employeeId === employee.id && a.moduleId === module.id && a.status === 'pending'
+          a.employeeId === usuario.id && a.moduleId === module.id && a.status === 'pending'
             ? { ...a, status: 'completed' }
             : a
         )
@@ -53,36 +53,34 @@ export default function App() {
   }
 
   const goHome = () => {
-    setEmployee(null)
+    setUsuario(null)
     setModule(null)
     setQuestions([])
     setResult(null)
-    setStep(STEPS.employee)
+    setStep(STEPS.usuario)
   }
 
   return (
-    // Para usar imagen de fondo: reemplazar el style con
-    // backgroundImage: "url('/bg-industrial.jpg')", backgroundSize: 'cover', backgroundPosition: 'center'
     <div
       className="fixed inset-0 flex items-center justify-center p-4 overflow-hidden"
       style={{ backgroundImage: "url('/SIMACHECK-FONDO.png')", backgroundSize: 'cover', backgroundPosition: 'center' }}
     >
       <div className="relative z-10 w-full flex flex-col items-center justify-center gap-5">
         <img src="/logo.png" alt="SIMA CHECK" className="h-16 w-auto object-contain drop-shadow-md" />
-        {step === STEPS.employee && (
-          <EmployeeSelection onSelect={(emp) => { setEmployee(emp); setStep(STEPS.module) }} />
+        {step === STEPS.usuario && (
+          <UsuarioSelection onSelect={(u) => { setUsuario(u); setStep(STEPS.module) }} />
         )}
         {step === STEPS.module && (
           <ModuleSelection
-            employee={employee}
+            usuario={usuario}
             assignments={assignments}
             onSelect={startEvaluation}
-            onBack={() => setStep(STEPS.employee)}
+            onBack={() => setStep(STEPS.usuario)}
           />
         )}
         {step === STEPS.evaluation && (
           <Evaluation
-            employee={employee}
+            usuario={usuario}
             module={module}
             questions={questions}
             onFinish={finishEvaluation}
@@ -91,7 +89,7 @@ export default function App() {
         )}
         {step === STEPS.results && (
           <Results
-            employee={employee}
+            usuario={usuario}
             module={module}
             result={result}
             onRetry={retry}

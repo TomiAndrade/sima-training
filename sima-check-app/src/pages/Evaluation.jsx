@@ -3,7 +3,7 @@ import QuestionCard from '../components/QuestionCard'
 import ProgressBar from '../components/ProgressBar'
 import Button from '../components/Button'
 
-export default function Evaluation({ employee, module: mod, questions, onFinish, onBack }) {
+export default function Evaluation({ usuario, module: mod, questions, onFinish, onBack }) {
   const [currentIndex, setCurrentIndex] = useState(0)
   const [answers, setAnswers] = useState(Array(questions.length).fill(null))
 

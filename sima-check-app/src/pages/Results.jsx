@@ -1,6 +1,6 @@
 import Button from '../components/Button'
 
-export default function Results({ employee, module: mod, result, onRetry, onGoToModules, onHome }) {
+export default function Results({ usuario, module: mod, result, onRetry, onGoToModules, onHome }) {
   const { correct, total, percentage, approved } = result
 
   const feedbackMsg = approved
@@ -24,7 +24,7 @@ export default function Results({ employee, module: mod, result, onRetry, onGoTo
 
       {/* Info */}
       <div className="text-center mb-8">
-        <p className="text-slate-900 text-lg font-semibold mb-1">{employee.name}</p>
+        <p className="text-slate-900 text-lg font-semibold mb-1">{usuario.name}</p>
         <p className="text-slate-500 text-sm">{mod.name}</p>
         <p className={`mt-3 text-sm max-w-xs mx-auto leading-relaxed ${approved ? 'text-emerald-700' : 'text-red-700'}`}>
           {feedbackMsg}

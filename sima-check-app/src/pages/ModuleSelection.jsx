@@ -1,8 +1,8 @@
 import { modules } from '../data/modules'
 
-export default function ModuleSelection({ employee, assignments, onSelect, onBack }) {
+export default function ModuleSelection({ usuario, assignments, onSelect, onBack }) {
   const pendingModuleIds = assignments
-    .filter((a) => a.employeeId === employee.id && a.status === 'pending')
+    .filter((a) => a.employeeId === usuario.id && a.status === 'pending')
     .map((a) => a.moduleId)
 
   const pendingModules = modules.filter((m) => pendingModuleIds.includes(m.id))
@@ -16,11 +16,11 @@ export default function ModuleSelection({ employee, assignments, onSelect, onBac
         </button>
         <div className="flex items-center gap-4">
           <div className="w-12 h-12 rounded-full bg-red-50 border-2 border-red-600 flex items-center justify-center text-red-600 font-black text-lg flex-shrink-0">
-            {employee.name.split(' ').map((n) => n[0]).slice(0, 2).join('')}
+            {usuario.name.split(' ').map((n) => n[0]).slice(0, 2).join('')}
           </div>
           <div>
-            <p className="text-slate-900 text-xl font-bold leading-tight">{employee.name}</p>
-            <p className="text-slate-500 text-sm">{employee.company}</p>
+            <p className="text-slate-900 text-xl font-bold leading-tight">{usuario.name}</p>
+            <p className="text-slate-500 text-sm">{usuario.company}</p>
           </div>
         </div>
         <h2 className="text-slate-900 text-lg font-bold mt-4">
