@@ -53,14 +53,18 @@ function ModulosPicker({ options, selectedIds, onChange }) {
 }
 
 // Botones de acción + ambos modales, listos para colocar en el header.
-export function BancoAcciones({ backendId, assignedIds, baseOrden, onChanged }) {
+// `onAssignExisting`/`onAssignNew` son opcionales: si se pasan, los modales
+// dejan de pegarle al backend y en cambio le devuelven al padre lo elegido
+// (modo staged — ver TrainingModules.jsx). Sin ellos, comportamiento actual
+// (asignación inmediata + `onChanged` para refrescar).
+export function BancoAcciones({ backendId, assignedIds, baseOrden, onChanged, onAssignExisting, onAssignNew }) {
   const [assignOpen, setAssignOpen] = useState(false)
   const [nuevaOpen, setNuevaOpen] = useState(false)
 
   return (
     <div className="flex items-center gap-2">
       <Button variant="secondary" onClick={() => setNuevaOpen(true)}>Nueva pregunta</Button>
-      <Button onClick={() => setAssignOpen(true)}>Asignar pregunta</Button>
+      <Button variant="success" onClick={() => setAssignOpen(true)}>Asignar pregunta</Button>
 
       {assignOpen && (
         <AsignarPreguntaModal
@@ -69,6 +73,7 @@ export function BancoAcciones({ backendId, assignedIds, baseOrden, onChanged }) 
           assignedIds={assignedIds}
           baseOrden={baseOrden}
           onAssigned={onChanged}
+          onAssign={onAssignExisting}
         />
       )}
       {nuevaOpen && (
@@ -77,6 +82,7 @@ export function BancoAcciones({ backendId, assignedIds, baseOrden, onChanged }) 
           backendId={backendId}
           baseOrden={baseOrden}
           onAssigned={onChanged}
+          onAssign={onAssignNew}
         />
       )}
     </div>
@@ -86,9 +92,13 @@ export function BancoAcciones({ backendId, assignedIds, baseOrden, onChanged }) 
 // Panel con las preguntas ya asignadas desde el banco (feedback del backend).
 // `onToggle` es opcional: si se pasa, cada fila suma un botón Activar/Desactivar
 // (baja lógica por módulo, PATCH /modulos/:id/preguntas/:preguntaId) y las
-// preguntas desactivadas se muestran atenuadas. Sin `onToggle` el panel queda
-// puramente de lectura (usado por las vistas read-only del historial/vigente).
-export function PreguntasAsignadasPanel({ asignadas, error, onToggle, togglingId }) {
+// preguntas desactivadas se muestran atenuadas. `onRemove` es opcional también
+// (unassign duro, DELETE /modulos/:id/preguntas/:preguntaId — solo válido en un
+// BORRADOR): saca la fila del todo en vez de dejarla atenuada, para que el
+// editor no se llene de preguntas descartadas que ya nadie va a reactivar. Sin
+// `onToggle`/`onRemove` el panel queda puramente de lectura (vistas read-only
+// del historial/vigente).
+export function PreguntasAsignadasPanel({ asignadas, error, onToggle, onRemove, togglingId }) {
   return (
     <div className="border border-slate-200 rounded bg-white">
       <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between">
@@ -123,19 +133,33 @@ export function PreguntasAsignadasPanel({ asignadas, error, onToggle, togglingId
                       Inactiva
                     </span>
                   )}
-                  {onToggle && (
-                    enPapelera ? (
-                      <span className="text-slate-400 text-[11px] flex-shrink-0">Recuperala desde Preguntas</span>
-                    ) : (
-                      <Button
-                        variant={mvp.activa ? 'danger' : 'secondary'}
-                        size="sm"
-                        disabled={togglingId === mvp.preguntaId}
-                        onClick={() => onToggle(mvp)}
-                      >
-                        {togglingId === mvp.preguntaId ? '...' : mvp.activa ? 'Desactivar' : 'Activar'}
-                      </Button>
-                    )
+                  {(onToggle || onRemove) && (
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      {onToggle && (
+                        enPapelera ? (
+                          <span className="text-slate-400 text-[11px]">Recuperala desde Preguntas</span>
+                        ) : (
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            disabled={togglingId === mvp.preguntaId}
+                            onClick={() => onToggle(mvp)}
+                          >
+                            {togglingId === mvp.preguntaId ? '...' : mvp.activa ? 'Desactivar' : 'Activar'}
+                          </Button>
+                        )
+                      )}
+                      {onRemove && (
+                        <Button
+                          variant="danger"
+                          size="sm"
+                          disabled={togglingId === mvp.preguntaId}
+                          onClick={() => onRemove(mvp)}
+                        >
+                          {togglingId === mvp.preguntaId ? '...' : 'Quitar'}
+                        </Button>
+                      )}
+                    </div>
                   )}
                 </div>
               )
@@ -212,7 +236,7 @@ export function PreguntaBancoPicker({ selectedIds, onToggle, excludeIds }) {
                 className="mt-1"
                 disabled={yaAsignada}
                 checked={selectedIds.has(p.id)}
-                onChange={() => onToggle(p.id)}
+                onChange={() => onToggle(p.id, p)}
               />
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 flex-wrap">
@@ -246,16 +270,19 @@ export function PreguntaBancoPicker({ selectedIds, onToggle, excludeIds }) {
 // asignar las tildadas a un módulo ya creado, deshabilitando las que ya
 // están asignadas. El padre solo la monta mientras está abierta, así el
 // estado arranca limpio en cada apertura sin necesidad de resetearlo en un efecto.
-export function AsignarPreguntaModal({ onClose, backendId, assignedIds, baseOrden, onAssigned }) {
-  const [selected, setSelected] = useState(new Set())
+// `onAssign(items)` opcional: si se pasa, en vez de pegarle al backend le
+// devuelve al padre los items elegidos (con la pregunta completa incluida,
+// para poder renderizarlos sin ir al servidor — modo staged).
+export function AsignarPreguntaModal({ onClose, backendId, assignedIds, baseOrden, onAssigned, onAssign }) {
+  const [selected, setSelected] = useState(new Map())
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
 
-  const toggle = (id) => {
+  const toggle = (id, pregunta) => {
     setSelected((prev) => {
-      const next = new Set(prev)
+      const next = new Map(prev)
       if (next.has(id)) next.delete(id)
-      else next.add(id)
+      else next.set(id, pregunta)
       return next
     })
   }
@@ -264,13 +291,21 @@ export function AsignarPreguntaModal({ onClose, backendId, assignedIds, baseOrde
     setSaving(true)
     setError(null)
     try {
-      const items = [...selected].map((preguntaId, i) => ({
+      const items = [...selected.entries()].map(([preguntaId, pregunta], i) => ({
         preguntaId,
         orden: baseOrden + i + 1,
         obligatoria: true,
+        pregunta,
       }))
-      await modulosApi.asignarPreguntas(backendId, items)
-      await onAssigned()
+      if (onAssign) {
+        onAssign(items)
+      } else {
+        await modulosApi.asignarPreguntas(
+          backendId,
+          items.map(({ preguntaId, orden, obligatoria }) => ({ preguntaId, orden, obligatoria })),
+        )
+        await onAssigned()
+      }
       onClose()
     } catch (err) {
       setError(err.message)
@@ -298,7 +333,7 @@ export function AsignarPreguntaModal({ onClose, backendId, assignedIds, baseOrde
     >
       <div className="space-y-3">
         {error && <div className="bg-red-50 border border-red-200 text-red-700 text-xs rounded px-3 py-2">{error}</div>}
-        <PreguntaBancoPicker selectedIds={selected} onToggle={toggle} excludeIds={assignedIds} />
+        <PreguntaBancoPicker selectedIds={new Set(selected.keys())} onToggle={toggle} excludeIds={assignedIds} />
       </div>
     </Modal>
   )
@@ -306,12 +341,17 @@ export function AsignarPreguntaModal({ onClose, backendId, assignedIds, baseOrde
 
 const EMPTY_BACKEND_FORM = { texto: '', tipo: 'VERDADERO_FALSO', opciones: ['', '', '', ''], respuestaCorrecta: '', puntajeMax: '' }
 
-// Modal "Nueva pregunta": crea en el banco (POST /preguntas) y, si se pasa un
+// Modal "Nueva pregunta": crea en el banco (POST /preguntas, siempre
+// inmediato — es un alta permanente, no algo del borrador) y, si se pasa un
 // backendId (módulo), la asigna en el mismo gesto (POST /modulos/:id/preguntas).
 // Sin backendId, la pregunta queda creada en el banco sin asignar (misma
 // semántica que "sin módulo destino" en la importación de Excel).
+// `onAssign(pregunta)` opcional: si se pasa, la asignación al `backendId`
+// puntual queda a cargo del padre (modo staged) en vez de pegarle al backend;
+// los demás módulos elegidos (si hay) se siguen asignando de inmediato, están
+// fuera del alcance de ese borrador.
 // El padre solo la monta mientras está abierta (estado arranca limpio).
-export function NuevaPreguntaModal({ onClose, backendId, onAssigned }) {
+export function NuevaPreguntaModal({ onClose, backendId, onAssigned, onAssign }) {
   const [form, setForm] = useState(EMPTY_BACKEND_FORM)
   const [modules, setModules] = useState([])
   // Si el modal se abre desde la vista por-módulo (backendId), ese módulo arranca
@@ -349,11 +389,15 @@ export function NuevaPreguntaModal({ onClose, backendId, onAssigned }) {
       const pregunta = await preguntasApi.create(payload)
       // Asigna a cada módulo elegido. El orden lo appendea el backend (sin orden).
       for (const moduloId of selectedModuleIds) {
-        await modulosApi.asignarPreguntas(moduloId, [
-          { preguntaId: pregunta.id, obligatoria: true },
-        ])
+        if (onAssign && moduloId === backendId) {
+          onAssign(pregunta)
+        } else {
+          await modulosApi.asignarPreguntas(moduloId, [
+            { preguntaId: pregunta.id, obligatoria: true },
+          ])
+        }
       }
-      await onAssigned()
+      if (!onAssign) await onAssigned()
       onClose()
     } catch (err) {
       setError(err.message)

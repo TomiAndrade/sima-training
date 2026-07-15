@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Table from '../../components/Table'
 import Button from '../../components/Button'
 import Modal from '../../components/Modal'
@@ -60,61 +60,6 @@ function deberiaRecomendarVersionNueva({ total, baseSize }) {
   return total / baseSize >= RECOMENDAR_PORCENTAJE
 }
 
-// Modal: al editar contenido de un módulo con ACTIVO, elegir si el borrador se
-// publicará como actualización (sube MENOR) o como versión nueva (sube MAYOR).
-function VersionChoiceModal({ mod, onClose, onCreated }) {
-  const [saving, setSaving] = useState(null)
-  const [error, setError] = useState(null)
-
-  const elegir = async (esNuevaLinea) => {
-    setSaving(esNuevaLinea)
-    setError(null)
-    try {
-      const borrador = await modulosApi.crearVersion(mod.id, esNuevaLinea)
-      onCreated(borrador.id)
-    } catch (err) {
-      setError(err.message)
-      setSaving(null)
-    }
-  }
-
-  const menorPreview = formatVersionNumero(previewActivacion(mod.vigente, false))
-  const mayorPreview = formatVersionNumero(previewActivacion(mod.vigente, true))
-
-  return (
-    <Modal open onClose={onClose} title="Editar contenido del módulo">
-      <div className="space-y-3">
-        {error && <div className="bg-red-50 border border-red-200 text-red-700 text-xs rounded px-3 py-2">{error}</div>}
-        <p className="text-slate-500 text-sm">
-          El módulo ya tiene una versión publicada ({formatVersionNumero(mod.vigente)}). ¿Cómo querés publicar los cambios?
-        </p>
-        <button
-          type="button"
-          disabled={saving !== null}
-          onClick={() => elegir(false)}
-          className="w-full text-left border border-slate-200 rounded px-4 py-3 hover:border-red-600 hover:bg-red-50/30 transition-colors disabled:opacity-50"
-        >
-          <div className="text-slate-900 font-semibold text-sm">
-            {saving === false ? 'Creando borrador...' : 'Actualización (misma versión)'}
-          </div>
-          <div className="text-slate-400 text-xs font-mono mt-0.5">→ {menorPreview}</div>
-        </button>
-        <button
-          type="button"
-          disabled={saving !== null}
-          onClick={() => elegir(true)}
-          className="w-full text-left border border-slate-200 rounded px-4 py-3 hover:border-red-600 hover:bg-red-50/30 transition-colors disabled:opacity-50"
-        >
-          <div className="text-slate-900 font-semibold text-sm">
-            {saving === true ? 'Creando borrador...' : 'Versión nueva'}
-          </div>
-          <div className="text-slate-400 text-xs font-mono mt-0.5">→ {mayorPreview}</div>
-        </button>
-      </div>
-    </Modal>
-  )
-}
-
 export default function TrainingModules() {
   const [modules, setModules] = useState([])
   const [loading, setLoading] = useState(true)
@@ -143,16 +88,25 @@ export default function TrainingModules() {
   const [cancelandoBorrador, setCancelandoBorrador] = useState(false)
   const [cancelarBorradorError, setCancelarBorradorError] = useState(null)
 
+  // Confirmación al salir del borrador con "← Volver": guardar (aplica los
+  // cambios pendientes de esta sesión) o descartarlos.
+  const [volverModal, setVolverModal] = useState(false)
+  const [guardando, setGuardando] = useState(false)
+  const [guardarError, setGuardarError] = useState(null)
+
   // Chips de filtro por estado del módulo (activo/borrador/inactivo), combinables.
   const [showActivos, setShowActivos] = useState(true)
   const [showBorradores, setShowBorradores] = useState(true)
   const [showInactivos, setShowInactivos] = useState(false)
 
-  // Elección menor/mayor antes de crear el borrador (sólo cuando ya hay un ACTIVO).
-  const [choiceModal, setChoiceModal] = useState(null)
+  // Creación de un borrador nuevo a partir del ACTIVO (sin preguntar actualización/
+  // versión nueva: esa elección se pospone al Activar). Loading por módulo.
+  const [creandoBorradorId, setCreandoBorradorId] = useState(null)
 
-  // Confirmación de Activar (publica el borrador de la vista actual).
-  const [activarModal, setActivarModal] = useState(null)
+  // Confirmación de Activar (publica el borrador de la vista actual). Si el
+  // módulo ya tiene un ACTIVO hay que elegir actualización/versión nueva acá.
+  const [activarModal, setActivarModal] = useState(false)
+  const [esNuevaLineaElegida, setEsNuevaLineaElegida] = useState(false)
   const [activando, setActivando] = useState(false)
   const [activarError, setActivarError] = useState(null)
 
@@ -161,13 +115,6 @@ export default function TrainingModules() {
   const [versionesLoading, setVersionesLoading] = useState(false)
   const [versionesError, setVersionesError] = useState(null)
 
-  // Toggle Activar/Desactivar de una pregunta dentro del borrador que se edita.
-  const [togglingId, setTogglingId] = useState(null)
-  const [toggleError, setToggleError] = useState(null)
-
-  // Cambiar la elección menor/mayor de un borrador ya creado (recomendación).
-  const [cambiandoLinea, setCambiandoLinea] = useState(false)
-
   // Banco de preguntas de la versión abierta en la vista "questions": la vigente
   // por default, o una versión puntual (el borrador, o una del historial) si
   // view.versionId la especifica. El hook se llama incondicionalmente; con
@@ -175,6 +122,24 @@ export default function TrainingModules() {
   const questionsView = view.type === 'questions' ? view : null
   const questionsModule = questionsView ? modules.find((m) => m.id === questionsView.moduleId) : null
   const banco = useBancoModulo(questionsView?.moduleId, questionsView?.versionId)
+
+  // Staging: mientras se edita un borrador, los cambios (asignar/quitar/
+  // activar-desactivar) viven acá y no pegan al backend hasta "Guardar y
+  // volver" o "Activar" (ver flushCambios). `localAsignadas` arranca como
+  // foto de `banco.asignadas` una sola vez por sesión de edición — la
+  // sessionKeyRef evita re-tomar la foto en cada render, solo cuando se entra
+  // a un borrador distinto (otro moduleId/versionId).
+  const [localAsignadas, setLocalAsignadas] = useState([])
+  const sessionKeyRef = useRef(null)
+  useEffect(() => {
+    if (!questionsView || questionsView.readOnly || !banco.version) return
+    const key = `${questionsView.moduleId}:${questionsView.versionId}`
+    if (sessionKeyRef.current !== key) {
+      sessionKeyRef.current = key
+      setLocalAsignadas(banco.asignadas)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [questionsView?.moduleId, questionsView?.versionId, questionsView?.readOnly, banco.version])
 
   // Base de la que partió el borrador (el ACTIVO al momento de crearlo), sólo
   // para comparar cuántas preguntas cambiaron y recomendar "versión nueva" si
@@ -331,10 +296,21 @@ export default function TrainingModules() {
     setView({ type: 'questions', moduleId: mod.id, versionId: mod.vigente.id, readOnly: false })
   }
 
-  const handleBorradorCreado = (mod, borradorId) => {
-    setChoiceModal(null)
-    loadModules()
-    setView({ type: 'questions', moduleId: mod.id, versionId: borradorId, readOnly: false })
+  // Módulo publicado sin borrador en curso: crea el borrador (copia las
+  // preguntas del ACTIVO) y entra directo a editarlo. La elección
+  // actualización/versión nueva se pospone al Activar, acá no se pregunta nada.
+  const crearBorradorYEditar = async (mod) => {
+    setCreandoBorradorId(mod.id)
+    setError(null)
+    try {
+      const borrador = await modulosApi.crearVersion(mod.id)
+      await loadModules()
+      setView({ type: 'questions', moduleId: mod.id, versionId: borrador.id, readOnly: false })
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setCreandoBorradorId(null)
+    }
   }
 
   const verHistorial = (mod) => {
@@ -348,30 +324,82 @@ export default function TrainingModules() {
     setView({ type: 'questions', moduleId: mod.id, versionId, readOnly: true, from: 'versions' })
   }
 
-  // --- Activar/desactivar una pregunta dentro del borrador en edición ---
-  const handleTogglePregunta = async (mvp) => {
-    setTogglingId(mvp.preguntaId)
-    setToggleError(null)
-    try {
-      await modulosApi.setPreguntaActiva(questionsView.moduleId, mvp.preguntaId, !mvp.activa)
-      await banco.refresh()
-    } catch (err) {
-      setToggleError(err.message)
-    } finally {
-      setTogglingId(null)
+  // --- Acciones locales sobre el borrador en edición (staged, sin red) ---
+  const handleTogglePreguntaLocal = (mvp) => {
+    setLocalAsignadas((prev) => prev.map((m) => (m.preguntaId === mvp.preguntaId ? { ...m, activa: !m.activa } : m)))
+  }
+
+  const handleQuitarPreguntaLocal = (mvp) => {
+    setLocalAsignadas((prev) => prev.filter((m) => m.preguntaId !== mvp.preguntaId))
+  }
+
+  // items: [{ preguntaId, orden, obligatoria, pregunta }] (AsignarPreguntaModal, modo staged)
+  const handleAsignarLocal = (items) => {
+    setLocalAsignadas((prev) => [
+      ...prev,
+      ...items.map((item) => ({
+        preguntaId: item.preguntaId,
+        orden: item.orden,
+        obligatoria: item.obligatoria,
+        activa: true,
+        pregunta: item.pregunta,
+      })),
+    ])
+  }
+
+  // NuevaPreguntaModal (modo staged): una pregunta recién creada en el banco.
+  const handleNuevaPreguntaLocal = (pregunta) => {
+    setLocalAsignadas((prev) => [
+      ...prev,
+      {
+        preguntaId: pregunta.id,
+        orden: prev.reduce((max, m) => Math.max(max, m.orden), 0) + 1,
+        obligatoria: true,
+        activa: true,
+        pregunta,
+      },
+    ])
+  }
+
+  // Aplica al backend la diferencia entre lo que había al entrar a esta sesión
+  // (banco.asignadas, nunca se refresca mientras se edita) y lo que quedó
+  // armado localmente — la mínima cantidad de llamadas para llegar al estado
+  // deseado. La usan "Guardar y volver" y "Activar".
+  const flushCambios = async () => {
+    const moduloId = questionsView.moduleId
+    const antes = new Map(banco.asignadas.map((m) => [m.preguntaId, m]))
+    const ahora = new Map(localAsignadas.map((m) => [m.preguntaId, m]))
+
+    for (const id of antes.keys()) {
+      if (!ahora.has(id)) await modulosApi.unassignPregunta(moduloId, id)
+    }
+    for (const [id, m] of ahora) {
+      if (!antes.has(id)) {
+        await modulosApi.asignarPreguntas(moduloId, [{ preguntaId: id, orden: m.orden, obligatoria: m.obligatoria }])
+        if (!m.activa) await modulosApi.setPreguntaActiva(moduloId, id, false)
+      }
+    }
+    for (const [id, m] of ahora) {
+      const previo = antes.get(id)
+      if (previo && previo.activa !== m.activa) {
+        await modulosApi.setPreguntaActiva(moduloId, id, m.activa)
+      }
     }
   }
 
-  // --- Aceptar la recomendación de pasar a "versión nueva" ---
-  const handleCambiarALinea = async () => {
-    setCambiandoLinea(true)
+  // --- Guardar los cambios pendientes y volver a la lista ---
+  const handleGuardarYVolver = async (irAtras) => {
+    setGuardando(true)
+    setGuardarError(null)
     try {
-      await modulosApi.actualizarEleccionBorrador(questionsView.moduleId, true)
-      await banco.refresh()
+      await flushCambios()
+      await loadModules()
+      setVolverModal(false)
+      irAtras()
     } catch (err) {
-      setToggleError(err.message)
+      setGuardarError(err.message)
     } finally {
-      setCambiandoLinea(false)
+      setGuardando(false)
     }
   }
 
@@ -380,9 +408,11 @@ export default function TrainingModules() {
     setActivando(true)
     setActivarError(null)
     try {
-      await modulosApi.activar(questionsView.moduleId)
+      const hayActivo = questionsModule?.vigente?.estado === 'ACTIVO'
+      await flushCambios()
+      await modulosApi.activar(questionsView.moduleId, hayActivo ? esNuevaLineaElegida : undefined)
       await loadModules()
-      setActivarModal(null)
+      setActivarModal(false)
       setView({ type: 'modules' })
     } catch (err) {
       setActivarError(err.message)
@@ -393,13 +423,20 @@ export default function TrainingModules() {
 
   // --- Vista: contenido de una versión (borrador editable o vigente read-only) ---
   if (view.type === 'questions') {
-    const activarPreview = banco.version
-      ? formatVersionNumero(previewActivacion(questionsModule?.vigente ?? null, banco.version.esNuevaLinea))
-      : null
+    // Hay que elegir actualización/versión nueva recién al Activar, solo si el
+    // módulo ya tiene un ACTIVO publicado del cual derivar el número.
+    const hayActivo = questionsModule?.vigente?.estado === 'ACTIVO'
+    // Comparado contra lo armado en esta sesión (localAsignadas), no contra el
+    // servidor: refleja lo que se va a publicar si se activa ahora mismo.
+    const cambios = quiereCompararBase ? contarCambios(baseBanco.asignadas, localAsignadas) : null
+    const recomendarVersionNueva = quiereCompararBase && cambios && deberiaRecomendarVersionNueva(cambios)
+    const asignadasVista = view.readOnly ? banco.asignadas : localAsignadas
 
-    const cambios = quiereCompararBase ? contarCambios(baseBanco.asignadas, banco.asignadas) : null
-    const recomendarVersionNueva =
-      quiereCompararBase && banco.version?.esNuevaLinea === false && cambios && deberiaRecomendarVersionNueva(cambios)
+    const irAtras = () => setView(
+      view.from === 'versions'
+        ? { type: 'versions', moduleId: view.moduleId }
+        : { type: 'modules' },
+    )
 
     return (
       <div className="space-y-5 max-w-5xl">
@@ -408,11 +445,7 @@ export default function TrainingModules() {
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => setView(
-                view.from === 'versions'
-                  ? { type: 'versions', moduleId: view.moduleId }
-                  : { type: 'modules' },
-              )}
+              onClick={() => (view.readOnly ? irAtras() : setVolverModal(true))}
             >
               ← Volver
             </Button>
@@ -423,21 +456,22 @@ export default function TrainingModules() {
                 {banco.version && estadoVersionBadge(banco.version.estado)}
                 <span className="text-slate-400 text-xs font-mono">{formatVersionNumero(banco.version)}</span>
               </div>
-              <div className="text-slate-400 text-[10px] font-mono">{banco.asignadas.length} preguntas</div>
+              <div className="text-slate-400 text-[10px] font-mono">{asignadasVista.length} preguntas</div>
             </div>
           </div>
           {!view.readOnly && (
             <div className="flex items-center gap-2">
               <BancoAcciones
                 backendId={view.moduleId}
-                assignedIds={banco.assignedIds}
-                baseOrden={banco.baseOrden}
-                onChanged={banco.refresh}
+                assignedIds={new Set(localAsignadas.map((m) => m.preguntaId))}
+                baseOrden={localAsignadas.length}
+                onAssignExisting={handleAsignarLocal}
+                onAssignNew={handleNuevaPreguntaLocal}
               />
               <Button variant="danger" onClick={() => setCancelarBorradorModal(questionsModule)}>
                 {questionsModule?.vigente?.estado === 'BORRADOR' ? 'Eliminar módulo' : 'Cancelar borrador'}
               </Button>
-              <Button onClick={() => setActivarModal({ preview: activarPreview })}>Activar</Button>
+              <Button onClick={() => { setEsNuevaLineaElegida(false); setActivarError(null); setActivarModal(true) }}>Activar</Button>
             </div>
           )}
         </div>
@@ -450,45 +484,147 @@ export default function TrainingModules() {
           </div>
         )}
 
-        {recomendarVersionNueva && (
-          <div className="bg-amber-50 border border-amber-200 text-amber-700 text-xs rounded px-3 py-2 flex items-center justify-between gap-3 flex-wrap">
-            <span>
-              Hiciste {cambios.total} cambio{cambios.total !== 1 ? 's' : ''} de preguntas respecto a la versión publicada
-              ({formatVersionNumero(questionsModule?.vigente)}). Con tantos cambios, capaz conviene activar esto como
-              <strong> versión nueva</strong> en vez de actualización, así no termina siendo un módulo distinto sin que quede reflejado.
-            </span>
-            <Button variant="secondary" size="sm" onClick={handleCambiarALinea} disabled={cambiandoLinea}>
-              {cambiandoLinea ? 'Cambiando...' : 'Cambiar a versión nueva'}
-            </Button>
-          </div>
-        )}
-
-        {toggleError && <div className="bg-red-50 border border-red-200 text-red-700 text-xs rounded px-3 py-2">{toggleError}</div>}
-
         <PreguntasAsignadasPanel
-          asignadas={banco.asignadas}
+          asignadas={asignadasVista}
           error={banco.error}
-          onToggle={view.readOnly ? undefined : handleTogglePregunta}
-          togglingId={togglingId}
+          onToggle={view.readOnly ? undefined : handleTogglePreguntaLocal}
+          onRemove={view.readOnly ? undefined : handleQuitarPreguntaLocal}
         />
 
         <Modal
           open={!!activarModal}
-          onClose={() => setActivarModal(null)}
+          onClose={() => setActivarModal(false)}
           title="Activar versión"
           footer={
             <>
-              <Button variant="secondary" onClick={() => setActivarModal(null)}>Cancelar</Button>
+              <Button variant="secondary" onClick={() => setActivarModal(false)}>Cancelar</Button>
               <Button onClick={handleActivar} disabled={activando}>{activando ? 'Activando...' : 'Activar'}</Button>
             </>
           }
         >
           <div className="space-y-3">
             {activarError && <div className="bg-red-50 border border-red-200 text-red-700 text-xs rounded px-3 py-2">{activarError}</div>}
+            {hayActivo ? (
+              <>
+                <p className="text-slate-500 text-sm">
+                  El módulo ya tiene una versión publicada ({formatVersionNumero(questionsModule.vigente)}). ¿Cómo querés publicar estos cambios?
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setEsNuevaLineaElegida(false)}
+                  className={`w-full text-left border rounded px-4 py-3 transition-colors ${
+                    !esNuevaLineaElegida ? 'border-red-600 bg-red-50/30' : 'border-slate-200 hover:border-red-600'
+                  }`}
+                >
+                  <div className="text-slate-900 font-semibold text-sm">Actualización (misma versión)</div>
+                  <div className="text-slate-400 text-xs font-mono mt-0.5">
+                    → {formatVersionNumero(previewActivacion(questionsModule.vigente, false))}
+                  </div>
+                </button>
+                {recomendarVersionNueva && !esNuevaLineaElegida && (
+                  <div className="bg-amber-50 border border-amber-200 text-amber-700 text-xs rounded px-3 py-2">
+                    Hiciste {cambios.total} cambio{cambios.total !== 1 ? 's' : ''} de preguntas respecto a la versión
+                    publicada. Con tantos cambios, capaz conviene activar esto como <strong>versión nueva</strong> en vez
+                    de actualización, así no termina siendo un módulo distinto sin que quede reflejado.
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setEsNuevaLineaElegida(true)}
+                  className={`w-full text-left border rounded px-4 py-3 transition-colors ${
+                    esNuevaLineaElegida ? 'border-red-600 bg-red-50/30' : 'border-slate-200 hover:border-red-600'
+                  }`}
+                >
+                  <div className="text-slate-900 font-semibold text-sm">Versión nueva</div>
+                  <div className="text-slate-400 text-xs font-mono mt-0.5">
+                    → {formatVersionNumero(previewActivacion(questionsModule.vigente, true))}
+                  </div>
+                </button>
+                <p className="text-slate-400 text-xs">La versión publicada actual pasará a archivada.</p>
+              </>
+            ) : (
+              <p className="text-slate-600 text-sm">
+                Se va a publicar esta versión como{' '}
+                <span className="font-mono font-semibold">{formatVersionNumero(previewActivacion(null, true))}</span>.
+              </p>
+            )}
+          </div>
+        </Modal>
+
+        <Modal
+          open={volverModal}
+          onClose={() => setVolverModal(false)}
+          title="Salir del borrador"
+          footer={
+            <>
+              <Button variant="secondary" onClick={() => setVolverModal(false)} disabled={guardando}>Seguir editando</Button>
+              <Button
+                variant="danger"
+                disabled={guardando}
+                onClick={() => {
+                  setVolverModal(false)
+                  if (hayActivo) {
+                    // Nada se mandó al servidor durante la sesión: descartar es
+                    // solo tirar el estado local y volver, sin llamar al backend.
+                    irAtras()
+                  } else {
+                    // Nunca se publicó: no hay ACTIVO al cual volver, así que
+                    // descartar es eliminar el módulo entero (mismo flujo que
+                    // el botón "Eliminar módulo" de más abajo).
+                    setCancelarBorradorModal(questionsModule)
+                  }
+                }}
+              >
+                {hayActivo ? 'Descartar cambios' : 'Eliminar módulo'}
+              </Button>
+              <Button onClick={() => handleGuardarYVolver(irAtras)} disabled={guardando}>
+                {guardando ? 'Guardando...' : 'Guardar y volver'}
+              </Button>
+            </>
+          }
+        >
+          <div className="space-y-3">
+            {guardarError && <div className="bg-red-50 border border-red-200 text-red-700 text-xs rounded px-3 py-2">{guardarError}</div>}
             <p className="text-slate-600 text-sm">
-              Se va a publicar esta versión como <span className="font-mono font-semibold">{activarModal?.preview}</span>.
-              {questionsModule?.vigente?.estado === 'ACTIVO' && ' La versión publicada actual pasará a archivada.'}
+              Los cambios que hiciste en esta sesión todavía no se guardaron. Podés guardarlos y volver, o descartarlos
+              {hayActivo ? ' (el borrador queda como estaba antes de esta sesión).' : ' — como el módulo nunca se publicó, se elimina entero.'}
             </p>
+          </div>
+        </Modal>
+
+        <Modal
+          open={!!cancelarBorradorModal}
+          onClose={() => setCancelarBorradorModal(null)}
+          title={cancelarBorradorModal?.vigente?.estado === 'BORRADOR' ? 'Eliminar módulo' : 'Cancelar borrador'}
+          footer={
+            <>
+              <Button variant="secondary" onClick={() => setCancelarBorradorModal(null)}>Volver</Button>
+              <Button variant="danger" onClick={handleCancelarBorrador} disabled={cancelandoBorrador}>
+                {cancelandoBorrador
+                  ? 'Guardando...'
+                  : cancelarBorradorModal?.vigente?.estado === 'BORRADOR'
+                    ? 'Eliminar módulo'
+                    : 'Cancelar borrador'}
+              </Button>
+            </>
+          }
+        >
+          <div className="space-y-3">
+            {cancelarBorradorError && (
+              <div className="bg-red-50 border border-red-200 text-red-700 text-xs rounded px-3 py-2">{cancelarBorradorError}</div>
+            )}
+            {cancelarBorradorModal?.vigente?.estado === 'BORRADOR' ? (
+              <p className="text-slate-600 text-sm">
+                El módulo <span className="font-semibold">{cancelarBorradorModal?.nombre}</span> nunca se publicó — es
+                solo este borrador. Eliminarlo <strong>borra el módulo entero</strong> y no se puede deshacer.
+              </p>
+            ) : (
+              <p className="text-slate-600 text-sm">
+                Vas a descartar el borrador en curso de <span className="font-semibold">{cancelarBorradorModal?.nombre}</span>.
+                Se pierden los cambios sin publicar y el módulo vuelve a mostrar la última versión activa. Esta acción no
+                se puede deshacer.
+              </p>
+            )}
           </div>
         </Modal>
       </div>
@@ -596,20 +732,21 @@ export default function TrainingModules() {
           return (
             <>
               {nuncaPublicado ? (
-                <>
-                  <Button variant="ghost" size="sm" onClick={() => editarSinPublicar(row)}>Editar contenido</Button>
-                  <Button variant="danger" size="sm" onClick={() => setCancelarBorradorModal(row)}>Eliminar módulo</Button>
-                </>
+                <Button variant="ghost" size="sm" onClick={() => editarSinPublicar(row)}>Editar contenido</Button>
               ) : (
                 <>
                   <Button variant="ghost" size="sm" onClick={() => verVigente(row)}>Ver preguntas</Button>
                   {row.borradorId ? (
-                    <>
-                      <Button variant="ghost" size="sm" onClick={() => continuarBorrador(row)}>Continuar borrador</Button>
-                      <Button variant="danger" size="sm" onClick={() => setCancelarBorradorModal(row)}>Cancelar borrador</Button>
-                    </>
+                    <Button variant="ghost" size="sm" onClick={() => continuarBorrador(row)}>Continuar borrador</Button>
                   ) : (
-                    <Button variant="ghost" size="sm" onClick={() => setChoiceModal(row)}>Editar contenido</Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={creandoBorradorId === row.id}
+                      onClick={() => crearBorradorYEditar(row)}
+                    >
+                      {creandoBorradorId === row.id ? 'Creando borrador...' : 'Editar contenido'}
+                    </Button>
                   )}
                 </>
               )}
@@ -759,50 +896,6 @@ export default function TrainingModules() {
           )}
         </div>
       </Modal>
-
-      <Modal
-        open={!!cancelarBorradorModal}
-        onClose={() => setCancelarBorradorModal(null)}
-        title={cancelarBorradorModal?.vigente?.estado === 'BORRADOR' ? 'Eliminar módulo' : 'Cancelar borrador'}
-        footer={
-          <>
-            <Button variant="secondary" onClick={() => setCancelarBorradorModal(null)}>Volver</Button>
-            <Button variant="danger" onClick={handleCancelarBorrador} disabled={cancelandoBorrador}>
-              {cancelandoBorrador
-                ? 'Guardando...'
-                : cancelarBorradorModal?.vigente?.estado === 'BORRADOR'
-                  ? 'Eliminar módulo'
-                  : 'Cancelar borrador'}
-            </Button>
-          </>
-        }
-      >
-        <div className="space-y-3">
-          {cancelarBorradorError && (
-            <div className="bg-red-50 border border-red-200 text-red-700 text-xs rounded px-3 py-2">{cancelarBorradorError}</div>
-          )}
-          {cancelarBorradorModal?.vigente?.estado === 'BORRADOR' ? (
-            <p className="text-slate-600 text-sm">
-              El módulo <span className="font-semibold">{cancelarBorradorModal?.nombre}</span> nunca se publicó — es
-              solo este borrador. Eliminarlo <strong>borra el módulo entero</strong> y no se puede deshacer.
-            </p>
-          ) : (
-            <p className="text-slate-600 text-sm">
-              Vas a descartar el borrador en curso de <span className="font-semibold">{cancelarBorradorModal?.nombre}</span>.
-              Se pierden los cambios sin publicar y el módulo vuelve a mostrar la última versión activa. Esta acción no
-              se puede deshacer.
-            </p>
-          )}
-        </div>
-      </Modal>
-
-      {choiceModal && (
-        <VersionChoiceModal
-          mod={choiceModal}
-          onClose={() => setChoiceModal(null)}
-          onCreated={(borradorId) => handleBorradorCreado(choiceModal, borradorId)}
-        />
-      )}
     </div>
   )
 }

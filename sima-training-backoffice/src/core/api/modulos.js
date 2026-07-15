@@ -11,19 +11,19 @@ export const modulosApi = {
   // Baja lógica por módulo: activa/desactiva la asignación de la pregunta.
   setPreguntaActiva: (moduloId, preguntaId, activa) =>
     api.patch(`/modulos/${moduloId}/preguntas/${preguntaId}`, { activa }),
-  // Crea un BORRADOR nuevo copiando las preguntas del ACTIVO. esNuevaLinea=true
-  // sube MAYOR (versión nueva), false sube MENOR (actualización).
-  crearVersion: (id, esNuevaLinea) =>
-    api.post(`/modulos/${id}/versiones`, { esNuevaLinea }),
+  // Unassign duro: saca la pregunta del borrador (borra el pivot). Solo válido
+  // mientras se edita un BORRADOR; sobre una versión publicada el backend rechaza.
+  unassignPregunta: (moduloId, preguntaId) =>
+    api.del(`/modulos/${moduloId}/preguntas/${preguntaId}`),
+  // Crea un BORRADOR nuevo copiando las preguntas del ACTIVO, sin preguntar
+  // actualización/versión nueva todavía — esa elección se hace recién al activar.
+  crearVersion: (id) => api.post(`/modulos/${id}/versiones`, {}),
   // Publica el BORRADOR vigente: le asigna número y archiva el ACTIVO anterior.
-  activar: (id) => api.patch(`/modulos/${id}/activar`, {}),
+  // esNuevaLinea (true=versión nueva, false=actualización) es obligatorio solo
+  // si el módulo ya tenía un ACTIVO publicado del cual derivar el número.
+  activar: (id, esNuevaLinea) => api.patch(`/modulos/${id}/activar`, { esNuevaLinea }),
   versiones: (id) => api.get(`/modulos/${id}/versiones`),
   versionDetalle: (id, versionId) => api.get(`/modulos/${id}/versiones/${versionId}`),
-  // Cambia si el borrador en curso se publica como actualización o versión
-  // nueva, sin tocar sus preguntas (ej. al aceptar la recomendación de subir
-  // a versión nueva por haber hecho muchos cambios).
-  actualizarEleccionBorrador: (id, esNuevaLinea) =>
-    api.patch(`/modulos/${id}/borrador`, { esNuevaLinea }),
   // Descarta el borrador en curso. Si era la única versión (módulo nunca
   // publicado), el backend elimina el módulo entero junto con el borrador.
   cancelarBorrador: (id) => api.del(`/modulos/${id}/borrador`),

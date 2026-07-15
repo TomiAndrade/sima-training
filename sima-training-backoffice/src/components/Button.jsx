@@ -3,6 +3,7 @@ const variants = {
   secondary: 'bg-transparent hover:bg-slate-100 text-slate-700 hover:text-slate-900 font-medium border border-slate-300',
   danger: 'bg-transparent hover:bg-red-50 text-red-600 font-medium border border-red-300',
   ghost: 'bg-transparent hover:bg-slate-100 text-slate-600 hover:text-slate-900 font-medium border border-transparent',
+  success: 'bg-emerald-600 hover:bg-emerald-700 text-white font-medium border border-emerald-600',
 }
 
 const sizes = {
