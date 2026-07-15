@@ -11,9 +11,9 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { ActivarModuloDto } from './dto/activar-modulo.dto';
 import { AsignarPreguntaItemDto } from './dto/asignar-preguntas.dto';
 import { CreateModuloDto } from './dto/create-modulo.dto';
-import { CrearVersionDto } from './dto/crear-version.dto';
 import { TogglePreguntaDto } from './dto/toggle-pregunta.dto';
 import { UpdateModuloDto } from './dto/update-modulo.dto';
 import { ModulosService } from './modulos.service';
@@ -62,28 +62,19 @@ export class ModulosController {
 
   @Post(':id/versiones')
   @UseGuards(JwtAuthGuard)
-  crearVersion(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() dto: CrearVersionDto,
-  ) {
-    return this.modulos.crearVersion(id, dto.esNuevaLinea);
+  crearVersion(@Param('id', ParseUUIDPipe) id: string) {
+    return this.modulos.crearVersion(id);
   }
 
+  // esNuevaLinea (actualización/versión nueva) es obligatorio solo cuando el
+  // módulo ya tiene un ACTIVO publicado; el service lo valida.
   @Patch(':id/activar')
   @UseGuards(JwtAuthGuard)
-  activar(@Param('id', ParseUUIDPipe) id: string) {
-    return this.modulos.activar(id);
-  }
-
-  // Cambia si el borrador en curso se publicará como actualización o versión
-  // nueva, sin tocar sus preguntas. Reusa CrearVersionDto: misma forma de body.
-  @Patch(':id/borrador')
-  @UseGuards(JwtAuthGuard)
-  actualizarEleccionBorrador(
+  activar(
     @Param('id', ParseUUIDPipe) id: string,
-    @Body() dto: CrearVersionDto,
+    @Body() dto: ActivarModuloDto,
   ) {
-    return this.modulos.actualizarEleccionBorrador(id, dto.esNuevaLinea);
+    return this.modulos.activar(id, dto.esNuevaLinea);
   }
 
   // Descarta el borrador en curso. Si el módulo nunca se publicó (el borrador
@@ -112,5 +103,16 @@ export class ModulosController {
     @Body() dto: TogglePreguntaDto,
   ) {
     return this.modulos.setPreguntaActiva(id, preguntaId, dto.activa);
+  }
+
+  // Unassign duro: solo sobre un BORRADOR (el service lo valida). Distinto de
+  // setPreguntaActiva, que es la baja lógica y también aplica a lo publicado.
+  @Delete(':id/preguntas/:preguntaId')
+  @UseGuards(JwtAuthGuard)
+  unassignPregunta(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('preguntaId', ParseUUIDPipe) preguntaId: string,
+  ) {
+    return this.modulos.unassignPregunta(id, preguntaId);
   }
 }

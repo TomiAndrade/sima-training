@@ -167,9 +167,11 @@ export class ModulosService {
     }
   }
 
-  // Crea un BORRADOR nuevo copiando las preguntas del ACTIVO. `esNuevaLinea` se
-  // guarda para saber cómo numerar al Activar (true = sube MAYOR, false = sube MENOR).
-  async crearVersion(moduloId: string, esNuevaLinea: boolean) {
+  // Crea un BORRADOR nuevo copiando las preguntas del ACTIVO. La elección de
+  // cómo numerarlo (actualización/versión nueva) se pospone a `activar` — acá
+  // no se pregunta nada, para no obligar a decidir antes de saber cuánto se
+  // va a terminar cambiando.
+  async crearVersion(moduloId: string) {
     const modulo = await this.prisma.modulo.findUnique({
       where: { id: moduloId },
     });
@@ -210,7 +212,6 @@ export class ModulosService {
         moduloId,
         numeroVersion,
         estado: 'BORRADOR',
-        esNuevaLinea,
         createdBy: 'backoffice',
         preguntas: {
           create: pivots.map((p) => ({
@@ -229,7 +230,10 @@ export class ModulosService {
 
   // Publica el BORRADOR: pasa a ACTIVO con su número AÑO.MAYOR.MENOR y archiva el
   // ACTIVO anterior. Transacción para no dejar dos ACTIVO simultáneos.
-  async activar(moduloId: string) {
+  // `esNuevaLinea` (actualización/versión nueva) se decide recién acá, no al
+  // crear el borrador — es obligatorio solo cuando ya hay un ACTIVO publicado
+  // del cual derivar el número; en la primera publicación no hay de qué elegir.
+  async activar(moduloId: string, esNuevaLinea?: boolean) {
     const borrador = await this.prisma.moduloVersion.findFirst({
       where: { moduloId, estado: 'BORRADOR' },
     });
@@ -243,7 +247,13 @@ export class ModulosService {
       where: { moduloId, estado: 'ACTIVO' },
     });
 
-    const numero = await this.calcularNumero(moduloId, borrador, activo);
+    if (activo && esNuevaLinea == null) {
+      throw new ConflictException(
+        'Elegí si esta versión es una actualización o una versión nueva antes de activarla',
+      );
+    }
+
+    const numero = await this.calcularNumero(moduloId, esNuevaLinea, activo);
 
     return this.prisma.$transaction(async (tx) => {
       if (activo) {
@@ -256,6 +266,7 @@ export class ModulosService {
         where: { id: borrador.id },
         data: {
           estado: 'ACTIVO',
+          esNuevaLinea: activo ? esNuevaLinea : null,
           anio: numero.anio,
           mayor: numero.mayor,
           menor: numero.menor,
@@ -367,23 +378,44 @@ export class ModulosService {
     }
   }
 
-  // Cambia la elección de numeración (actualización/versión nueva) de un
-  // borrador ya creado, sin tocar sus preguntas. Pensado para cuando el
-  // backoffice recomienda pasar de "actualización" a "versión nueva" porque
-  // el borrador acumuló muchos cambios respecto a la base de la que partió.
-  async actualizarEleccionBorrador(moduloId: string, esNuevaLinea: boolean) {
-    const borrador = await this.prisma.moduloVersion.findFirst({
-      where: { moduloId, estado: 'BORRADOR' },
-    });
-    if (!borrador) {
-      throw new NotFoundException(
-        `El módulo ${moduloId} no tiene un borrador en curso`,
+  // Unassign duro: saca la pregunta del borrador (borra el pivot, no lo
+  // desactiva). Solo sobre BORRADOR — las versiones publicadas (ACTIVO/
+  // ARCHIVADO) son inmutables, ahí la única baja posible es la lógica
+  // (`setPreguntaActiva`). Complementa la baja lógica: mientras se arma un
+  // borrador, "Desactivar" deja la fila (atenuada, se puede reactivar) y
+  // "Quitar" la saca del todo — evita que el editor se llene de preguntas
+  // descartadas que ya nadie va a reactivar.
+  async unassignPregunta(moduloId: string, preguntaId: string) {
+    const version = await this.versionParaEditar(moduloId);
+    if (!version) {
+      throw new NotFoundException(`El módulo ${moduloId} no tiene versiones`);
+    }
+    if (version.estado !== 'BORRADOR') {
+      throw new ConflictException(
+        'Solo se puede quitar una pregunta de un borrador; las versiones publicadas son inmutables (usá "Desactivar")',
       );
     }
-    return this.prisma.moduloVersion.update({
-      where: { id: borrador.id },
-      data: { esNuevaLinea },
-    });
+
+    try {
+      await this.prisma.moduloVersionPregunta.delete({
+        where: {
+          moduloVersionId_preguntaId: {
+            moduloVersionId: version.id,
+            preguntaId,
+          },
+        },
+      });
+    } catch (err) {
+      if (
+        err instanceof Prisma.PrismaClientKnownRequestError &&
+        err.code === 'P2025'
+      ) {
+        throw new NotFoundException(
+          `La pregunta ${preguntaId} no está asignada a este módulo`,
+        );
+      }
+      throw err;
+    }
   }
 
   // Descarta el BORRADOR en curso sin publicarlo. Si el módulo ya tiene un
@@ -422,7 +454,7 @@ export class ModulosService {
   // Calcula el número público al activar el borrador.
   private async calcularNumero(
     moduloId: string,
-    borrador: ModuloVersion,
+    esNuevaLinea: boolean | undefined,
     activo: ModuloVersion | null,
   ) {
     const anioActual = new Date().getFullYear();
@@ -439,7 +471,7 @@ export class ModulosService {
     }
 
     // Actualización (misma versión) → sube MENOR en la línea del ACTIVO.
-    if (borrador.esNuevaLinea === false) {
+    if (esNuevaLinea === false) {
       return { anio: activo.anio, mayor: activo.mayor, menor: activo.menor + 1 };
     }
 

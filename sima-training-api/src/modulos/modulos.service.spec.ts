@@ -21,6 +21,7 @@ describe('ModulosService', () => {
       aggregate: jest.Mock;
       update: jest.Mock;
       deleteMany: jest.Mock;
+      delete: jest.Mock;
     };
     pregunta: { count: jest.Mock; findUnique: jest.Mock };
     $transaction: jest.Mock;
@@ -43,6 +44,7 @@ describe('ModulosService', () => {
         aggregate: jest.fn().mockResolvedValue({ _max: { orden: 0 } }),
         update: jest.fn(),
         deleteMany: jest.fn(),
+        delete: jest.fn(),
       },
       pregunta: { count: jest.fn(), findUnique: jest.fn() },
       $transaction: jest.fn((cb) => cb(prisma)),
@@ -152,7 +154,7 @@ describe('ModulosService', () => {
     prisma.moduloVersion.findFirst.mockImplementation(({ where }) =>
       where.estado === 'BORRADOR' ? { id: 'v-borrador' } : null,
     );
-    await expect(service.crearVersion('m1', false)).rejects.toBeInstanceOf(
+    await expect(service.crearVersion('m1')).rejects.toBeInstanceOf(
       ConflictException,
     );
   });
@@ -160,12 +162,12 @@ describe('ModulosService', () => {
   it('crearVersion rechaza si no hay versión activa de la cual partir', async () => {
     prisma.modulo.findUnique.mockResolvedValue({ id: 'm1' });
     prisma.moduloVersion.findFirst.mockResolvedValue(null);
-    await expect(service.crearVersion('m1', false)).rejects.toBeInstanceOf(
+    await expect(service.crearVersion('m1')).rejects.toBeInstanceOf(
       ConflictException,
     );
   });
 
-  it('crearVersion copia los pivots del ACTIVO al nuevo borrador', async () => {
+  it('crearVersion copia los pivots del ACTIVO al nuevo borrador sin pedir esNuevaLinea', async () => {
     prisma.modulo.findUnique.mockResolvedValue({ id: 'm1' });
     prisma.moduloVersion.findFirst.mockImplementation(({ where }) =>
       where.estado === 'BORRADOR' ? null : { id: 'v-activo' },
@@ -182,21 +184,20 @@ describe('ModulosService', () => {
       estado: 'BORRADOR',
     });
 
-    await service.crearVersion('m1', true);
+    await service.crearVersion('m1');
 
-    expect(prisma.moduloVersion.create).toHaveBeenCalledWith(
+    const dataCreada = prisma.moduloVersion.create.mock.calls[0][0].data;
+    expect(dataCreada).toEqual(
       expect.objectContaining({
-        data: expect.objectContaining({
-          moduloId: 'm1',
-          numeroVersion: 3,
-          estado: 'BORRADOR',
-          esNuevaLinea: true,
-          preguntas: {
-            create: [{ preguntaId: 'p1', orden: 1, obligatoria: true, activa: true }],
-          },
-        }),
+        moduloId: 'm1',
+        numeroVersion: 3,
+        estado: 'BORRADOR',
+        preguntas: {
+          create: [{ preguntaId: 'p1', orden: 1, obligatoria: true, activa: true }],
+        },
       }),
     );
+    expect(dataCreada.esNuevaLinea).toBeUndefined();
   });
 
   it('activar rechaza si no hay borrador', async () => {
@@ -206,9 +207,19 @@ describe('ModulosService', () => {
     );
   });
 
-  it('activar numera la primera publicación como AÑO.01.00', async () => {
+  it('activar rechaza si hay un ACTIVO publicado y no se eligió esNuevaLinea', async () => {
     prisma.moduloVersion.findFirst.mockImplementation(({ where }) =>
-      where.estado === 'BORRADOR' ? { id: 'v-borrador', esNuevaLinea: null } : null,
+      where.estado === 'BORRADOR' ? { id: 'v-borrador' } : { id: 'v-activo' },
+    );
+    await expect(service.activar('m1')).rejects.toBeInstanceOf(
+      ConflictException,
+    );
+    expect(prisma.moduloVersion.update).not.toHaveBeenCalled();
+  });
+
+  it('activar numera la primera publicación como AÑO.01.00 sin pedir esNuevaLinea', async () => {
+    prisma.moduloVersion.findFirst.mockImplementation(({ where }) =>
+      where.estado === 'BORRADOR' ? { id: 'v-borrador' } : null,
     );
     prisma.moduloVersion.aggregate.mockResolvedValue({ _max: { mayor: 0 } });
     prisma.moduloVersion.update.mockResolvedValue({ id: 'v-borrador', estado: 'ACTIVO' });
@@ -220,6 +231,7 @@ describe('ModulosService', () => {
       where: { id: 'v-borrador' },
       data: expect.objectContaining({
         estado: 'ACTIVO',
+        esNuevaLinea: null,
         anio: anioActual,
         mayor: 1,
         menor: 0,
@@ -230,13 +242,11 @@ describe('ModulosService', () => {
   it('activar como actualización (menor) sube el menor y archiva el ACTIVO previo', async () => {
     const activo = { id: 'v-activo', anio: 2026, mayor: 1, menor: 0 };
     prisma.moduloVersion.findFirst.mockImplementation(({ where }) =>
-      where.estado === 'BORRADOR'
-        ? { id: 'v-borrador', esNuevaLinea: false }
-        : activo,
+      where.estado === 'BORRADOR' ? { id: 'v-borrador' } : activo,
     );
     prisma.moduloVersion.update.mockResolvedValue({ id: 'v-borrador', estado: 'ACTIVO' });
 
-    await service.activar('m1');
+    await service.activar('m1', false);
 
     expect(prisma.moduloVersion.update).toHaveBeenCalledWith({
       where: { id: 'v-activo' },
@@ -244,26 +254,24 @@ describe('ModulosService', () => {
     });
     expect(prisma.moduloVersion.update).toHaveBeenCalledWith({
       where: { id: 'v-borrador' },
-      data: expect.objectContaining({ anio: 2026, mayor: 1, menor: 1 }),
+      data: expect.objectContaining({ esNuevaLinea: false, anio: 2026, mayor: 1, menor: 1 }),
     });
   });
 
   it('activar como versión nueva (mayor) sube el mayor y resetea el menor', async () => {
     const activo = { id: 'v-activo', anio: 2026, mayor: 1, menor: 3 };
     prisma.moduloVersion.findFirst.mockImplementation(({ where }) =>
-      where.estado === 'BORRADOR'
-        ? { id: 'v-borrador', esNuevaLinea: true }
-        : activo,
+      where.estado === 'BORRADOR' ? { id: 'v-borrador' } : activo,
     );
     prisma.moduloVersion.aggregate.mockResolvedValue({ _max: { mayor: 1 } });
     prisma.moduloVersion.update.mockResolvedValue({ id: 'v-borrador', estado: 'ACTIVO' });
 
     const anioActual = new Date().getFullYear();
-    await service.activar('m1');
+    await service.activar('m1', true);
 
     expect(prisma.moduloVersion.update).toHaveBeenCalledWith({
       where: { id: 'v-borrador' },
-      data: expect.objectContaining({ anio: anioActual, mayor: 2, menor: 0 }),
+      data: expect.objectContaining({ esNuevaLinea: true, anio: anioActual, mayor: 2, menor: 0 }),
     });
   });
 
@@ -349,6 +357,33 @@ describe('ModulosService', () => {
     );
   });
 
+  it('unassignPregunta rechaza si el módulo no tiene versiones', async () => {
+    prisma.moduloVersion.findFirst.mockResolvedValue(null);
+    await expect(service.unassignPregunta('m1', 'p1')).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+  });
+
+  it('unassignPregunta rechaza si la versión vigente no es un BORRADOR', async () => {
+    prisma.moduloVersion.findFirst.mockImplementation(({ where }) =>
+      where.estado === 'BORRADOR' ? null : where.estado === 'ACTIVO' ? { id: 'v-activo', estado: 'ACTIVO' } : null,
+    );
+    await expect(service.unassignPregunta('m1', 'p1')).rejects.toBeInstanceOf(
+      ConflictException,
+    );
+    expect(prisma.moduloVersionPregunta.delete).not.toHaveBeenCalled();
+  });
+
+  it('unassignPregunta borra el pivot cuando hay un borrador en curso', async () => {
+    prisma.moduloVersion.findFirst.mockImplementation(({ where }) =>
+      where.estado === 'BORRADOR' ? { id: 'v-borrador', estado: 'BORRADOR' } : null,
+    );
+    await service.unassignPregunta('m1', 'p1');
+    expect(prisma.moduloVersionPregunta.delete).toHaveBeenCalledWith({
+      where: { moduloVersionId_preguntaId: { moduloVersionId: 'v-borrador', preguntaId: 'p1' } },
+    });
+  });
+
   it('cancelarBorrador rechaza si no hay borrador en curso', async () => {
     prisma.moduloVersion.findFirst.mockResolvedValue(null);
     await expect(service.cancelarBorrador('m1')).rejects.toBeInstanceOf(
@@ -381,24 +416,5 @@ describe('ModulosService', () => {
     expect(prisma.moduloVersion.delete).toHaveBeenCalledWith({ where: { id: 'v-borrador' } });
     expect(prisma.modulo.delete).toHaveBeenCalledWith({ where: { id: 'm1' } });
     expect(resultado).toEqual({ moduloEliminado: true });
-  });
-
-  it('actualizarEleccionBorrador rechaza si no hay borrador en curso', async () => {
-    prisma.moduloVersion.findFirst.mockResolvedValue(null);
-    await expect(
-      service.actualizarEleccionBorrador('m1', true),
-    ).rejects.toBeInstanceOf(NotFoundException);
-  });
-
-  it('actualizarEleccionBorrador cambia esNuevaLinea del borrador en curso', async () => {
-    prisma.moduloVersion.findFirst.mockResolvedValue({ id: 'v-borrador' });
-    prisma.moduloVersion.update.mockResolvedValue({ id: 'v-borrador', esNuevaLinea: true });
-
-    await service.actualizarEleccionBorrador('m1', true);
-
-    expect(prisma.moduloVersion.update).toHaveBeenCalledWith({
-      where: { id: 'v-borrador' },
-      data: { esNuevaLinea: true },
-    });
   });
 });
