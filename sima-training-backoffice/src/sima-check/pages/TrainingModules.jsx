@@ -701,6 +701,63 @@ export default function TrainingModules() {
         </span>
       ),
     },
+    // Cada acción es su propia columna (en vez de un solo bloque flex) para que
+    // el ancho de cada botón lo fije la tabla por columna y todas las filas
+    // queden alineadas verticalmente, aunque el label o la cantidad de botones
+    // cambie según el estado del módulo (nunca publicado / con borrador / etc.).
+    {
+      key: '_verPreguntas',
+      label: 'Acciones',
+      render: (_v, row) =>
+        row.vigente?.estado === 'BORRADOR' ? null : (
+          <Button variant="ghost" size="sm" onClick={() => verVigente(row)}>Ver preguntas</Button>
+        ),
+    },
+    {
+      key: '_editarContenido',
+      label: '',
+      render: (_v, row) => {
+        if (row.vigente?.estado === 'BORRADOR') {
+          return <Button variant="ghost" size="sm" onClick={() => editarSinPublicar(row)}>Editar contenido</Button>
+        }
+        if (row.borradorId) {
+          return <Button variant="ghost" size="sm" onClick={() => continuarBorrador(row)}>Continuar borrador</Button>
+        }
+        return (
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={creandoBorradorId === row.id}
+            onClick={() => crearBorradorYEditar(row)}
+          >
+            {creandoBorradorId === row.id ? 'Creando borrador...' : 'Editar contenido'}
+          </Button>
+        )
+      },
+    },
+    {
+      key: '_historial',
+      label: '',
+      render: (_v, row) => <Button variant="ghost" size="sm" onClick={() => verHistorial(row)}>Historial</Button>,
+    },
+    {
+      key: '_verDetalles',
+      label: '',
+      render: (_v, row) => <Button variant="ghost" size="sm" onClick={() => openDetalleModulo(row)}>Ver detalles</Button>,
+    },
+    {
+      key: '_toggleActivo',
+      label: '',
+      render: (_v, row) => (
+        <Button
+          variant={row.activo === false ? 'ghost' : 'danger'}
+          size="sm"
+          onClick={() => setDesactivarModal(row)}
+        >
+          {row.activo === false ? 'Activar' : 'Desactivar'}
+        </Button>
+      ),
+    },
   ]
 
   return (
@@ -727,41 +784,6 @@ export default function TrainingModules() {
       <Table
         columns={moduleColumns}
         data={modulosFiltrados}
-        actions={(row) => {
-          const nuncaPublicado = row.vigente?.estado === 'BORRADOR'
-          return (
-            <>
-              {nuncaPublicado ? (
-                <Button variant="ghost" size="sm" onClick={() => editarSinPublicar(row)}>Editar contenido</Button>
-              ) : (
-                <>
-                  <Button variant="ghost" size="sm" onClick={() => verVigente(row)}>Ver preguntas</Button>
-                  {row.borradorId ? (
-                    <Button variant="ghost" size="sm" onClick={() => continuarBorrador(row)}>Continuar borrador</Button>
-                  ) : (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      disabled={creandoBorradorId === row.id}
-                      onClick={() => crearBorradorYEditar(row)}
-                    >
-                      {creandoBorradorId === row.id ? 'Creando borrador...' : 'Editar contenido'}
-                    </Button>
-                  )}
-                </>
-              )}
-              <Button variant="ghost" size="sm" onClick={() => verHistorial(row)}>Historial</Button>
-              <Button variant="ghost" size="sm" onClick={() => openDetalleModulo(row)}>Ver detalles</Button>
-              <Button
-                variant={row.activo === false ? 'ghost' : 'danger'}
-                size="sm"
-                onClick={() => setDesactivarModal(row)}
-              >
-                {row.activo === false ? 'Activar' : 'Desactivar'}
-              </Button>
-            </>
-          )
-        }}
       />
 
       <Modal
