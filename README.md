@@ -42,7 +42,7 @@ npm install
 cp .env.example .env
 docker compose up -d db          # PostgreSQL local
 npx prisma migrate dev           # crea las tablas
-npx prisma db seed               # fixtures (5 clientes, 8 usuarios)
+npx prisma db seed               # organización interna + módulos base
 npm run start:dev                # → http://localhost:3000
 
 # 2. Backoffice

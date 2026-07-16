@@ -31,7 +31,7 @@ docker compose up -d db
 # 4. Aplicar migraciones (crea las tablas)
 npx prisma migrate dev
 
-# 5. Cargar datos de prueba (fixtures del prototipo)
+# 5. Cargar datos base (organización interna + módulos)
 npx prisma db seed
 
 # 6. Correr en modo desarrollo (hot reload)
@@ -120,7 +120,7 @@ src/
 └── main.ts          ValidationPipe global + CORS
 prisma/
 ├── schema.prisma    Usuario, Organizacion, Pregunta, Etiqueta, Modulo, ModuloVersion + pivots
-├── seed.ts          Fixtures del prototipo (5 clientes, 8 usuarios)
+├── seed.ts          Organización interna (Ingeniería SIMA) + módulos base
 └── migrations/      Migraciones versionadas
 ```
 
