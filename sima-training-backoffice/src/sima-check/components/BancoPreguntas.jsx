@@ -98,6 +98,19 @@ export function BancoAcciones({ backendId, assignedIds, baseOrden, onChanged, on
 // editor no se llene de preguntas descartadas que ya nadie va a reactivar. Sin
 // `onToggle`/`onRemove` el panel queda puramente de lectura (vistas read-only
 // del historial/vigente).
+// Chequeo de formato y peso antes de subir, para avisar sin round-trip. La
+// autoridad sigue siendo el backend (detecta el formato por magic bytes, no por
+// el mimetype que declara el browser). Devuelve el error o null.
+function validarImagen(file) {
+  if (!IMAGEN_MIME_TYPES.includes(file.type)) {
+    return 'La imagen debe ser PNG, JPG o WEBP'
+  }
+  if (file.size > IMAGEN_MAX_BYTES) {
+    return `La imagen supera el máximo de ${IMAGEN_MAX_BYTES / 1024 / 1024} MB`
+  }
+  return null
+}
+
 // Miniatura de la imagen del enunciado. Devuelve null si la pregunta no tiene,
 // así el llamador la puede poner sin condicionar. Decorativa (alt vacío): el
 // enunciado que va al lado ya dice de qué se trata.
@@ -357,6 +370,8 @@ export function AsignarPreguntaModal({ onClose, backendId, assignedIds, baseOrde
 
 const EMPTY_BACKEND_FORM = { texto: '', tipo: 'VERDADERO_FALSO', opciones: ['', '', '', ''], respuestaCorrecta: '', puntajeMax: '' }
 
+const OPCION_LETRAS = ['a', 'b', 'c', 'd']
+
 // Modal "Nueva pregunta": crea en el banco (POST /preguntas, siempre
 // inmediato — es un alta permanente, no algo del borrador) y, si se pasa un
 // backendId (módulo), la asigna en el mismo gesto (POST /modulos/:id/preguntas).
@@ -377,10 +392,18 @@ export function NuevaPreguntaModal({ onClose, backendId, onAssigned, onAssign })
   // handleGuardar se sube. Así cambiarla o quitarla antes de crear la pregunta
   // es estado local, y abrir y cerrar el modal no deja archivos huérfanos.
   const [imagenFile, setImagenFile] = useState(null)
+  // Mismo criterio para las opciones de OPCIONES_IMAGEN: 4 slots que sostienen
+  // el File hasta confirmar.
+  const [opcionFiles, setOpcionFiles] = useState([null, null, null, null])
+  // Cuál de las opciones es la correcta. Se guarda el File y no un índice
+  // porque las claves todavía no existen (se generan al subir, en handleGuardar)
+  // y porque una referencia no se desincroniza al quitar o reemplazar un slot.
+  const [correctaFile, setCorrectaFile] = useState(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
 
   const necesitaOpciones = form.tipo === 'OPCION_MULTIPLE' || form.tipo === 'OPCIONES_IMAGEN'
+  const opcionesSonImagen = form.tipo === 'OPCIONES_IMAGEN'
 
   useEffect(() => {
     modulosApi.list().then(setModules).catch(() => {})
@@ -396,22 +419,54 @@ export function NuevaPreguntaModal({ onClose, backendId, onAssigned, onAssign })
     return () => URL.revokeObjectURL(imagenPreview)
   }, [imagenPreview])
 
-  const handleImagenChange = (e) => {
+  const opcionPreviews = useMemo(
+    () => opcionFiles.map((f) => (f ? URL.createObjectURL(f) : null)),
+    [opcionFiles],
+  )
+  useEffect(() => {
+    return () => opcionPreviews.forEach((url) => url && URL.revokeObjectURL(url))
+  }, [opcionPreviews])
+
+  // Devuelve el File elegido si pasa las validaciones, o null (dejando el error
+  // seteado). Limpia el input para poder volver a elegir el mismo archivo
+  // después de quitarlo — si no, el change no dispara.
+  const tomarArchivo = (e) => {
     const file = e.target.files?.[0]
-    // Limpia el input para poder volver a elegir el mismo archivo después de
-    // quitarlo (si no, el change no dispara).
     e.target.value = ''
-    if (!file) return
-    if (!IMAGEN_MIME_TYPES.includes(file.type)) {
-      setError('La imagen debe ser PNG, JPG o WEBP')
-      return
-    }
-    if (file.size > IMAGEN_MAX_BYTES) {
-      setError(`La imagen supera el máximo de ${IMAGEN_MAX_BYTES / 1024 / 1024} MB`)
-      return
+    if (!file) return null
+    const err = validarImagen(file)
+    if (err) {
+      setError(err)
+      return null
     }
     setError(null)
-    setImagenFile(file)
+    return file
+  }
+
+  const handleImagenChange = (e) => {
+    const file = tomarArchivo(e)
+    if (file) setImagenFile(file)
+  }
+
+  const handleOpcionChange = (i, e) => {
+    const file = tomarArchivo(e)
+    if (!file) return
+    setOpcionFiles((prev) => prev.map((f, idx) => (idx === i ? file : f)))
+  }
+
+  const quitarOpcion = (i) => {
+    const quitado = opcionFiles[i]
+    setOpcionFiles((prev) => prev.map((f, idx) => (idx === i ? null : f)))
+    // Si la que se quita era la marcada como correcta, la marca se cae con ella.
+    if (quitado && quitado === correctaFile) setCorrectaFile(null)
+  }
+
+  const handleTipoChange = (tipo) => {
+    // Las opciones no sobreviven al cambio de tipo: pasar de texto a imagen (o
+    // al revés) dejaría textos donde van claves, o archivos que ya no se usan.
+    setForm((f) => ({ ...f, tipo, respuestaCorrecta: '', opciones: ['', '', '', ''] }))
+    setOpcionFiles([null, null, null, null])
+    setCorrectaFile(null)
   }
 
   const moduleOptions = useMemo(
@@ -424,27 +479,57 @@ export function NuevaPreguntaModal({ onClose, backendId, onAssigned, onAssign })
       setError('El enunciado es obligatorio')
       return
     }
+    // Los archivos cargados, sin los slots vacíos. Es el orden en el que van a
+    // quedar las opciones.
+    const files = opcionFiles.filter(Boolean)
+    if (opcionesSonImagen) {
+      // Se chequea acá para no gastar subidas en un alta que el backend va a
+      // rechazar igual (valida las mismas dos reglas).
+      if (files.length < 2) {
+        setError('Se necesitan al menos 2 imágenes')
+        return
+      }
+      if (!correctaFile) {
+        setError('Elegí cuál es la opción correcta')
+        return
+      }
+    }
+
     setSaving(true)
     setError(null)
+    // Claves subidas en este intento, para poder limpiarlas si el alta no llega
+    // a completarse.
+    const subidas = []
+    let creada = false
     try {
-      const payload = {
+      const imagen = imagenFile ? (await preguntasApi.subirImagen(imagenFile)).imagen : undefined
+      if (imagen) subidas.push(imagen)
+
+      let opciones
+      let respuestaCorrecta = form.respuestaCorrecta.trim() || undefined
+      if (opcionesSonImagen) {
+        opciones = await Promise.all(
+          files.map(async (f) => (await preguntasApi.subirImagen(f)).imagen),
+        )
+        subidas.push(...opciones)
+        // Recién acá existen las claves: la opción correcta se venía trackeando
+        // por referencia al File, y su clave es la que quedó en su misma
+        // posición del array subido.
+        respuestaCorrecta = opciones[files.indexOf(correctaFile)]
+      } else if (necesitaOpciones) {
+        opciones = form.opciones.filter(Boolean)
+      }
+
+      const pregunta = await preguntasApi.create({
         texto: form.texto.trim(),
         tipo: form.tipo,
-        respuestaCorrecta: form.respuestaCorrecta.trim() || undefined,
+        respuestaCorrecta,
         puntajeMax: form.puntajeMax ? Number(form.puntajeMax) : undefined,
-        ...(necesitaOpciones ? { opciones: form.opciones.filter(Boolean) } : {}),
-      }
-      const imagen = imagenFile ? (await preguntasApi.subirImagen(imagenFile)).imagen : undefined
-      let pregunta
-      try {
-        pregunta = await preguntasApi.create({ ...payload, imagen })
-      } catch (err) {
-        // La imagen se subió pero la pregunta no se creó: nadie la referencia,
-        // así que la limpiamos. Si la limpieza falla no la tapamos: el error
-        // que le importa al usuario es el del alta.
-        if (imagen) await preguntasApi.borrarImagen(imagen).catch(() => {})
-        throw err
-      }
+        ...(opciones ? { opciones } : {}),
+        imagen,
+      })
+      creada = true
+
       // Asigna a cada módulo elegido. El orden lo appendea el backend (sin orden).
       for (const moduloId of selectedModuleIds) {
         if (onAssign && moduloId === backendId) {
@@ -458,6 +543,12 @@ export function NuevaPreguntaModal({ onClose, backendId, onAssigned, onAssign })
       if (!onAssign) await onAssigned()
       onClose()
     } catch (err) {
+      // Solo si la pregunta no llegó a crearse: una vez creada, las imágenes
+      // están en uso (el backend rechaza borrarlas) y el error es de otra cosa,
+      // como la asignación a un módulo. La limpieza no tapa el error real.
+      if (!creada) {
+        await Promise.allSettled(subidas.map((c) => preguntasApi.borrarImagen(c)))
+      }
       setError(err.message)
     } finally {
       setSaving(false)
@@ -491,7 +582,7 @@ export function NuevaPreguntaModal({ onClose, backendId, onAssigned, onAssign })
           <select
             className={inputCls}
             value={form.tipo}
-            onChange={(e) => setForm((f) => ({ ...f, tipo: e.target.value, respuestaCorrecta: '' }))}
+            onChange={(e) => handleTipoChange(e.target.value)}
           >
             <option value="VERDADERO_FALSO">Verdadero / Falso</option>
             <option value="OPCION_MULTIPLE">Opción múltiple</option>
@@ -545,23 +636,58 @@ export function NuevaPreguntaModal({ onClose, backendId, onAssigned, onAssign })
         {necesitaOpciones && (
           <div className="space-y-2">
             <label className="block text-slate-600 text-xs font-semibold uppercase tracking-widest">
-              {form.tipo === 'OPCIONES_IMAGEN' ? 'Opciones (rutas de imagen)' : 'Opciones'}
+              {opcionesSonImagen ? 'Opciones (imágenes)' : 'Opciones'}
             </label>
-            {['a', 'b', 'c', 'd'].map((letter, i) => (
-              <div key={letter} className="flex items-center gap-2">
-                <span className="text-slate-400 text-xs font-mono w-4">{letter})</span>
-                <input
-                  className="flex-1 bg-white border border-slate-300 rounded px-3 py-1.5 text-slate-900 text-sm focus:outline-none focus:border-red-600"
-                  value={form.opciones[i]}
-                  onChange={(e) => {
-                    const opts = [...form.opciones]
-                    opts[i] = e.target.value
-                    setForm((f) => ({ ...f, opciones: opts }))
-                  }}
-                  placeholder={form.tipo === 'OPCIONES_IMAGEN' ? '/images/opcion.png' : `Opción ${letter}`}
-                />
-              </div>
-            ))}
+            {opcionesSonImagen ? (
+              <>
+                <div className="grid grid-cols-4 gap-3">
+                  {OPCION_LETRAS.map((letter, i) => (
+                    <div key={letter} className="space-y-1.5">
+                      <span className="text-slate-400 text-xs font-mono">{letter})</span>
+                      {opcionPreviews[i] ? (
+                        <div className="space-y-1.5">
+                          <img
+                            src={opcionPreviews[i]}
+                            alt={`Opción ${letter.toUpperCase()}`}
+                            className="w-full aspect-square object-contain rounded border border-slate-200 bg-slate-50"
+                          />
+                          <Button variant="secondary" size="sm" onClick={() => quitarOpcion(i)}>Quitar</Button>
+                        </div>
+                      ) : (
+                        <label className="w-full aspect-square rounded border border-dashed border-slate-300 bg-slate-50 flex items-center justify-center cursor-pointer hover:border-slate-400 hover:bg-slate-100">
+                          <span className="text-slate-400 text-xs">+ Imagen</span>
+                          <input
+                            type="file"
+                            accept={IMAGEN_MIME_TYPES.join(',')}
+                            onChange={(e) => handleOpcionChange(i, e)}
+                            className="hidden"
+                          />
+                        </label>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <p className="text-slate-400 text-xs">
+                  Mínimo 2 · PNG, JPG o WEBP · hasta {IMAGEN_MAX_BYTES / 1024 / 1024} MB cada una.
+                </p>
+              </>
+            ) : (
+              OPCION_LETRAS.map((letter, i) => (
+                <div key={letter} className="flex items-center gap-2">
+                  <span className="text-slate-400 text-xs font-mono w-4">{letter})</span>
+                  <input
+                    className="flex-1 bg-white border border-slate-300 rounded px-3 py-1.5 text-slate-900 text-sm focus:outline-none focus:border-red-600"
+                    value={form.opciones[i]}
+                    onChange={(e) => {
+                      const opts = [...form.opciones]
+                      opts[i] = e.target.value
+                      setForm((f) => ({ ...f, opciones: opts }))
+                    }}
+                    placeholder={`Opción ${letter}`}
+                  />
+                </div>
+              ))
+            )}
           </div>
         )}
 
@@ -577,6 +703,32 @@ export function NuevaPreguntaModal({ onClose, backendId, onAssigned, onAssign })
               <option value="Verdadero">Verdadero</option>
               <option value="Falso">Falso</option>
             </select>
+          ) : opcionesSonImagen ? (
+            // Un <select> no sirve acá: las opciones son imágenes y todavía no
+            // tienen clave (se genera al subir), así que no hay texto que
+            // mostrar. Se elige tocando la miniatura, como en la app del alumno.
+            opcionFiles.some(Boolean) ? (
+              <div className="grid grid-cols-4 gap-3">
+                {opcionFiles.map((file, i) =>
+                  file ? (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => setCorrectaFile(file)}
+                      className={`w-full aspect-square rounded overflow-hidden border-2 transition-colors ${
+                        correctaFile === file
+                          ? 'border-emerald-500 ring-2 ring-emerald-500/30'
+                          : 'border-slate-200 hover:border-slate-400'
+                      }`}
+                    >
+                      <img src={opcionPreviews[i]} alt={`Opción ${OPCION_LETRAS[i].toUpperCase()}`} className="w-full h-full object-contain bg-slate-50" />
+                    </button>
+                  ) : null,
+                )}
+              </div>
+            ) : (
+              <p className="text-slate-400 text-xs">Cargá las imágenes para elegir cuál es la correcta.</p>
+            )
           ) : (
             <select
               className={inputCls}
