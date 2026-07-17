@@ -34,3 +34,6 @@ pnpm-debug.log*
 
 # Prisma
 prisma/*.db
+
+# Archivos subidos (imágenes de preguntas) — ver UPLOADS_DIR
+/uploads
