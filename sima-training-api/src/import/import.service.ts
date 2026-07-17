@@ -412,11 +412,19 @@ export class ImportService {
       if (!tipoRaw) errores.push('Falta el tipo');
       else if (!tipo) errores.push(`Tipo no reconocido: "${tipoRaw}"`);
       if (
-        (tipo === TipoPregunta.OPCION_MULTIPLE ||
-          tipo === TipoPregunta.OPCIONES_IMAGEN) &&
-        opciones.length < 2
+        tipo === TipoPregunta.OPCION_MULTIPLE ||
+        tipo === TipoPregunta.OPCIONES_IMAGEN
       ) {
-        errores.push('Requiere al menos 2 opciones');
+        if (opciones.length < 2) {
+          errores.push('Requiere al menos 2 opciones');
+        } else if (respuestaCorrecta && !opciones.includes(respuestaCorrecta)) {
+          // Mismo chequeo que hace PreguntasService.create al confirmar. Se
+          // adelanta acá para que la fila se marque en el preview y se pueda
+          // destildar, en vez de que el confirm falle a mitad de la importación.
+          errores.push(
+            'La respuesta correcta no coincide con ninguna de las opciones',
+          );
+        }
       }
 
       if (errores.length) {

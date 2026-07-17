@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { ModuloVersion, Prisma } from '@prisma/client';
+import { ModuloVersion, Prisma, TipoPregunta } from '@prisma/client';
 import { ModulosService } from '../modulos/modulos.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -16,8 +16,17 @@ import { StorageService } from '../storage/storage.service';
 import { CreatePreguntaDto } from './dto/create-pregunta.dto';
 import { FindAllPreguntasDto } from './dto/find-all-preguntas.dto';
 
-// Carpeta bajo la que se guardan las imágenes de enunciado en el storage.
+// Carpeta bajo la que se guardan las imágenes de preguntas en el storage: tanto
+// la del enunciado como las de las opciones de OPCIONES_IMAGEN.
 const CARPETA_IMAGENES = 'preguntas';
+
+// Tipos cuyo contenido son opciones a elegir.
+const TIPOS_CON_OPCIONES: TipoPregunta[] = [
+  TipoPregunta.OPCION_MULTIPLE,
+  TipoPregunta.OPCIONES_IMAGEN,
+];
+
+const MIN_OPCIONES = 2;
 
 // Forma exacta de una clave generada por el storage. Se valida antes de borrar
 // para que el endpoint no sea un borrado arbitrario de archivos.
@@ -32,9 +41,33 @@ export class PreguntasService {
     private readonly storage: StorageService,
   ) {}
 
+  // Reglas cruzadas entre campos, que el DTO no puede expresar (class-validator
+  // valida campo a campo). Importa sobre todo desde que las opciones de
+  // OPCIONES_IMAGEN son claves de storage: con textos legibles un
+  // desalineamiento entre respuestaCorrecta y opciones se veía a simple vista;
+  // con claves opacas es invisible y rompe la corrección de la evaluación.
+  private validarOpciones(dto: CreatePreguntaDto) {
+    if (!TIPOS_CON_OPCIONES.includes(dto.tipo)) return;
+
+    const opciones = dto.opciones ?? [];
+    if (opciones.length < MIN_OPCIONES) {
+      throw new BadRequestException(
+        `Una pregunta de tipo ${dto.tipo} requiere al menos ${MIN_OPCIONES} opciones`,
+      );
+    }
+    // respuestaCorrecta sigue siendo opcional (TEXTO_LIBRE puede no tener una
+    // fija); lo que no se admite es que apunte a algo que no está.
+    if (dto.respuestaCorrecta && !opciones.includes(dto.respuestaCorrecta)) {
+      throw new BadRequestException(
+        'La respuesta correcta debe ser una de las opciones',
+      );
+    }
+  }
+
   // TODO(sprint futuro): detección de preguntas duplicadas/similares
   // (pg_trgm o embeddings) antes de crear. Fuera de alcance de este sprint.
   async create(dto: CreatePreguntaDto) {
+    this.validarOpciones(dto);
     const { etiquetaIds, opciones, ...rest } = dto;
     return this.prisma.pregunta.create({
       data: {
@@ -92,8 +125,14 @@ export class PreguntasService {
       throw new BadRequestException(`Clave de imagen inválida: ${clave}`);
     }
 
+    // Una clave puede estar referenciada desde dos lugares: el enunciado
+    // (columna `imagen`) o una opción de OPCIONES_IMAGEN (dentro del jsonb
+    // `opciones`). Mirar solo la columna dejaría borrar una imagen de opción
+    // en uso, rompiendo la pregunta en silencio.
     const enUso = await this.prisma.pregunta.count({
-      where: { imagen: clave },
+      where: {
+        OR: [{ imagen: clave }, { opciones: { array_contains: clave } }],
+      },
     });
     if (enUso > 0) {
       throw new ConflictException(

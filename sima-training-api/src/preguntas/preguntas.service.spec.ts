@@ -89,6 +89,60 @@ describe('PreguntasService', () => {
     expect(prisma.pregunta.create).toHaveBeenCalled();
   });
 
+  describe('validación de opciones al crear', () => {
+    const opcionesImagen = {
+      texto: '¿Cuál es el tacho correcto?',
+      tipo: 'OPCIONES_IMAGEN' as any,
+      opciones: [CLAVE, 'preguntas/22222222-3333-4444-8555-666666666666.png'],
+    };
+
+    it('acepta una pregunta con opciones y respuestaCorrecta consistente', async () => {
+      prisma.pregunta.create.mockResolvedValue({ id: '1' });
+      await service.create({ ...opcionesImagen, respuestaCorrecta: CLAVE });
+      expect(prisma.pregunta.create).toHaveBeenCalled();
+    });
+
+    it('rechaza un tipo con opciones que trae menos de 2', async () => {
+      await expect(
+        service.create({ ...opcionesImagen, opciones: [CLAVE] }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(prisma.pregunta.create).not.toHaveBeenCalled();
+    });
+
+    it('rechaza un tipo con opciones que no trae ninguna', async () => {
+      await expect(
+        service.create({ texto: '¿?', tipo: 'OPCION_MULTIPLE' as any }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('rechaza una respuestaCorrecta que no está entre las opciones', async () => {
+      await expect(
+        service.create({
+          ...opcionesImagen,
+          respuestaCorrecta:
+            'preguntas/99999999-9999-4999-8999-999999999999.png',
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(prisma.pregunta.create).not.toHaveBeenCalled();
+    });
+
+    it('permite omitir respuestaCorrecta', async () => {
+      prisma.pregunta.create.mockResolvedValue({ id: '1' });
+      await service.create(opcionesImagen);
+      expect(prisma.pregunta.create).toHaveBeenCalled();
+    });
+
+    it('no exige opciones en los tipos que no las usan', async () => {
+      prisma.pregunta.create.mockResolvedValue({ id: '1' });
+      await service.create({
+        texto: '¿El casco es obligatorio?',
+        tipo: 'VERDADERO_FALSO' as any,
+        respuestaCorrecta: 'Verdadero',
+      });
+      expect(prisma.pregunta.create).toHaveBeenCalled();
+    });
+  });
+
   it('filtra por texto (?q=) y arma el where con contains insensitive', async () => {
     prisma.pregunta.findMany.mockResolvedValue([]);
     await service.findAll({ q: 'casco' });
@@ -190,6 +244,27 @@ describe('PreguntasService', () => {
         borrada: true,
       });
       expect(storage.borrar).toHaveBeenCalledWith(CLAVE);
+    });
+
+    it('busca la clave tanto en el enunciado como en las opciones', async () => {
+      // Una imagen de opción vive dentro del jsonb `opciones`, no en la columna
+      // `imagen`: si el where mirara solo la columna, se podría borrar una
+      // imagen en uso y romper la pregunta en silencio.
+      prisma.pregunta.count.mockResolvedValue(0);
+      await service.borrarImagen(CLAVE);
+      expect(prisma.pregunta.count).toHaveBeenCalledWith({
+        where: {
+          OR: [{ imagen: CLAVE }, { opciones: { array_contains: CLAVE } }],
+        },
+      });
+    });
+
+    it('rechaza borrar una imagen usada como opción (409)', async () => {
+      prisma.pregunta.count.mockResolvedValue(1);
+      await expect(service.borrarImagen(CLAVE)).rejects.toBeInstanceOf(
+        ConflictException,
+      );
+      expect(storage.borrar).not.toHaveBeenCalled();
     });
 
     it('rechaza borrar una imagen ya usada por una pregunta (409)', async () => {
