@@ -16,6 +16,11 @@ export const modules = [
       { id: 109, type: 'truefalse', statement: 'El uso del celular personal está permitido en zonas de proceso sin restricciones.', correctAnswer: 'Falso' },
       { id: 110, type: 'multiple', statement: '¿Cada cuánto tiempo se debe realizar la revisión del equipo de trabajo?', options: ['Una vez al año', 'Solo si se ve dañado', 'Antes de cada uso', 'Mensualmente'], correctAnswer: 'Antes de cada uso' },
       { id: 111, type: 'image-options', statement: '¿En qué tacho deben depositarse los residuos biodegradables?', options: ['/tacho-amarillo.png', '/tacho-verde.png', '/tacho-negro.png'], correctAnswer: '/tacho-verde.png', pinned: true },
+      // `image` es la imagen del enunciado (distinta de las opciones con
+      // imagen de la 111): se muestra encima de las opciones. Cuando la app se
+      // conecte al backend, acá va a llegar la URL armada desde Pregunta.imagen
+      // — QuestionCard no cambia, ya usa el src tal cual.
+      { id: 112, type: 'truefalse', statement: 'El tacho de la imagen corresponde a residuos biodegradables.', image: '/tacho-verde.png', correctAnswer: 'Verdadero', pinned: true },
     ],
   },
   {

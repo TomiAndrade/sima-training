@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import Button from '../../components/Button'
 import Modal from '../../components/Modal'
 import MultiSelectFilter from '../../components/MultiSelectFilter'
-import { IMAGEN_MAX_BYTES, IMAGEN_MIME_TYPES, preguntasApi } from '../../core/api/preguntas'
+import { imagenUrl, IMAGEN_MAX_BYTES, IMAGEN_MIME_TYPES, preguntasApi } from '../../core/api/preguntas'
 import { etiquetasApi } from '../../core/api/etiquetas'
 import { modulosApi } from '../../core/api/modulos'
 import { backendTypeBadge } from './bancoModulo'
@@ -98,6 +98,21 @@ export function BancoAcciones({ backendId, assignedIds, baseOrden, onChanged, on
 // editor no se llene de preguntas descartadas que ya nadie va a reactivar. Sin
 // `onToggle`/`onRemove` el panel queda puramente de lectura (vistas read-only
 // del historial/vigente).
+// Miniatura de la imagen del enunciado. Devuelve null si la pregunta no tiene,
+// así el llamador la puede poner sin condicionar. Decorativa (alt vacío): el
+// enunciado que va al lado ya dice de qué se trata.
+function ImagenEnunciado({ imagen, className = 'w-8 h-8' }) {
+  const url = imagenUrl(imagen)
+  if (!url) return null
+  return (
+    <img
+      src={url}
+      alt=""
+      className={`${className} object-cover rounded border border-slate-200 bg-slate-50 flex-shrink-0`}
+    />
+  )
+}
+
 export function PreguntasAsignadasPanel({ asignadas, error, onToggle, onRemove, togglingId }) {
   return (
     <div className="border border-slate-200 rounded bg-white">
@@ -123,6 +138,7 @@ export function PreguntasAsignadasPanel({ asignadas, error, onToggle, onRemove, 
                 <div key={mvp.preguntaId} className={`px-4 py-2.5 flex items-center gap-3 ${mvp.activa === false ? 'opacity-50' : ''}`}>
                   <span className="text-slate-400 text-xs font-mono w-6">{mvp.orden}</span>
                   {backendTypeBadge(mvp.pregunta.tipo)}
+                  <ImagenEnunciado imagen={mvp.pregunta.imagen} />
                   <span className="text-slate-700 text-sm line-clamp-1 flex-1">{mvp.pregunta.texto}</span>
                   {enPapelera ? (
                     <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-amber-50 text-amber-600 flex-shrink-0">
@@ -683,6 +699,7 @@ export function EditarModulosModal({ pregunta, onClose, onSaved }) {
           <label className="block text-slate-600 text-xs font-semibold uppercase tracking-widest mb-1.5">Enunciado</label>
           <div className="flex items-start gap-2">
             {backendTypeBadge(pregunta.tipo)}
+            <ImagenEnunciado imagen={pregunta.imagen} className="w-16 h-16" />
             <p className="text-slate-700 text-sm">{pregunta.texto}</p>
           </div>
         </div>
