@@ -2,7 +2,7 @@ import { modules } from '../data/modules'
 
 export default function ModuleSelection({ usuario, assignments, onSelect, onBack }) {
   const pendingModuleIds = assignments
-    .filter((a) => a.employeeId === usuario.id && a.status === 'pending')
+    .filter((a) => a.usuarioId === usuario.id && a.status === 'pending')
     .map((a) => a.moduleId)
 
   const pendingModules = modules.filter((m) => pendingModuleIds.includes(m.id))

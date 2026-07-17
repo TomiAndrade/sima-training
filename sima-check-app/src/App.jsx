@@ -29,7 +29,7 @@ export default function App() {
     if (score.approved) {
       setAssignments((prev) =>
         prev.map((a) =>
-          a.employeeId === usuario.id && a.moduleId === module.id && a.status === 'pending'
+          a.usuarioId === usuario.id && a.moduleId === module.id && a.status === 'pending'
             ? { ...a, status: 'completed' }
             : a
         )
