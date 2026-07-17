@@ -1,6 +1,8 @@
 // Cliente HTTP del backoffice contra la API de SIMA Training.
 // Base URL configurable por entorno (Vite). En dev apunta al backend local.
-const BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000'
+// Se exporta porque además de las llamadas hay que construir URLs de archivos
+// servidos por la API (ver imagenUrl en preguntas.js).
+export const BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000'
 
 // Credenciales del backoffice (Sprint 1: login simple sin roles). El prototipo
 // todavía no tiene pantalla de login, así que el cliente se autentica solo con

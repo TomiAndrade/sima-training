@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import Button from '../../components/Button'
 import Modal from '../../components/Modal'
 import MultiSelectFilter from '../../components/MultiSelectFilter'
-import { preguntasApi } from '../../core/api/preguntas'
+import { IMAGEN_MAX_BYTES, IMAGEN_MIME_TYPES, preguntasApi } from '../../core/api/preguntas'
 import { etiquetasApi } from '../../core/api/etiquetas'
 import { modulosApi } from '../../core/api/modulos'
 import { backendTypeBadge } from './bancoModulo'
@@ -357,6 +357,10 @@ export function NuevaPreguntaModal({ onClose, backendId, onAssigned, onAssign })
   // Si el modal se abre desde la vista por-módulo (backendId), ese módulo arranca
   // preseleccionado y editable (se pueden sumar otros). Sin backendId, vacío.
   const [selectedModuleIds, setSelectedModuleIds] = useState(() => new Set(backendId ? [backendId] : []))
+  // La imagen del enunciado se queda en el browser hasta confirmar: recién en
+  // handleGuardar se sube. Así cambiarla o quitarla antes de crear la pregunta
+  // es estado local, y abrir y cerrar el modal no deja archivos huérfanos.
+  const [imagenFile, setImagenFile] = useState(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
 
@@ -365,6 +369,34 @@ export function NuevaPreguntaModal({ onClose, backendId, onAssigned, onAssign })
   useEffect(() => {
     modulosApi.list().then(setModules).catch(() => {})
   }, [])
+
+  const imagenPreview = useMemo(
+    () => (imagenFile ? URL.createObjectURL(imagenFile) : null),
+    [imagenFile],
+  )
+  // Libera el object URL anterior cuando cambia la imagen o se cierra el modal.
+  useEffect(() => {
+    if (!imagenPreview) return
+    return () => URL.revokeObjectURL(imagenPreview)
+  }, [imagenPreview])
+
+  const handleImagenChange = (e) => {
+    const file = e.target.files?.[0]
+    // Limpia el input para poder volver a elegir el mismo archivo después de
+    // quitarlo (si no, el change no dispara).
+    e.target.value = ''
+    if (!file) return
+    if (!IMAGEN_MIME_TYPES.includes(file.type)) {
+      setError('La imagen debe ser PNG, JPG o WEBP')
+      return
+    }
+    if (file.size > IMAGEN_MAX_BYTES) {
+      setError(`La imagen supera el máximo de ${IMAGEN_MAX_BYTES / 1024 / 1024} MB`)
+      return
+    }
+    setError(null)
+    setImagenFile(file)
+  }
 
   const moduleOptions = useMemo(
     () => modules.map((m) => ({ id: m.id, label: m.nombre })),
@@ -386,7 +418,17 @@ export function NuevaPreguntaModal({ onClose, backendId, onAssigned, onAssign })
         puntajeMax: form.puntajeMax ? Number(form.puntajeMax) : undefined,
         ...(necesitaOpciones ? { opciones: form.opciones.filter(Boolean) } : {}),
       }
-      const pregunta = await preguntasApi.create(payload)
+      const imagen = imagenFile ? (await preguntasApi.subirImagen(imagenFile)).imagen : undefined
+      let pregunta
+      try {
+        pregunta = await preguntasApi.create({ ...payload, imagen })
+      } catch (err) {
+        // La imagen se subió pero la pregunta no se creó: nadie la referencia,
+        // así que la limpiamos. Si la limpieza falla no la tapamos: el error
+        // que le importa al usuario es el del alta.
+        if (imagen) await preguntasApi.borrarImagen(imagen).catch(() => {})
+        throw err
+      }
       // Asigna a cada módulo elegido. El orden lo appendea el backend (sin orden).
       for (const moduloId of selectedModuleIds) {
         if (onAssign && moduloId === backendId) {
@@ -450,6 +492,38 @@ export function NuevaPreguntaModal({ onClose, backendId, onAssigned, onAssign })
             onChange={(e) => setForm((f) => ({ ...f, texto: e.target.value }))}
             placeholder="Escribí la pregunta aquí..."
           />
+        </div>
+
+        <div>
+          <label className="block text-slate-600 text-xs font-semibold uppercase tracking-widest mb-1.5">
+            Imagen del enunciado <span className="normal-case font-normal text-slate-400">(opcional)</span>
+          </label>
+          {imagenPreview ? (
+            <div className="flex items-start gap-3">
+              <img
+                src={imagenPreview}
+                alt="Imagen del enunciado"
+                className="w-32 h-32 object-contain rounded border border-slate-200 bg-slate-50"
+              />
+              <div className="text-xs text-slate-500 space-y-1.5">
+                <p className="font-mono break-all">{imagenFile.name}</p>
+                <p>{(imagenFile.size / 1024).toFixed(0)} KB</p>
+                <Button variant="secondary" onClick={() => setImagenFile(null)}>Quitar imagen</Button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <input
+                type="file"
+                accept={IMAGEN_MIME_TYPES.join(',')}
+                onChange={handleImagenChange}
+                className="block w-full text-sm text-slate-600 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200"
+              />
+              <p className="text-slate-400 text-xs mt-1.5">
+                PNG, JPG o WEBP · hasta {IMAGEN_MAX_BYTES / 1024 / 1024} MB. No se puede cambiar después de crear la pregunta.
+              </p>
+            </>
+          )}
         </div>
 
         {necesitaOpciones && (
