@@ -120,15 +120,15 @@ Pendiente para el próximo sprint: AuditLog completo (ISO 9001), el arranque de 
 |---|---|---|
 | `Client` | `core/data/clients.js` | `id, name, active` |
 | `User` | `core/data/users.js` | `id, name, role, clientId` |
-| `Employee` | `core/data/employees.js` | `id, dni, name, clientId` |
+| `UsuarioMock` | `core/data/usuarios-mock.js` (export `usuariosMock`) | `id, dni, name, clientId` — consumido por `Dashboard.jsx` y `TrainingAssignments.jsx`. Es el mock de la persona evaluada (el ex-`Employee`); no confundir con `User`, que son las cuentas del backoffice |
 
 ### SIMA CHECK — entidades del producto de capacitaciones
 
 | Entidad | Archivo | Campos |
 |---|---|---|
 | `TrainingModule` | `sima-check/data/training-modules.js` | `id, backendId, name, active, questions[]` (`questions[]` vacío, ver arriba). **La pantalla Módulos (`TrainingModules.jsx`) ya no usa este mock**: lista/crea/edita módulos y su versionado 100% contra `/modulos`. El StatCard "Módulos activos" de `Overview.jsx` tampoco lo usa (trae `GET /modulos` y reusa `estadoModulo`, ver abajo). El archivo sigue siendo consumido, solo para metadata liviana (`name`/`active`), por `Dashboard.jsx`, el resto de `Overview.jsx` (gráfico de aprobación, que compara por nombre de módulo) y `TrainingAssignments.jsx` — pendiente de migrar; mientras tanto esos conteos/selects pueden divergir del estado real del backend |
-| `TrainingAssignment` | `sima-check/data/training-assignments.js` | `id, employeeId, moduleId, assignedBy, assignedAt, status` |
-| `Evaluation` | `sima-check/data/evaluations.js` | `id, employeeName, moduleName, score, approved, date, companyId` |
+| `TrainingAssignment` | `sima-check/data/training-assignments.js` | `id, usuarioId, moduleId, assignedBy, assignedAt, status` |
+| `Evaluation` | `sima-check/data/evaluations.js` | `id, usuarioName, moduleName, score, approved, date, clientId` |
 
 `status` admite: `'pending' | 'completed' | 'expired'`
 
@@ -230,7 +230,7 @@ sima-training-api/                (backend NestJS)
 sima-training-backoffice/src/
 ├── core/
 │   ├── api/           client.js · usuarios.js · organizaciones.js  ← capa HTTP
-│   ├── data/          clients.js · users.js · employees.js (mock, en migración)
+│   ├── data/          clients.js · users.js · usuarios-mock.js (mock, en migración)
 │   └── pages/         Clients.jsx · Users.jsx (Users ya usa la API real)
 ├── sima-check/
 │   ├── data/          training-modules.js · training-assignments.js · evaluations.js
@@ -240,11 +240,11 @@ sima-training-backoffice/src/
 └── hooks/             useNavigation.js
 
 sima-check-app/src/
-├── data/              employees.js · modules.js · assignments.js
+├── data/              usuarios.js · modules.js · assignments.js
 ├── components/        Button · ProgressBar · QuestionCard
 ├── hooks/             useNavigation.js
 ├── utils/             evaluation.js (pickRandomQuestions, calculateScore)
-└── pages/             EmployeeSelection · ModuleSelection · Evaluation · Results
+└── pages/             UsuarioSelection · ModuleSelection · Evaluation · Results
 ```
 
 ## Decisiones de arquitectura
@@ -256,7 +256,8 @@ sima-check-app/src/
 - Los modales manejan estado local.
 - Los gráficos son SVG puro (sin librerías).
 - Tailwind v3 es obligatorio.
-- El campo `company` (string) se mantiene en el empleado de la app junto a `companyId` para evitar importar `companies.js` en la app tablet.
+- El campo `company` (string) se mantiene en el usuario de la app junto a `companyId` para evitar importar `companies.js` en la app tablet.
+- **Los dos frontends nombran la entidad `usuario`, no `employee`** — alineado con el `Usuario` del backend, que unifica `User` + `Employee` (ver arriba). En la **app tablet** alcanza a los archivos (`data/usuarios.js`, `pages/UsuarioSelection.jsx`), al prop que se pasa entre pantallas (`usuario`) y al campo `assignments[].usuarioId`. En el **backoffice**, a `core/data/usuarios-mock.js` (export `usuariosMock`), al campo `trainingAssignments[].usuarioId` y a `evaluations[].usuarioName`. Los duplicados del modelo viejo (`sima-check-app/src/data/employees.js` + `pages/EmployeeSelection.jsx`, `sima-training-backoffice/src/core/data/employees.js`) se eliminaron; quedan en el historial de git. `User` (`core/data/users.js`) **no** entra en este rename: son las cuentas del backoffice (administrador/coordinador), otra cosa.
 - La navegación de SIMA CHECK en el backoffice usa un Set (`SIMA_CHECK_PAGES`) en `BackofficeLayout.jsx` para detectar cuándo renderizar la barra de tabs y el breadcrumb de dos niveles.
 - La pantalla Preguntas maneja su propia navegación interna (`selectedModuleId`) con `useState` — no requiere cambios en el router global.
 - El campo `image` de las preguntas **mockeadas de la app tablet** es una ruta relativa a `public/` (ej: `/images/cartel.png`). En el backend, `Pregunta.imagen` ya no es eso: guarda una clave de storage y se sirve bajo `/uploads` (ver Sprint 4); las rutas a `public/` sobreviven solo como formato legacy del import de Excel.
