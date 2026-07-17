@@ -105,7 +105,7 @@ export default function Overview() {
                 className={`flex items-center justify-between px-4 py-3 ${i < recent.length - 1 ? 'border-b border-slate-200/60' : ''} hover:bg-slate-50 transition-colors`}
               >
                 <div className="min-w-0">
-                  <p className="text-slate-800 text-sm font-medium truncate">{ev.employeeName}</p>
+                  <p className="text-slate-800 text-sm font-medium truncate">{ev.usuarioName}</p>
                   <p className="text-slate-400 text-[10px] font-mono uppercase tracking-wide truncate">
                     {ev.moduleName} · {ev.date}
                   </p>

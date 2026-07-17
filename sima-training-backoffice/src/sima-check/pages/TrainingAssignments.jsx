@@ -49,7 +49,7 @@ export default function TrainingAssignments() {
       return
     }
     const duplicate = assignments.some(
-      (a) => a.employeeId === form.usuarioId && a.moduleId === form.moduleId
+      (a) => a.usuarioId === form.usuarioId && a.moduleId === form.moduleId
     )
     if (duplicate) {
       setError('Este usuario ya tiene ese módulo asignado.')
@@ -59,7 +59,7 @@ export default function TrainingAssignments() {
       ...prev,
       {
         id: Date.now(),
-        employeeId: form.usuarioId,
+        usuarioId: form.usuarioId,
         moduleId: form.moduleId,
         assignedBy: 1,
         assignedAt: new Date().toISOString().split('T')[0],
@@ -71,7 +71,7 @@ export default function TrainingAssignments() {
 
   const columns = [
     {
-      key: 'employeeId',
+      key: 'usuarioId',
       label: 'Usuario',
       render: (id) => (
         <span className="text-slate-900 font-medium">{getUsuario(id)?.name ?? '—'}</span>
@@ -81,7 +81,7 @@ export default function TrainingAssignments() {
       key: '_cliente',
       label: 'Cliente',
       render: (_, row) => (
-        <span className="text-slate-600">{getClientName(getUsuario(row.employeeId)?.clientId)}</span>
+        <span className="text-slate-600">{getClientName(getUsuario(row.usuarioId)?.clientId)}</span>
       ),
     },
     {
@@ -122,7 +122,7 @@ export default function TrainingAssignments() {
   const filteredAssignments = useMemo(() => {
     const q = search.trim().toLowerCase()
     return assignments.filter((a) => {
-      const u = getUsuario(a.employeeId)
+      const u = getUsuario(a.usuarioId)
       if (!u) return false
       if (q && !u.name.toLowerCase().includes(q) && !u.dni.includes(q)) return false
       if (filterClient && u.clientId !== Number(filterClient)) return false
