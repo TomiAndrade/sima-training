@@ -29,6 +29,11 @@ export class CreatePreguntaDto {
   @IsString()
   respuestaCorrecta?: string;
 
+  // Clave de storage devuelta por POST /preguntas/imagen, o una ruta relativa
+  // a public/ si vino del import de Excel (formato legacy, ver imagenUrl() en
+  // el backoffice). Inmutable una vez creada la pregunta: no hay endpoint que
+  // la cambie, porque todas las versiones de módulo comparten el preguntaId y
+  // las ARCHIVADO deben seguir mostrando lo que se rindió.
   @IsOptional()
   @IsString()
   imagen?: string;

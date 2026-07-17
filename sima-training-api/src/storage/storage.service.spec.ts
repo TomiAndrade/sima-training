@@ -19,10 +19,16 @@ describe('LocalDiskStorage', () => {
   });
 
   it('guarda el archivo y devuelve una clave opaca con la carpeta y la extensión', async () => {
-    const clave = await storage.guardar(Buffer.from('contenido'), 'preguntas', 'png');
+    const clave = await storage.guardar(
+      Buffer.from('contenido'),
+      'preguntas',
+      'png',
+    );
 
     expect(clave).toMatch(/^preguntas\/[0-9a-f-]{36}\.png$/);
-    await expect(readFile(resolve(raiz, clave), 'utf8')).resolves.toBe('contenido');
+    await expect(readFile(resolve(raiz, clave), 'utf8')).resolves.toBe(
+      'contenido',
+    );
   });
 
   it('genera una clave distinta por archivo, sin usar el nombre original', async () => {
@@ -37,7 +43,9 @@ describe('LocalDiskStorage', () => {
 
     await storage.borrar(clave);
 
-    await expect(stat(resolve(raiz, clave))).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(stat(resolve(raiz, clave))).rejects.toMatchObject({
+      code: 'ENOENT',
+    });
   });
 
   it('borrar es idempotente: no falla si el archivo ya no está', async () => {
