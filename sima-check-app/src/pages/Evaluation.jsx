@@ -37,7 +37,7 @@ export default function Evaluation({ usuario, module: mod, questions, onFinish, 
       <div className="px-6 pt-5 pb-4 border-b border-slate-200 flex-shrink-0">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <p className="text-slate-500 text-sm">{employee.name}</p>
+            <p className="text-slate-500 text-sm">{usuario.name}</p>
             <p className="text-red-600 font-semibold text-sm">{mod.name}</p>
           </div>
           <button onClick={onBack} className="text-slate-400 text-sm hover:text-slate-700 touch-manipulation">
