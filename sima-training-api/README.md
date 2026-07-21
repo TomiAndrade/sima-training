@@ -89,6 +89,12 @@ Ver [`.env.example`](.env.example). Las principales:
 | `POST` | `/import/preguntas/confirm` | JWT | Crea las preguntas ya elegidas por el usuario en el preview (body JSON, no re-sube el archivo); `moduloId?` opcional para asignarlas en el mismo gesto |
 | `POST` | `/etiquetas` | JWT | Alta (rechaza nombre duplicado con 409) |
 | `GET` | `/etiquetas` | — | Lista todas |
+| `POST` | `/puestos` | JWT | Alta (rechaza nombre duplicado con 409) |
+| `GET` | `/puestos` | — | Lista todos |
+| `PATCH` | `/puestos/:id` | JWT | Edición (nombre y/o `activo`, baja lógica) |
+| `POST` | `/centros-costo` | JWT | Alta (rechaza nombre duplicado con 409) |
+| `GET` | `/centros-costo` | — | Lista todos |
+| `PATCH` | `/centros-costo/:id` | JWT | Edición (nombre y/o `activo`, baja lógica) |
 | `POST` | `/preguntas` | JWT | Alta, con `etiquetaIds?` opcionales |
 | `GET` | `/preguntas` | — | Lista, filtros `?q=` (texto), `?etiqueta=`, `?categoria=`, `?activa=` (papelera global si `false`), `?moduloId=` (repetible, OR entre sí), `?sinAsignar=true` (OR con `moduloId`). Cada pregunta trae `modulos: [{moduloId, moduloNombre, activaEnModulo}]` con sus asignaciones vigentes |
 | `GET` | `/preguntas/:id` | — | Detalle |

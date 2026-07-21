@@ -219,6 +219,34 @@ model ModuloVersion {
   @@map("modulo_versiones")
 }
 
+// Puesto: catálogo de puestos/cargos de nómina. Baja lógica vía `activo`.
+model Puesto {
+  id     String  @id @default(uuid())
+  nombre String  @unique
+  activo Boolean @default(true)
+
+  // Trazabilidad
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  createdBy String?  @map("created_by")
+
+  @@map("puestos")
+}
+
+// CentroCosto: catálogo de centros de costo de nómina. Baja lógica vía `activo`.
+model CentroCosto {
+  id     String  @id @default(uuid())
+  nombre String  @unique
+  activo Boolean @default(true)
+
+  // Trazabilidad
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  createdBy String?  @map("created_by")
+
+  @@map("centros_costo")
+}
+
 // Pivot ModuloVersion <-> Pregunta (N a N), con orden y obligatoriedad.
 model ModuloVersionPregunta {
   moduloVersionId String  @map("modulo_version_id")
