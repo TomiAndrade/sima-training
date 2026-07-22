@@ -93,12 +93,16 @@ Al finalizar, la asignación cambia de `pending → completed` en el estado de l
 
 ## Datos
 
-> **Usuarios** y **Organizaciones (Clientes)** ya viven en el backend real (PostgreSQL); el seed carga 5 clientes + 8 usuarios. El resto sigue mockeado en archivos `.js` y se migra ABM por ABM.
+> **Usuarios** y **Organizaciones (Clientes)** ya viven en el backend real (PostgreSQL); el seed carga la organización interna (Ingeniería SIMA) y los módulos base, sin usuarios de prueba. El resto sigue mockeado en archivos `.js` y se migra ABM por ABM.
+>
+> Una persona puede tener **varios pares** (puesto, centro de costo) y debe hacer los módulos que le corresponden por **todos** ellos — el par marcado como `principal` es solo el que se muestra en el listado. Qué roles admite cada tipo de organización lo fija una matriz (`INTERNA` → todos · `CLIENTE` → auditor · `SUBCONTRATISTA` → alumno) que el backend valida tanto en el alta manual como en el import de Excel. Detalle en [`docs/modelo-vinculacion-propuesto.md`](docs/modelo-vinculacion-propuesto.md) y en el [README del backend](sima-training-api/README.md).
+>
+> ⚠️ El **backoffice todavía consume la forma vieja** de `GET /usuarios` (rol plano, clasificación): migrarlo es trabajo pendiente.
 
 | Entidad | Origen | Detalle |
 |---|---|---|
 | Clientes | **Backend** (`Organizacion`, tipo CLIENTE) / mock en backoffice | YPF, Pan American Energy, TotalEnergies, Pluspetrol, Vista Energy |
-| Usuarios | **Backend** (API real) | 8 usuarios con roles `administrador` o `coordinador` |
+| Usuarios | **Backend** (API real) | `Usuario` es **identidad pura** (nombre, apellido, DNI, email). La pertenencia vive en `Vinculacion` — una por usuario, con **organización y rol** (`administrador` · `coordinador` · `auditor` · `alumno`) — y el par **puesto + centro de costo** en `VinculacionPuestoCentro` |
 | Empleados | Mock | 15 empleados con DNI, nombre y cliente |
 | Módulos | Mock | 4 módulos, ~10 preguntas cada uno (incluye preguntas reales de SIMA Avanzado) |
 | Evaluaciones | Mock | 20 registros históricos |
@@ -111,7 +115,9 @@ Al finalizar, la asignación cambia de `pending → completed` en el estado de l
 ```
 sima-training-api/                # Backend NestJS
 ├── prisma/         schema.prisma · seed.ts · migrations/
-└── src/            auth/ · usuarios/ · organizaciones/ · import/ · prisma/ · health/
+└── src/            auth/ · usuarios/ · organizaciones/ · puestos/ · centros-costo/
+                    · etiquetas/ · preguntas/ · modulos/ · import/ · storage/
+                    · prisma/ · health/
 
 sima-training-backoffice/src/
 ├── core/

@@ -16,21 +16,13 @@ enum TipoOrganizacion {
   INTERNA
 }
 
-// Rol transitorio en Sprint 1 (como simula el prototipo).
-// Migrará a la entidad Vinculacion cuando exista (post Sprint 1).
+// Rol de la vinculación persona↔organización. Vivió transitoriamente en
+// Usuario hasta que se implementó Vinculacion (ver docs/modelo-vinculacion-propuesto.md).
 enum RolUsuario {
   ADMINISTRADOR
   COORDINADOR
+  AUDITOR
   ALUMNO
-}
-
-// Clasificación del alumno. Excluyente (un alumno tiene exactamente una).
-// Solo aplica a usuarios con rol ALUMNO; los operadores quedan en null.
-enum ClasificacionAlumno {
-  SIMA
-  SUBCONTRATISTA
-  CLIENTE
-  INVITADO
 }
 
 // Organizacion: clientes y subcontratistas. La jerarquía se modela con una
@@ -46,7 +38,7 @@ model Organizacion {
   organizacionPadre Organizacion?  @relation("OrganizacionJerarquia", fields: [organizacionPadreId], references: [id])
   subcontratistas   Organizacion[] @relation("OrganizacionJerarquia")
 
-  usuarios Usuario[]
+  vinculaciones Vinculacion[]
 
   // Trazabilidad
   createdAt DateTime @default(now()) @map("created_at")
@@ -57,22 +49,18 @@ model Organizacion {
   @@map("organizaciones")
 }
 
-// Usuario: identidad única de cualquier persona (cuenta de sistema y/o persona
-// evaluada). Decisión de Sprint 1 (pregunta abierta #8): una sola entidad, el
-// rol vive acá de forma transitoria hasta que exista Vinculacion.
+// Usuario: identidad pura de cualquier persona (cuenta de sistema y/o persona
+// evaluada). Rol, organización y clasificación se movieron a Vinculacion
+// (ver docs/modelo-vinculacion-propuesto.md); acá solo queda lo que identifica
+// a la persona en sí.
 model Usuario {
-  id        Int        @id @default(autoincrement())
-  nombre    String
-  apellido  String
-  dni       String     @unique
-  email     String?
-  rol       RolUsuario @default(COORDINADOR)
+  id       Int     @id @default(autoincrement())
+  nombre   String
+  apellido String
+  dni      String  @unique
+  email    String?
 
-  // Clasificación del alumno (nullable: solo se setea para rol ALUMNO).
-  clasificacion ClasificacionAlumno?
-
-  organizacionId Int?          @map("organizacion_id")
-  organizacion   Organizacion? @relation(fields: [organizacionId], references: [id])
+  vinculacion Vinculacion?
 
   // Datos flexibles de nómina (jsonb). Dato de tránsito: los campos que se
   // estabilicen cuando llegue el Excel real se promueven a columnas (§3.4-a).
@@ -167,15 +155,15 @@ model PreguntaEtiqueta {
 // Módulo: contenedor estable de versiones. El contenido real (preguntas)
 // vive en ModuloVersion, nunca acá directamente.
 model Modulo {
-  id          String  @id @default(uuid())
-  nombre      String  @db.VarChar(200)
-  descripcion String?
+  id            String  @id @default(uuid())
+  nombre        String  @db.VarChar(200)
+  descripcion   String?
   // Baja lógica del módulo entero (independiente del ciclo BORRADOR/ACTIVO/ARCHIVADO
   // de sus versiones): el admin lo retira/reactiva a mano.
-  activo Boolean @default(true)
+  activo        Boolean @default(true)
   // Cada cuántos meses un alumno debe rendir de nuevo este módulo para seguir
   // certificado. Nullable: módulos sin cadencia de recertificación definida.
-  vigenciaMeses Int? @map("vigencia_meses")
+  vigenciaMeses Int?    @map("vigencia_meses")
 
   versiones ModuloVersion[]
 
@@ -198,14 +186,14 @@ model ModuloVersion {
   // Número público AÑO.MAYOR.MENOR (ej. 2026.01.00). Se asigna al Activar (publicar);
   // un BORRADOR sin publicar los tiene en null y se muestra como "Borrador".
   // MAYOR = secuencia por módulo por año; MENOR = revisión dentro de esa línea.
-  anio  Int? @map("anio")
-  mayor Int?
-  menor Int?
+  anio         Int?      @map("anio")
+  mayor        Int?
+  menor        Int?
   // Timestamp de publicación (para ordenar el historial).
-  activadaEn DateTime? @map("activada_en")
+  activadaEn   DateTime? @map("activada_en")
   // Elección guardada en el borrador: true = versión nueva (sube MAYOR), false = actualización
   // (sube MENOR). null para v1 / primera publicación (no hay de qué derivar).
-  esNuevaLinea Boolean? @map("es_nueva_linea")
+  esNuevaLinea Boolean?  @map("es_nueva_linea")
 
   modulo    Modulo                  @relation(fields: [moduloId], references: [id])
   preguntas ModuloVersionPregunta[]
@@ -225,6 +213,8 @@ model Puesto {
   nombre String  @unique
   activo Boolean @default(true)
 
+  vinculaciones VinculacionPuestoCentro[]
+
   // Trazabilidad
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -239,12 +229,82 @@ model CentroCosto {
   nombre String  @unique
   activo Boolean @default(true)
 
+  vinculaciones VinculacionPuestoCentro[]
+
   // Trazabilidad
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
   createdBy String?  @map("created_by")
 
   @@map("centros_costo")
+}
+
+// Vinculacion: vínculo persona ↔ organización (una por usuario — el @unique
+// en usuarioId es la regla "una sola organización" verificada por Postgres).
+// Guarda lo que es único por persona: organización y rol. Puesto y centro de
+// costo se repiten y van siempre juntos: viven apareados en VinculacionPuestoCentro.
+// Reemplaza a Usuario.rol/organizacionId y al concepto de "clasificación"
+// (que se elimina: la pertenencia SIMA/CLIENTE/SUBCONTRATISTA se deriva de
+// Organizacion.tipo + organizacionPadreId, no se persiste acá).
+// Ver docs/modelo-vinculacion-propuesto.md.
+model Vinculacion {
+  id Int @id @default(autoincrement())
+
+  usuarioId Int     @unique @map("usuario_id")
+  usuario   Usuario @relation(fields: [usuarioId], references: [id])
+
+  organizacionId Int          @map("organizacion_id")
+  organizacion   Organizacion @relation(fields: [organizacionId], references: [id])
+
+  rol RolUsuario
+
+  puestosCentros VinculacionPuestoCentro[]
+
+  activa Boolean @default(true)
+
+  // Trazabilidad
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  createdBy String?   @map("created_by")
+  updatedBy String?   @map("updated_by")
+  deletedAt DateTime? @map("deleted_at")
+
+  @@map("vinculaciones")
+}
+
+// Un par (puesto, centro de costo) que la persona ejerce dentro de su vinculación.
+// Los tres campos de la PK son NOT NULL: un par siempre viene completo — nunca un
+// puesto sin centro ni al revés. Reemplaza a VinculacionPuesto + VinculacionCentroCosto,
+// que modelaban puesto y centro como ejes independientes: la capacitación obligatoria
+// depende del par ("Soldador en YPF" ≠ "Soldador en PAE"), no de dos listas sueltas.
+// Por eso el mismo puesto en varios centros SÍ es una fila por centro.
+// Ver docs/modelo-vinculacion-propuesto.md §1.1.
+model VinculacionPuestoCentro {
+  vinculacionId Int    @map("vinculacion_id")
+  puestoId      String @map("puesto_id")
+  centroCostoId String @map("centro_costo_id")
+
+  vinculacion Vinculacion @relation(fields: [vinculacionId], references: [id])
+  puesto      Puesto      @relation(fields: [puestoId], references: [id])
+  centroCosto CentroCosto @relation(fields: [centroCostoId], references: [id])
+
+  // Cuál par se muestra como "el" puesto/centro del usuario en listados/tablas.
+  // Exactamente UNO en true por vinculación, garantizado por un índice único PARCIAL
+  // (UNIQUE (vinculacion_id) WHERE principal) que vive solo en la migración: Prisma
+  // no puede expresar un @@unique con WHERE.
+  principal Boolean @default(false)
+  activo    Boolean @default(true)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  createdBy String?  @map("created_by")
+
+  @@id([vinculacionId, puestoId, centroCostoId])
+  // Índices invertidos: la regla de asignación filtra por el par exacto entrando por
+  // cualquiera de los dos ejes. El `map` es explícito porque el nombre autogenerado
+  // pasa el límite de 63 caracteres de Postgres y Prisma lo truncaría.
+  @@index([puestoId, centroCostoId, vinculacionId], map: "vinculacion_puesto_centro_puesto_centro_idx")
+  @@index([centroCostoId, puestoId, vinculacionId], map: "vinculacion_puesto_centro_centro_puesto_idx")
+  @@map("vinculacion_puesto_centro")
 }
 
 // Pivot ModuloVersion <-> Pregunta (N a N), con orden y obligatoriedad.
