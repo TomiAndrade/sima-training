@@ -20,27 +20,8 @@ const TABS = [
   { id: 'operadores', label: 'Operadores' },
 ]
 
-// Clasificación del alumno (excluyente). Solo aplica a rol ALUMNO.
-const CLASIFICACIONES = ['SIMA', 'SUBCONTRATISTA', 'CLIENTE', 'INVITADO']
-
-const clasifBadge = {
-  SIMA:           'bg-sky-50 text-sky-600',
-  SUBCONTRATISTA: 'bg-amber-50 text-amber-600',
-  CLIENTE:        'bg-blue-50 text-blue-600',
-  INVITADO:       'bg-slate-100 text-slate-600',
-}
-
-const clasifLabel = (c) => (c ? c.charAt(0) + c.slice(1).toLowerCase() : '—')
-
-// Tipo de organización → clasificación sugerida (editable en el form).
-const ORG_TIPO_A_CLASIF = {
-  INTERNA:        'SIMA',
-  CLIENTE:        'CLIENTE',
-  SUBCONTRATISTA: 'SUBCONTRATISTA',
-}
-
-const esAlumno = (u) => u.rol === 'ALUMNO'
-const esOperador = (u) => u.rol === 'ADMINISTRADOR' || u.rol === 'COORDINADOR'
+const esAlumno = (u) => u.vinculacion?.rol === 'ALUMNO'
+const esOperador = (u) => u.vinculacion?.rol === 'ADMINISTRADOR' || u.vinculacion?.rol === 'COORDINADOR'
 const matchTab = (u, t) =>
   t === 'todos' ? true : t === 'alumnos' ? esAlumno(u) : esOperador(u)
 
@@ -53,7 +34,6 @@ const emptyForm = {
   dni: '',
   email: '',
   rol: 'COORDINADOR',
-  clasificacion: 'INVITADO',
   organizacionId: '',
   legajo: '',
   puesto: '',
@@ -73,7 +53,6 @@ export default function Usuarios() {
   const [formError, setFormError] = useState(null)
   const [importOpen, setImportOpen] = useState(false)
   const [search, setSearch] = useState('')
-  const [clasifFilter, setClasifFilter] = useState('todas')
 
   const fetchAll = async () => {
     const [us, orgs] = await Promise.all([
@@ -107,7 +86,6 @@ export default function Usuarios() {
 
   const usuariosFiltrados = usuarios
     .filter((u) => matchTab(u, tab))
-    .filter((u) => clasifFilter === 'todas' || u.clasificacion === clasifFilter)
     .filter((u) => {
       const q = search.trim().toLowerCase()
       if (!q) return true
@@ -118,15 +96,6 @@ export default function Usuarios() {
       )
     })
 
-  const getOrgName = (id) =>
-    organizaciones.find((o) => o.id === id)?.nombre ?? '—'
-
-  // Clasificación sugerida según el tipo de la organización elegida.
-  const clasifDesdeOrg = (orgId) => {
-    const org = organizaciones.find((o) => o.id === Number(orgId))
-    return ORG_TIPO_A_CLASIF[org?.tipo] ?? 'INVITADO'
-  }
-
   const isAlumnoForm = form.rol === 'ALUMNO'
 
   const openCreate = () => {
@@ -135,7 +104,6 @@ export default function Usuarios() {
       ...emptyForm,
       rol: defaultRolParaTab(tab),
       organizacionId: defaultOrg,
-      clasificacion: defaultOrg ? clasifDesdeOrg(defaultOrg) : 'INVITADO',
     })
     setFormError(null)
     setModal({ mode: 'create' })
@@ -148,9 +116,8 @@ export default function Usuarios() {
       apellido: usuario.apellido ?? '',
       dni: usuario.dni ?? '',
       email: usuario.email ?? '',
-      rol: usuario.rol ?? 'COORDINADOR',
-      clasificacion: usuario.clasificacion ?? 'INVITADO',
-      organizacionId: usuario.organizacionId ?? '',
+      rol: usuario.vinculacion?.rol ?? 'COORDINADOR',
+      organizacionId: usuario.vinculacion?.organizacion?.id ?? '',
       legajo: datos.legajo ?? '',
       puesto: datos.puesto ?? '',
       sector: datos.sector ?? '',
@@ -164,14 +131,15 @@ export default function Usuarios() {
       nombre: form.nombre.trim(),
       apellido: form.apellido.trim(),
       dni: form.dni.trim(),
-      rol: form.rol,
-      organizacionId: form.organizacionId ? Number(form.organizacionId) : undefined,
+      vinculacion: {
+        rol: form.rol,
+        organizacionId: form.organizacionId ? Number(form.organizacionId) : undefined,
+      },
     }
     if (form.email.trim()) payload.email = form.email.trim()
 
-    // Clasificación y datos de nómina solo para alumnos.
+    // Datos de nómina, solo para alumnos.
     if (form.rol === 'ALUMNO') {
-      payload.clasificacion = form.clasificacion
       const datos = {}
       if (form.legajo.trim()) datos.legajo = form.legajo.trim()
       if (form.puesto.trim()) datos.puesto = form.puesto.trim()
@@ -226,37 +194,37 @@ export default function Usuarios() {
     {
       key: 'rol',
       label: 'Rol',
-      render: (val) => (
-        <span
-          className={`px-2.5 py-1 rounded-full text-xs font-semibold capitalize ${roleBadge[val] ?? 'bg-slate-100 text-slate-600'}`}
-        >
-          {val?.toLowerCase()}
-        </span>
-      ),
-    },
-    {
-      key: 'clasificacion',
-      label: 'Clasificación',
-      render: (val) =>
-        val ? (
+      render: (_, row) => {
+        const rol = row.vinculacion?.rol
+        return rol ? (
           <span
-            className={`px-2.5 py-1 rounded-full text-xs font-semibold ${clasifBadge[val] ?? 'bg-slate-100 text-slate-600'}`}
+            className={`px-2.5 py-1 rounded-full text-xs font-semibold capitalize ${roleBadge[rol] ?? 'bg-slate-100 text-slate-600'}`}
           >
-            {clasifLabel(val)}
+            {rol.toLowerCase()}
           </span>
         ) : (
           <span className="text-slate-400">—</span>
-        ),
+        )
+      },
     },
     {
-      key: 'organizacionId',
+      key: 'organizacion',
       label: 'Organización',
-      render: (id) => <span className="text-slate-700">{getOrgName(id)}</span>,
+      render: (_, row) => (
+        <span className="text-slate-700">{row.vinculacion?.organizacion?.nombre ?? '—'}</span>
+      ),
     },
     {
-      key: 'datos',
-      label: 'Puesto',
-      render: (datos) => <span className="text-slate-500">{datos?.puesto ?? '—'}</span>,
+      key: 'parPrincipal',
+      label: 'Puesto / Centro de costo',
+      render: (_, row) => {
+        const par = row.vinculacion?.parPrincipal
+        return (
+          <span className="text-slate-500">
+            {par ? `${par.puesto.nombre} · ${par.centroCosto.nombre}` : '—'}
+          </span>
+        )
+      },
     },
   ]
 
@@ -312,7 +280,7 @@ export default function Usuarios() {
         })}
       </div>
 
-      {/* Búsqueda + filtro por clasificación */}
+      {/* Búsqueda */}
       <div className="flex flex-wrap items-center gap-3">
         <input
           type="text"
@@ -321,18 +289,6 @@ export default function Usuarios() {
           placeholder="Buscar por DNI, nombre o apellido…"
           className="w-full max-w-sm bg-white border border-slate-300 rounded px-3 py-2 text-slate-900 text-sm focus:outline-none focus:border-red-600"
         />
-        <select
-          value={clasifFilter}
-          onChange={(e) => setClasifFilter(e.target.value)}
-          className="bg-white border border-slate-300 rounded px-3 py-2 text-slate-900 text-sm focus:outline-none focus:border-red-600"
-        >
-          <option value="todas">Todas las clasificaciones</option>
-          {CLASIFICACIONES.map((c) => (
-            <option key={c} value={c}>
-              {clasifLabel(c)}
-            </option>
-          ))}
-        </select>
       </div>
 
       {loadError && (
@@ -444,15 +400,7 @@ export default function Usuarios() {
             <select
               className="w-full bg-white border border-slate-300 rounded px-3 py-2 text-slate-900 text-sm focus:outline-none focus:border-red-600"
               value={form.organizacionId}
-              onChange={(e) => {
-                const organizacionId = e.target.value
-                // Autocompletar la clasificación sugerida según el tipo de la org.
-                setForm((f) => ({
-                  ...f,
-                  organizacionId,
-                  clasificacion: organizacionId ? clasifDesdeOrg(organizacionId) : 'INVITADO',
-                }))
-              }}
+              onChange={(e) => setForm((f) => ({ ...f, organizacionId: e.target.value }))}
             >
               <option value="">— Sin organización —</option>
               {organizaciones.map((o) => (
@@ -465,24 +413,6 @@ export default function Usuarios() {
 
           {isAlumnoForm && (
             <div className="border-t border-slate-200 pt-4 space-y-4">
-              <div>
-                <label className="block text-slate-700 text-sm font-medium mb-1">Clasificación</label>
-                <select
-                  className="w-full bg-white border border-slate-300 rounded px-3 py-2 text-slate-900 text-sm focus:outline-none focus:border-red-600"
-                  value={form.clasificacion}
-                  onChange={(e) => setForm((f) => ({ ...f, clasificacion: e.target.value }))}
-                >
-                  {CLASIFICACIONES.map((c) => (
-                    <option key={c} value={c}>
-                      {clasifLabel(c)}
-                    </option>
-                  ))}
-                </select>
-                <p className="text-slate-400 text-xs mt-1">
-                  Se sugiere según la organización, pero podés cambiarla.
-                </p>
-              </div>
-
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Datos de nómina</p>
               <div className="grid grid-cols-3 gap-3">
                 <div>
