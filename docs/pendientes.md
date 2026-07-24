@@ -17,8 +17,6 @@ Registro vivo de lo que falta. Lista de trabajo, no documento formal — actuali
 
 ## Frontends
 
-- **Migrar el backoffice a la forma nueva de `GET /usuarios`** (rol anidado en `vinculacion`, `parPrincipal`, filtros `?organizacionId=`/`?centroCostoId=`/`?puestoId=`/`?rol=`). Hoy consume la forma vieja (`usuario.rol` plano, `clasificacion`) y está roto — el backend ya no expone esos campos.
-- **ABM de pares (puesto, centro) en el form de Usuario.** El `PATCH /usuarios` reemplaza el set completo de pares si se manda `pares` (no hace merge) — el front tiene que mandar siempre todos los pares vigentes, no solo el que cambió.
 - **Ninguna pantalla real para `Asignacion`/`ReglaAsignacion`.** El backend ya tiene el modelo completo (`POST/GET /asignaciones`, `POST /asignaciones/recalcular/:usuarioId`, `PATCH /:id/revocar`, CRUD de `/reglas-asignacion`) pero el backoffice no lo consume en ningún lado: `TrainingAssignments.jsx` sigue siendo el mock viejo de HSE (`training-assignments.js`), sin relación con las tablas reales. Falta: pantalla de reglas (qué módulo exige cada par puesto+centro) y pantalla de asignaciones vigentes/revocadas por persona.
 - **Conectar la app tablet al backend** (hoy 100% mockeada). Incluye traducir clave→URL de las imágenes de opciones (equivalente de `imagenUrl()` del backoffice) manteniendo la clave cruda como identidad para que `calculateScore` siga comparando bien.
 
