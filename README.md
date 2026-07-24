@@ -1,8 +1,10 @@
 # SIMA TRAINING — MVP
 
-> **Estado: MVP con backend real (Sprint 1).** El ABM de **Usuarios** del backoffice persiste contra **PostgreSQL** vía una API **NestJS**. El resto de las pantallas sigue con datos mockeados (se migran ABM por ABM). La app tablet sigue mockeada por ahora.
+> **Estado: MVP con backend real.** El backend (NestJS + PostgreSQL) ya expone **Usuarios** (con su vinculación a organización/rol y sus pares puesto+centro de costo), **Puestos**, **Centros de Costo**, **Organizaciones**, el banco de **Preguntas**, los **Módulos** versionados y el motor de **Asignaciones automáticas** (regla puesto+centro → módulo). El backoffice ya consume 100% del backend para Usuarios, Puestos, Centros de Costo, Preguntas y Módulos; Clientes y la pantalla de Asignaciones todavía son mock. La app tablet sigue 100% mockeada, sin conexión al backend.
 
 MVP de alta fidelidad para **Ingeniería Sima**, orientado a la industria Oil & Gas. Arquitectura multi-producto: **SIMA CHECK** (capacitaciones y evaluaciones) es el primer producto integrado. El sistema está preparado para incorporar SIMA INSPECTIONS, SIMA AUDITS, etc.
+
+Detalle completo (modelo de dominio, decisiones de diseño por sprint, endpoints) en [`CLAUDE.md`](CLAUDE.md). Pendientes activos en [`docs/pendientes.md`](docs/pendientes.md).
 
 ---
 
@@ -10,7 +12,7 @@ MVP de alta fidelidad para **Ingeniería Sima**, orientado a la industria Oil & 
 
 | Proyecto | Descripción | Puerto dev |
 |---|---|---|
-| `sima-training-api/` | **Backend** NestJS + PostgreSQL + Prisma (Sprint 1) | 3000 |
+| `sima-training-api/` | **Backend** NestJS + PostgreSQL + Prisma | 3000 |
 | `sima-training-backoffice/` | Backoffice de la plataforma SIMA TRAINING | 5173 |
 | `sima-check-app/` | App de evaluación para tablets industriales (SIMA CHECK) | 5174 |
 
@@ -64,49 +66,51 @@ npm run dev   # → http://localhost:5174
 Sidebar global con tres secciones:
 
 - **Panel Principal** — vista de plataforma: KPIs operacionales, tabla de actividad reciente, estado del sistema (OPERATIVO/ADVERTENCIA), product cards
-- **Administración** — Clientes · Usuarios (Usuarios ya consume la API real)
+- **Administración** — Clientes · Usuarios · Puestos · Centros de Costo (Usuarios, Puestos y Centros de Costo ya consumen la API real; Clientes sigue mock)
 - **Productos** — SIMA CHECK (ítem único; al entrar aparece tab bar interno)
 
 ### SIMA CHECK (tab bar interno)
 
 | Tab | Descripción |
 |---|---|
-| Resumen | Métricas operacionales + gráfico SVG de aprobación por módulo + últimas evaluaciones |
-| Capacitaciones | Tabla de módulos + modal crear/editar + toggle activo/inactivo |
-| Preguntas | Selector de módulo → tabla de preguntas + modal crear/editar (V/F y opción múltiple) |
-| Asignaciones | Tabla con estado + modal crear con validación de duplicados |
+| Resumen | Métricas operacionales + gráfico SVG de aprobación por módulo + últimas evaluaciones (mock, salvo el StatCard "Módulos activos" que ya es dato real) |
+| Módulos | **100% backend**: tabla de módulos contra `/modulos`, con su ciclo de vida (BORRADOR/ACTIVO/ARCHIVADO) y versionado (`AÑO.MAYOR.MENOR`) |
+| Preguntas | **100% backend**: banco de preguntas contra `/preguntas`, filtros combinables por módulo/texto/papelera, asignación a módulos |
+| Asignaciones | Mock (`training-assignments.js`) — el backend ya tiene el modelo real (`Asignacion`/`ReglaAsignacion`, asignación automática por par puesto+centro → módulo) pero esta pantalla todavía no lo consume |
 
 ---
 
 ## App SIMA CHECK — flujo
 
-Todas las pantallas son tarjetas flotantes sobre fondo oscuro (listo para imagen de fondo real).
+Todas las pantallas son tarjetas blancas (`bg-white border border-slate-200 shadow-2xl`) sobre un fondo claro con imagen de industria de fondo (modo claro, pensado para uso en exteriores Oil & Gas) — no fondo oscuro.
 
 1. **Ingreso por DNI** — campo numérico, validación vacío / no encontrado
-2. **Capacitaciones pendientes** — nombre y empresa del empleado + módulos con `status === 'pending'`
-3. **Evaluación** — 3 preguntas aleatorias, barra de progreso (avanza al responder), opciones táctiles grandes; V/F con verde/rojo; opción múltiple seleccionada en blanco
+2. **Capacitaciones pendientes** — nombre y empresa de la persona + módulos con `status === 'pending'`
+3. **Evaluación** — 3 preguntas aleatorias, barra de progreso (avanza al responder), opciones táctiles grandes; V/F con verde/rojo; opción múltiple seleccionada en oscuro; `image-options` en grid 2×2
 4. **Resultado** — score %, badge APROBADO (≥70%) / DESAPROBADO (<70%), botones de acción
 
-Al finalizar, la asignación cambia de `pending → completed` en el estado de la sesión.
+Al finalizar, la asignación cambia de `pending → completed` en el estado de la sesión — solo si aprueba.
 
 ---
 
 ## Datos
 
-> **Usuarios** y **Organizaciones (Clientes)** ya viven en el backend real (PostgreSQL); el seed carga la organización interna (Ingeniería SIMA) y los módulos base, sin usuarios de prueba. El resto sigue mockeado en archivos `.js` y se migra ABM por ABM.
+> **Usuarios, Organizaciones, Puestos, Centros de Costo, Preguntas y Módulos** ya viven en el backend real (PostgreSQL); el seed carga la organización interna (Ingeniería SIMA) y los módulos base, sin datos de prueba. **Clientes** y la pantalla de **Asignaciones** siguen mockeados en archivos `.js`.
 >
 > Una persona puede tener **varios pares** (puesto, centro de costo) y debe hacer los módulos que le corresponden por **todos** ellos — el par marcado como `principal` es solo el que se muestra en el listado. Qué roles admite cada tipo de organización lo fija una matriz (`INTERNA` → todos · `CLIENTE` → auditor · `SUBCONTRATISTA` → alumno) que el backend valida tanto en el alta manual como en el import de Excel. Detalle en [`docs/modelo-vinculacion-propuesto.md`](docs/modelo-vinculacion-propuesto.md) y en el [README del backend](sima-training-api/README.md).
 >
-> ⚠️ El **backoffice todavía consume la forma vieja** de `GET /usuarios` (rol plano, clasificación): migrarlo es trabajo pendiente.
+> ⚠️ El **backoffice todavía consume la forma vieja** de `GET /usuarios` (rol plano, clasificación): migrarlo es trabajo pendiente (ver [`docs/pendientes.md`](docs/pendientes.md)).
 
 | Entidad | Origen | Detalle |
 |---|---|---|
-| Clientes | **Backend** (`Organizacion`, tipo CLIENTE) / mock en backoffice | YPF, Pan American Energy, TotalEnergies, Pluspetrol, Vista Energy |
-| Usuarios | **Backend** (API real) | `Usuario` es **identidad pura** (nombre, apellido, DNI, email). La pertenencia vive en `Vinculacion` — una por usuario, con **organización y rol** (`administrador` · `coordinador` · `auditor` · `alumno`) — y el par **puesto + centro de costo** en `VinculacionPuestoCentro` |
-| Empleados | Mock | 15 empleados con DNI, nombre y cliente |
-| Módulos | Mock | 4 módulos, ~10 preguntas cada uno (incluye preguntas reales de SIMA Avanzado) |
-| Evaluaciones | Mock | 20 registros históricos |
-| Asignaciones | Mock | 25 asignaciones con `status: pending \| completed \| expired` |
+| Clientes | Mock en backoffice (el backend ya modela `Organizacion` tipo CLIENTE, pero la pantalla no la consume) | YPF, Pan American Energy, TotalEnergies, Pluspetrol, Vista Energy |
+| Usuarios | **Backend** (API real) | `Usuario` es **identidad pura** (nombre, apellido, DNI, email). La pertenencia vive en `Vinculacion` — una por usuario, con **organización y rol** (`ADMINISTRADOR` · `COORDINADOR` · `AUDITOR` · `ALUMNO`) — y el par **puesto + centro de costo** en `VinculacionPuestoCentro` |
+| Puestos / Centros de Costo | **Backend** (API real) | Catálogos de nómina, baja lógica con `activo` |
+| Preguntas | **Backend** (API real) | Banco único y reutilizable entre módulos, con detección de duplicados/similares en el import de Excel |
+| Módulos | **Backend** (API real) | Versionados e inmutables (`ModuloVersion`, numeración `AÑO.MAYOR.MENOR`). El mock `training-modules.js` sobrevive solo para metadata liviana en pantallas que no migraron (Dashboard, Resumen, Asignaciones) |
+| Asignaciones | Mock en backoffice (el backend ya modela `Asignacion`/`ReglaAsignacion`, ver arriba) | 27 asignaciones con `status: pending \| completed \| expired` |
+| Evaluaciones | Mock | 20 registros históricos, para el dashboard |
+| `UsuarioMock` (persona evaluada) | Mock (`usuarios-mock.js`) | 15 personas con DNI, nombre y cliente — consumido por Dashboard y Asignaciones, no confundir con el `Usuario` real del backend |
 
 ---
 
@@ -116,27 +120,30 @@ Al finalizar, la asignación cambia de `pending → completed` en el estado de l
 sima-training-api/                # Backend NestJS
 ├── prisma/         schema.prisma · seed.ts · migrations/
 └── src/            auth/ · usuarios/ · organizaciones/ · puestos/ · centros-costo/
-                    · etiquetas/ · preguntas/ · modulos/ · import/ · storage/
-                    · prisma/ · health/
+                    · etiquetas/ · preguntas/ · modulos/ · asignaciones/ · import/
+                    · storage/ · prisma/ · health/
 
 sima-training-backoffice/src/
 ├── core/
-│   ├── api/        client.js · usuarios.js · organizaciones.js   # capa HTTP
-│   ├── data/       clients.js · users.js · employees.js (mock, en migración)
-│   └── pages/      Clients.jsx · Users.jsx (Users ya usa la API real)
+│   ├── api/        client.js · usuarios.js · organizaciones.js · puestos.js ·
+│   │               centrosCosto.js · preguntas.js · modulos.js · etiquetas.js  # capa HTTP
+│   ├── data/       clients.js · users.js · usuarios-mock.js (mock, en migración)
+│   └── pages/      Clients.jsx · Usuarios.jsx · Puestos.jsx · CentrosCosto.jsx
+│                   (Usuarios/Puestos/CentrosCosto ya usan la API real)
 ├── sima-check/
-│   ├── data/       training-modules.js · training-assignments.js · evaluations.js
-│   └── pages/      Overview.jsx · TrainingModules.jsx · Questions.jsx · TrainingAssignments.jsx
+│   ├── data/       training-modules.js · training-assignments.js · evaluations.js (mock)
+│   └── pages/      Overview.jsx · TrainingModules.jsx (backend) · Questions.jsx (backend)
+│                   · TrainingAssignments.jsx (mock)
 ├── pages/          BackofficeLayout.jsx · Dashboard.jsx
-├── components/     Button · Card · Modal · Table · StatCard · ProgressBar
+├── components/     Button · Card · Modal · Table · StatCard · ProgressBar · MultiSelectFilter
 └── hooks/          useNavigation.js
 
 sima-check-app/src/
-├── data/           employees.js · modules.js · assignments.js
+├── data/           usuarios.js · modules.js · assignments.js
 ├── components/     Button · ProgressBar · QuestionCard
 ├── hooks/          useNavigation.js
 ├── utils/          evaluation.js (pickRandomQuestions, calculateScore)
-└── pages/          EmployeeSelection · ModuleSelection · Evaluation · Results
+└── pages/          UsuarioSelection · ModuleSelection · Evaluation · Results
 ```
 
 ---
@@ -147,6 +154,7 @@ sima-check-app/src/
 |---|---|---|
 | Backoffice | Fondos | `zinc-950` / `zinc-900` / `zinc-800` |
 | Backoffice | Acento | `red-600` |
-| App tablet | Fondos | `slate-900` / `slate-800` |
+| App tablet | Fondo | Imagen de industria (`SIMACHECK-FONDO.png`), modo **claro** |
+| App tablet | Cards | `bg-white` / texto `slate-900` (principal) · `slate-500` (secundario) |
 | Ambos | Aprobado | `emerald-500` |
-| Ambos | Desaprobado / peligro | `red-600` |
+| Ambos | Desaprobado / peligro / acento | `red-600` |

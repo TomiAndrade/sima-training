@@ -6,7 +6,7 @@ App tablet para capacitaciones y evaluaciones industriales. Parte del MVP de la 
 
 - Vite + React
 - Tailwind CSS v3
-- Sin router, sin backend, sin base de datos
+- Sin router, sin backend, sin base de datos — 100% mockeado. El backend real (`sima-training-api`) ya existe (Usuarios, Preguntas, Módulos, Asignaciones), pero esta app todavía no lo consume (ver [`../docs/pendientes.md`](../docs/pendientes.md))
 
 ## Correr en dev
 
@@ -19,20 +19,20 @@ npm run dev   # → http://localhost:5174
 
 ```
 src/
-├── data/          employees.js · modules.js · assignments.js
+├── data/          usuarios.js · modules.js · assignments.js
 ├── components/    Button · ProgressBar · QuestionCard
 ├── utils/         evaluation.js (pickRandomQuestions, calculateScore)
-└── pages/         EmployeeSelection · ModuleSelection · Evaluation · Results
+└── pages/         UsuarioSelection · ModuleSelection · Evaluation · Results
 ```
 
 ## Flujo de la app
 
-1. **Ingreso por DNI** — el empleado ingresa su DNI para identificarse
+1. **Ingreso por DNI** — la persona ingresa su DNI para identificarse
 2. **Capacitaciones pendientes** — lista de módulos con asignación `status: 'pending'`
 3. **Evaluación** — 3 preguntas aleatorias del módulo seleccionado
 4. **Resultado** — APROBADO (≥70%) o DESAPROBADO (<70%)
 
-Si el empleado aprueba, la asignación pasa a `completed`. Si desaprueba, queda `pending` y puede reintentar.
+Si la persona aprueba, la asignación pasa a `completed`. Si desaprueba, queda `pending` y puede reintentar.
 
 ## Tipos de pregunta
 

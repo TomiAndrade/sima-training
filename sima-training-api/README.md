@@ -2,7 +2,7 @@
 
 Backend de la plataforma **SIMA Training** — NestJS + PostgreSQL + Prisma.
 
-Expone la API que consumen los frontends existentes (`sima-training-backoffice` y, a futuro, `sima-check-app`). Sprint 1: ABM de **Usuarios** y **Organizaciones** sobre datos reales, autenticación básica JWT y esqueleto de importación de Excel. Sprint 2: banco de **Preguntas** y **Módulos versionados** de SIMA CHECK. Sprint 5: **modelo de vinculación** — `Usuario` queda como identidad pura y la pertenencia (organización, rol, pares puesto+centro de costo) se mueve a `Vinculacion` / `VinculacionPuestoCentro`; la clasificación SIMA/CLIENTE/SUBCONTRATISTA/INVITADO se elimina como concepto.
+Expone la API que consumen los frontends existentes (`sima-training-backoffice` y, a futuro, `sima-check-app`). Sprint 1: ABM de **Usuarios** y **Organizaciones** sobre datos reales, autenticación básica JWT y esqueleto de importación de Excel. Sprint 2: banco de **Preguntas** y **Módulos versionados** de SIMA CHECK. Sprint 3: **versionado real de módulos** (`ModuloVersion` con numeración pública `AÑO.MAYOR.MENOR`, borrador/activar/archivar, unassign duro de preguntas). Sprint 4: **imágenes en el enunciado y en las opciones** de una pregunta, servidas desde `/uploads`. Sprint 5: **modelo de vinculación** — `Usuario` queda como identidad pura y la pertenencia (organización, rol, pares puesto+centro de costo) se mueve a `Vinculacion` / `VinculacionPuestoCentro`; la clasificación SIMA/CLIENTE/SUBCONTRATISTA/INVITADO se elimina como concepto. Además: **asignaciones automáticas** — el par (puesto, centro de costo) de una persona obliga a rendir un módulo (`ReglaAsignacion`), y `AsignacionesService.recalcular()` deriva las `Asignacion` (`AUTOMATICA`/`MANUAL`) vigentes de cada usuario.
 
 ## Stack
 
@@ -73,6 +73,7 @@ Ver [`.env.example`](.env.example). Las principales:
 | Método | Ruta | Auth | Descripción |
 |---|---|---|---|
 | `GET` | `/health` | — | Estado del servicio |
+| `GET` | `/uploads/*` | — | Archivos subidos (imágenes de preguntas). Lectura pública |
 | `POST` | `/auth/login` | — | Login, devuelve `access_token` |
 | `GET` | `/usuarios` | — | Lista paginada (`?page=`, `?limit=`, default 1/50), filtros `?organizacionId=` · `?rol=` · `?puestoId=` · `?centroCostoId=`, orden `created_at` desc. Responde `{ data, total, page, limit }`; cada usuario trae `vinculacion: { rol, organizacion, parPrincipal, pares }` (ver más abajo) |
 | `POST` | `/usuarios` | JWT | Alta con su vinculación anidada: `{ nombre, apellido, dni, email?, datos?, vinculacion: { organizacionId, rol, pares?: [{ puestoId, centroCostoId }] } }`. 409 si el DNI ya está en uso (revive si pertenece a un usuario dado de baja); 400 si el rol no está permitido para el tipo de esa organización |
@@ -95,16 +96,31 @@ Ver [`.env.example`](.env.example). Las principales:
 | `POST` | `/centros-costo` | JWT | Alta (rechaza nombre duplicado con 409) |
 | `GET` | `/centros-costo` | — | Lista todos |
 | `PATCH` | `/centros-costo/:id` | JWT | Edición (nombre y/o `activo`, baja lógica) |
-| `POST` | `/preguntas` | JWT | Alta, con `etiquetaIds?` opcionales |
+| `POST` | `/preguntas` | JWT | Alta, con `etiquetaIds?` opcionales. No corre detección de duplicados/similares (eso solo pasa en el preview del import de Excel) |
+| `POST` | `/preguntas/imagen` | JWT | Sube la imagen de un enunciado u opción (multipart `file`, máx 2 MB, formato detectado por magic bytes). Devuelve `{ imagen: "preguntas/<uuid>.png" }` para mandar en el `imagen` del alta |
+| `DELETE` | `/preguntas/imagen/:clave` | JWT | Borra una imagen huérfana (clave url-encoded). 409 si alguna pregunta la sigue referenciando (enunciado u opción) |
 | `GET` | `/preguntas` | — | Lista, filtros `?q=` (texto), `?etiqueta=`, `?categoria=`, `?activa=` (papelera global si `false`), `?moduloId=` (repetible, OR entre sí), `?sinAsignar=true` (OR con `moduloId`). Cada pregunta trae `modulos: [{moduloId, moduloNombre, activaEnModulo}]` con sus asignaciones vigentes |
 | `GET` | `/preguntas/:id` | — | Detalle |
-| `PATCH` | `/preguntas/:id` | JWT | Papelera global: `{ activa: false }` desactiva la pregunta y cascadea `activa=false` a todas sus asignaciones por módulo; `{ activa: true }` la recupera pero **no** restaura los pivots (el admin reactiva módulo por módulo) |
-| `GET` | `/modulos` | — | Lista todos los módulos (`id, nombre, descripcion`) |
+| `PATCH` | `/preguntas/:id` | JWT | Papelera global: `{ activa: false }` desactiva la pregunta y cascadea `activa=false` a todas sus asignaciones por módulo (solo en versiones BORRADOR/ACTIVO, nunca ARCHIVADO); `{ activa: true }` la recupera pero **no** restaura los pivots (el admin reactiva módulo por módulo) |
+| `GET` | `/modulos` | — | Lista todos los módulos con `vigente: {estado, anio, mayor, menor}` y `borradorId` si hay un borrador en curso |
 | `POST` | `/modulos` | JWT | Crea el módulo y su `ModuloVersion` v1 en BORRADOR |
 | `GET` | `/modulos/:id` | — | Módulo + versión activa (o la última) + sus preguntas (activas e inactivas) |
-| `GET` | `/modulos/:id/versiones` | — | Lista todas las versiones del módulo |
-| `POST` | `/modulos/:id/preguntas` | JWT | Asigna preguntas existentes a la versión BORRADOR (array `{ preguntaId, orden, obligatoria? }`; 409 si ya está asignada, 404 si la pregunta no existe) |
-| `PATCH` | `/modulos/:id/preguntas/:preguntaId` | JWT | Activa/desactiva la asignación de una pregunta **en ese módulo** (baja lógica por módulo, distinta de la papelera global de `/preguntas/:id`) |
+| `PATCH` | `/modulos/:id` | JWT | Edita metadata del módulo (`nombre`/`descripcion`) |
+| `GET` | `/modulos/:id/versiones` | — | Historial de versiones (más reciente primero), con `preguntasCount` por versión |
+| `GET` | `/modulos/:id/versiones/:versionId` | — | Detalle de una versión puntual (incluye ARCHIVADO) + sus preguntas |
+| `POST` | `/modulos/:id/versiones` | JWT | Crea un borrador nuevo copiando los pivots de preguntas del ACTIVO. Rechaza si ya hay un borrador en curso o si no hay ACTIVO del cual partir |
+| `PATCH` | `/modulos/:id/activar` | JWT | Publica el borrador vigente (body `{esNuevaLinea?}`, obligatorio solo si ya hay un ACTIVO del cual derivar el número). Asigna el número `AÑO.MAYOR.MENOR` y archiva el ACTIVO anterior — transaccional |
+| `DELETE` | `/modulos/:id/borrador` | JWT | Descarta el borrador en curso. Si era la única versión (módulo nunca publicado), elimina el módulo entero |
+| `POST` | `/modulos/:id/preguntas` | JWT | Asigna preguntas existentes a la versión BORRADOR (array `{ preguntaId, orden?, obligatoria? }` — `orden` se appendea si no viene; 409 si ya está asignada, 404 si la pregunta no existe) |
+| `PATCH` | `/modulos/:id/preguntas/:preguntaId` | JWT | Activa/desactiva la asignación de una pregunta **en la versión que se edita** (baja lógica por módulo, reversible; distinta de la papelera global de `/preguntas/:id`) |
+| `DELETE` | `/modulos/:id/preguntas/:preguntaId` | JWT | Unassign duro del pivot (a diferencia del toggle anterior, no reversible). Solo sobre un BORRADOR — rechaza sobre ACTIVO/ARCHIVADO |
+| `GET` | `/asignaciones` | — | Lista las asignaciones (vigentes y revocadas) de una persona, `?usuarioId=` |
+| `POST` | `/asignaciones` | JWT | Alta MANUAL de una asignación puntual. 409 si ya hay una vigente de ese módulo para esa persona (índice único parcial) |
+| `POST` | `/asignaciones/recalcular/:usuarioId` | JWT | Deriva las AUTOMATICA a partir de los pares (puesto, centro) activos y las reglas vigentes: crea las que faltan y revoca las que ya no corresponden. Nunca toca las MANUAL. Devuelve `{ creadas, revocadas }`. **No se dispara solo** — hay que llamarlo explícitamente después de editar los pares de un usuario |
+| `PATCH` | `/asignaciones/:id/revocar` | JWT | Revoca una asignación (nunca se borra). Idempotente |
+| `GET` | `/reglas-asignacion` | — | Lista reglas, filtros `?puestoId=`/`?centroCostoId=`/`?moduloId=`/`?activo=` |
+| `POST` | `/reglas-asignacion` | JWT | Alta de una regla (puesto + centro de costo → módulo obligatorio). Si el triple ya existe dado de baja, la reactiva en vez de duplicar |
+| `PATCH` | `/reglas-asignacion/:id` | JWT | Activa/desactiva la regla (`{ activo }`). El triple puesto/centro/módulo no se edita: para cambiarlo se crea otra regla |
 
 Las **lecturas** (`GET`) son abiertas; las **escrituras** requieren `Authorization: Bearer <token>`.
 
@@ -144,14 +160,22 @@ src/
 │                    La nómina delega el alta en UsuariosService (misma validación)
 ├── etiquetas/       CRUD de Etiqueta (categorización de preguntas)
 ├── preguntas/       Alta/listado de Pregunta (banco único, reutilizable entre módulos)
-├── modulos/         Modulo + ModuloVersion (versionado inmutable) + asignación de preguntas
+│                    + imagen de enunciado/opciones (sube/borra, StorageModule)
+├── modulos/         Modulo + ModuloVersion (versionado inmutable, numeración pública
+│                    AÑO.MAYOR.MENOR) + asignación de preguntas
+├── asignaciones/    Asignacion (obligación de una persona de rendir un módulo) +
+│                    ReglaAsignacion (qué módulo exige cada par puesto+centro) +
+│                    AsignacionesService.recalcular() (deriva las AUTOMATICA)
+├── storage/         StorageService abstracto + LocalDiskStorage (uploads/) +
+│                    formato-imagen.ts (detección por magic bytes)
 ├── prisma/          PrismaService + módulo global
 ├── health/          Health check
 ├── app.module.ts
-└── main.ts          ValidationPipe global + CORS
+└── main.ts          ValidationPipe global + CORS + static assets de /uploads
 prisma/
 ├── schema.prisma    Usuario, Vinculacion, VinculacionPuestoCentro, Organizacion,
-│                    Puesto, CentroCosto, Pregunta, Etiqueta, Modulo, ModuloVersion + pivots
+│                    Puesto, CentroCosto, Pregunta, Etiqueta, Modulo, ModuloVersion,
+│                    ReglaAsignacion, Asignacion + pivots
 ├── seed.ts          Organización interna (Ingeniería SIMA) + módulos base.
 │                    Limpia en orden de dependencia (las FK son ON DELETE RESTRICT)
 └── migrations/      Migraciones versionadas
@@ -177,7 +201,31 @@ prisma/
 - **Dos bajas lógicas distintas para `Pregunta`, no una sola**: `ModuloVersionPregunta.activa` es la baja **por módulo** (Sprint 2, no afecta otros módulos ni el banco). `Pregunta.activa` es la **papelera global** (Sprint 3): saca la pregunta de todo el banco y cascadea `activa=false` a todas sus asignaciones por módulo; recuperarla de la papelera **no** restaura esas asignaciones (asimetría intencional — el admin decide dónde reactivarla).
 - **Detección de duplicados/similares: resuelto en memoria, no con pg_trgm** (`src/import/similitud.ts`). Se normaliza el texto en español (sin acentos/puntuación) y se compara por coeficiente de Dice sobre trigramas de caracteres, contra el banco completo y contra las filas del mismo archivo. Se prefirió esta vía a la extensión `pg_trgm` de Postgres porque el proyecto es local-first sin deploy cloud activo todavía, y para no atar la portabilidad a que el Postgres administrado permita `CREATE EXTENSION`; queda encapsulado en funciones puras, reemplazable el día que el banco crezca lo suficiente.
 - **Importación de preguntas por Excel con preview seleccionable**: cada fila del `.xlsx` se clasifica como nueva/duplicada/parecida; el usuario elige fila por fila cuáles importar en el preview (`POST /import/preguntas/preview`), y el confirm (`POST /import/preguntas/confirm`) recibe esa selección ya armada como JSON (no vuelve a leer el archivo), con un `moduloId` de destino opcional.
-- **Pendiente para el próximo sprint**: `PATCH /modulos/:id/aprobar` (flujo de aprobación de versión) y el AuditLog completo para ISO 9001.
+- ~~**Pendiente para el próximo sprint**: `PATCH /modulos/:id/aprobar`~~ — **resuelto con otro diseño**: el Sprint 3 (versionado) lo reemplazó por `PATCH /modulos/:id/activar`, que publica el borrador directamente (sin un paso de aprobación separado). El AuditLog para ISO 9001 sigue sin implementar.
+
+## Decisiones de diseño (Sprint 3 — Versionado de módulos)
+
+- **Numeración pública de 3 partes `AÑO.MAYOR.MENOR`** (ej. `2026.01.00`), distinta del `numeroVersion` interno (contador monotónico de creación). Se asigna recién al Activar — un borrador sin publicar se muestra como "Borrador", sin número. **Actualización** sube MENOR; **Versión nueva** sube MAYOR y resetea MENOR (MAYOR es la secuencia del módulo por año).
+- **La elección actualización/versión nueva (`esNuevaLinea`) se decide al Activar, no al crear el borrador** — da tiempo a ver cuánto se terminó modificando antes de comprometerse. Es obligatoria solo cuando ya hay un ACTIVO publicado del cual derivar el número.
+- **A lo sumo un BORRADOR y un ACTIVO por módulo.** `crearVersion` copia los pivots de preguntas del ACTIVO (punto de partida = lo publicado, no vacío) y rechaza si ya hay un borrador en curso.
+- **`activar` es transaccional**: calcula el número, pasa el borrador a ACTIVO y el ACTIVO anterior (si había) a ARCHIVADO — nunca quedan dos ACTIVO simultáneos.
+- **`cancelarBorrador` descarta el borrador en curso** (y sus pivots). Si era la única versión del módulo (nunca se publicó), borra el `Modulo` entero — mismo endpoint para los dos casos, el backoffice solo cambia el label del botón.
+- **Unassign duro (`DELETE /modulos/:id/preguntas/:preguntaId`) solo sobre BORRADOR**, a diferencia del toggle de activo/inactivo (que también aplica sobre lo publicado, por ser reversible). Borrar un pivot de ACTIVO/ARCHIVADO rompería la inmutabilidad del historial.
+
+## Decisiones de diseño (Sprint 4 — Imágenes en el enunciado)
+
+- **Storage detrás de una interfaz chica** (`StorageService.guardar/borrar`), para que migrar a S3 sea escribir otra implementación sin tocar schema, controllers ni frontend. `LocalDiskStorage` escribe en `UPLOADS_DIR` (default `./uploads`); la base guarda una **clave opaca**, nunca una ruta de filesystem ni una URL absoluta.
+- **El formato se detecta por magic bytes**, no por `originalname`/`mimetype` del cliente (`storage/formato-imagen.ts`). El nombre de archivo es siempre un uuid generado — evita path traversal. Límite de 2 MB.
+- **La subida va separada del alta** (`POST /preguntas/imagen` devuelve la clave, después se manda en el `imagen` del `POST /preguntas`): así el DTO de alta no cambió y el frontend puede mostrar preview antes de confirmar.
+- **La imagen de una pregunta ya creada no se reemplaza ni se borra** — no hay endpoint de edición (coherente con "las preguntas no se editan, se activan/desactivan") y porque todas las versiones de un módulo comparten el mismo `preguntaId`: mutar la imagen cambiaría retroactivamente versiones ARCHIVADO. Para cambiarla: papelera + pregunta nueva. `DELETE /preguntas/imagen/:clave` responde 409 si alguna pregunta la referencia (enunciado u opción).
+
+## Decisiones de diseño (Asignaciones automáticas por par)
+
+- **`ReglaAsignacion` es el motor de las `Asignacion` automáticas**: el par exacto (puesto, centro de costo) —no cada eje por separado— obliga a rendir un módulo. Apunta a `Modulo` (el contenedor), no a una `ModuloVersion`: la obligación es "este módulo", la versión concreta se resuelve al rendir.
+- **`Asignacion` nunca se borra, se revoca** (`revocadaAt`). Un índice único parcial (`WHERE revocada_at IS NULL`) garantiza a lo sumo una vigente por (usuario, módulo) — vive solo en la migración SQL, Prisma no lo expresa.
+- **`recalcular()` es síncrono, idempotente y nunca toca las `MANUAL`.** Compara los pares activos + reglas vigentes contra las asignaciones vigentes actuales: crea las AUTOMATICA que faltan, revoca las AUTOMATICA que ya no corresponden a ningún par activo. Correrlo dos veces seguidas no duplica ni revoca de más.
+- **No se dispara solo.** Hoy es un endpoint aparte (`POST /asignaciones/recalcular/:usuarioId`) — editar los pares de una persona desde `/usuarios` no lo invoca todavía (ver pendientes).
+- **El registro de aprobaciones es un hueco explícito**, aislado en `AsignacionesService.modulosAprobados()` (devuelve un Set vacío hasta que exista la entidad de aprobaciones — bloqueado por la conexión de la app tablet). `moduloVersionId` en `Asignacion` queda `null` por el mismo motivo.
 
 ## Decisiones de diseño (Sprint 5 — Modelo de vinculación)
 
