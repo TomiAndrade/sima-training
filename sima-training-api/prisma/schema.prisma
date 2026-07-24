@@ -62,6 +62,8 @@ model Usuario {
 
   vinculacion Vinculacion?
 
+  asignaciones Asignacion[]
+
   // Datos flexibles de nómina (jsonb). Dato de tránsito: los campos que se
   // estabilicen cuando llegue el Excel real se promueven a columnas (§3.4-a).
   datos Json @default("{}")
@@ -101,6 +103,14 @@ enum EstadoVersionModulo {
   BORRADOR
   ACTIVO
   ARCHIVADO
+}
+
+// Origen de una Asignacion: la derivó recalcular() a partir de una regla, o la
+// cargó un admin a mano. recalcular() sólo crea/revoca las AUTOMATICA — nunca
+// toca las MANUAL.
+enum OrigenAsignacion {
+  AUTOMATICA
+  MANUAL
 }
 
 // Pregunta: única, puede pertenecer a varios módulos (vía ModuloVersionPregunta).
@@ -165,7 +175,9 @@ model Modulo {
   // certificado. Nullable: módulos sin cadencia de recertificación definida.
   vigenciaMeses Int?    @map("vigencia_meses")
 
-  versiones ModuloVersion[]
+  versiones        ModuloVersion[]
+  reglasAsignacion ReglaAsignacion[]
+  asignaciones     Asignacion[]
 
   // Trazabilidad
   createdAt DateTime @default(now()) @map("created_at")
@@ -195,8 +207,9 @@ model ModuloVersion {
   // (sube MENOR). null para v1 / primera publicación (no hay de qué derivar).
   esNuevaLinea Boolean?  @map("es_nueva_linea")
 
-  modulo    Modulo                  @relation(fields: [moduloId], references: [id])
-  preguntas ModuloVersionPregunta[]
+  modulo       Modulo                  @relation(fields: [moduloId], references: [id])
+  preguntas    ModuloVersionPregunta[]
+  asignaciones Asignacion[]
 
   // Trazabilidad
   createdAt DateTime @default(now()) @map("created_at")
@@ -213,7 +226,8 @@ model Puesto {
   nombre String  @unique
   activo Boolean @default(true)
 
-  vinculaciones VinculacionPuestoCentro[]
+  vinculaciones    VinculacionPuestoCentro[]
+  reglasAsignacion ReglaAsignacion[]
 
   // Trazabilidad
   createdAt DateTime @default(now()) @map("created_at")
@@ -229,7 +243,8 @@ model CentroCosto {
   nombre String  @unique
   activo Boolean @default(true)
 
-  vinculaciones VinculacionPuestoCentro[]
+  vinculaciones    VinculacionPuestoCentro[]
+  reglasAsignacion ReglaAsignacion[]
 
   // Trazabilidad
   createdAt DateTime @default(now()) @map("created_at")
@@ -322,4 +337,68 @@ model ModuloVersionPregunta {
 
   @@id([moduloVersionId, preguntaId])
   @@map("modulo_version_preguntas")
+}
+
+// ReglaAsignacion: el par (puesto, centro de costo) obliga a rendir un módulo.
+// Apunta a Modulo (el contenedor estable), NO a una ModuloVersion: la obligación
+// es "este módulo", la versión concreta que se rinda se resuelve al momento de
+// rendir. Es el motor de las Asignacion AUTOMATICA (ver AsignacionesService.recalcular):
+// los módulos obligatorios se definen por el PAR EXACTO — "Soldador en YPF" puede
+// pedir módulos distintos que "Soldador en PAE".
+model ReglaAsignacion {
+  id            String  @id @default(uuid())
+  puestoId      String  @map("puesto_id")
+  centroCostoId String  @map("centro_costo_id")
+  moduloId      String  @map("modulo_id")
+  // Baja lógica: una regla no se borra, se desactiva (deja de generar obligaciones).
+  activo        Boolean @default(true)
+
+  puesto      Puesto      @relation(fields: [puestoId], references: [id])
+  centroCosto CentroCosto @relation(fields: [centroCostoId], references: [id])
+  modulo      Modulo      @relation(fields: [moduloId], references: [id])
+
+  // Trazabilidad
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  createdBy String?  @map("created_by")
+  updatedBy String?  @map("updated_by")
+
+  // No tiene sentido la misma regla dos veces para el mismo triple. Volver a
+  // agregar una regla dada de baja se resuelve reactivando la fila (activo=true).
+  @@unique([puestoId, centroCostoId, moduloId])
+  @@map("reglas_asignacion")
+}
+
+// Asignacion: obligación concreta de una persona de rendir un módulo. Apunta a
+// Modulo (el contenedor estable), NO a la versión. Nunca se borra — se revoca
+// (revocadaAt): una asignación revocada no cuenta como obligación vigente.
+model Asignacion {
+  id              String  @id @default(uuid())
+  usuarioId       Int     @map("usuario_id")
+  moduloId        String  @map("modulo_id")
+  // Se completa RECIÉN al rendir: deja registro de qué versión concreta se evaluó.
+  // Hoy nadie lo completa (la app tablet sigue mockeada).
+  moduloVersionId String? @map("modulo_version_id")
+
+  origen     OrigenAsignacion @default(AUTOMATICA)
+  // Baja de la obligación. Null = vigente. Nunca se borra la fila (trazabilidad).
+  revocadaAt DateTime?        @map("revocada_at")
+
+  usuario       Usuario        @relation(fields: [usuarioId], references: [id])
+  modulo        Modulo         @relation(fields: [moduloId], references: [id])
+  moduloVersion ModuloVersion? @relation(fields: [moduloVersionId], references: [id])
+
+  // Trazabilidad
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  createdBy String?  @map("created_by")
+  updatedBy String?  @map("updated_by")
+
+  // A lo sumo UNA asignación vigente por (usuario, módulo). Se garantiza con un
+  // índice único PARCIAL (WHERE revocada_at IS NULL) que vive sólo en la migración
+  // — Prisma no expresa WHERE en @@unique (mismo caso que el índice `principal` de
+  // vinculacion_puesto_centro). Blinda la idempotencia de recalcular() y deja
+  // coexistir una asignación revocada vieja + una vigente nueva (recontratación).
+  @@index([usuarioId])
+  @@map("asignaciones")
 }

@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { AsignacionesModule } from './asignaciones/asignaciones.module';
 import { AuthModule } from './auth/auth.module';
 import { CentrosCostoModule } from './centros-costo/centros-costo.module';
 import { EtiquetasModule } from './etiquetas/etiquetas.module';
@@ -27,6 +28,7 @@ import { UsuariosModule } from './usuarios/usuarios.module';
     ModulosModule,
     PuestosModule,
     CentrosCostoModule,
+    AsignacionesModule,
   ],
   controllers: [HealthController],
   providers: [],
