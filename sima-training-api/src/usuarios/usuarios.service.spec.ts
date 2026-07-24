@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { RolUsuario, TipoOrganizacion } from '@prisma/client';
+import { AsignacionesService } from '../asignaciones/asignaciones.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { UsuariosService } from './usuarios.service';
 
@@ -49,6 +50,7 @@ describe('UsuariosService', () => {
     vinculacionPuestoCentro: { deleteMany: jest.Mock };
     $transaction: jest.Mock;
   };
+  let asignaciones: { recalcularEnTx: jest.Mock };
 
   const vinculacionSima = {
     organizacionId: 1,
@@ -70,6 +72,7 @@ describe('UsuariosService', () => {
       vinculacionPuestoCentro: { deleteMany: jest.fn() },
       $transaction: jest.fn((cb: (tx: unknown) => unknown) => cb(prisma)),
     };
+    asignaciones = { recalcularEnTx: jest.fn().mockResolvedValue(undefined) };
 
     // Por defecto: organización INTERNA (acepta cualquier rol) y DNI libre.
     prisma.organizacion.findUnique.mockResolvedValue({
@@ -82,6 +85,7 @@ describe('UsuariosService', () => {
       providers: [
         UsuariosService,
         { provide: PrismaService, useValue: prisma },
+        { provide: AsignacionesService, useValue: asignaciones },
       ],
     }).compile();
 
@@ -276,6 +280,103 @@ describe('UsuariosService', () => {
         },
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  // --- Recálculo automático de asignaciones al cambiar los pares ---
+
+  it('alta sin pares NO abre transacción ni recalcula (camino del import)', async () => {
+    await service.create({
+      nombre: 'Ana',
+      apellido: 'Paz',
+      dni: '30111222',
+      vinculacion: vinculacionSima,
+    });
+
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(asignaciones.recalcularEnTx).not.toHaveBeenCalled();
+  });
+
+  it('alta con pares recalcula en la misma transacción', async () => {
+    prisma.puesto.findMany.mockResolvedValue([{ id: 'p-soldador' }]);
+    prisma.centroCosto.findMany.mockResolvedValue([{ id: 'c-ypf' }]);
+
+    await service.create({
+      nombre: 'Ana',
+      apellido: 'Paz',
+      dni: '30111222',
+      vinculacion: {
+        ...vinculacionSima,
+        pares: [{ puestoId: 'p-soldador', centroCostoId: 'c-ypf' }],
+      },
+    });
+
+    expect(prisma.$transaction).toHaveBeenCalled();
+    // El id sale del usuario recién creado (mock → id 1), y corre sobre el mismo
+    // cliente transaccional (el mock de $transaction pasa `prisma` como tx).
+    expect(asignaciones.recalcularEnTx).toHaveBeenCalledWith(prisma, 1, 'backoffice');
+  });
+
+  it('revivir un usuario dado de baja recalcula SIEMPRE, aunque no traiga pares', async () => {
+    // El chequeo "dado de baja" (deletedAt: { not: null }) encuentra id 5.
+    prisma.usuario.findFirst.mockImplementation(({ where }) =>
+      where.deletedAt && typeof where.deletedAt === 'object'
+        ? Promise.resolve({ id: 5 })
+        : Promise.resolve(null),
+    );
+    prisma.usuario.update.mockResolvedValue(usuarioConVinculacion());
+
+    await service.create({
+      nombre: 'Ana',
+      apellido: 'Paz',
+      dni: '30111222',
+      vinculacion: vinculacionSima, // sin pares
+    });
+
+    // Un revivido puede arrastrar AUTOMATICA de antes de la baja: recalcular
+    // igual, para revocar las que ya no correspondan.
+    expect(asignaciones.recalcularEnTx).toHaveBeenCalledWith(prisma, 5, 'backoffice');
+  });
+
+  it('update con pares dispara el recálculo', async () => {
+    prisma.usuario.findFirst.mockResolvedValue(usuarioConVinculacion());
+    prisma.usuario.update.mockResolvedValue(usuarioConVinculacion());
+    prisma.puesto.findMany.mockResolvedValue([{ id: 'p-soldador' }]);
+    prisma.centroCosto.findMany.mockResolvedValue([{ id: 'c-ypf' }]);
+
+    await service.update(1, {
+      vinculacion: {
+        pares: [{ puestoId: 'p-soldador', centroCostoId: 'c-ypf' }],
+      },
+    });
+
+    expect(asignaciones.recalcularEnTx).toHaveBeenCalledWith(prisma, 1, 'backoffice');
+  });
+
+  it('update de solo el nombre NO recalcula', async () => {
+    prisma.usuario.findFirst.mockResolvedValue(usuarioConVinculacion());
+    prisma.usuario.update.mockResolvedValue(usuarioConVinculacion());
+
+    await service.update(1, { nombre: 'Ana María' });
+
+    expect(asignaciones.recalcularEnTx).not.toHaveBeenCalled();
+  });
+
+  it('update de solo el rol NO recalcula (el rol no es input del recálculo)', async () => {
+    prisma.usuario.findFirst.mockResolvedValue(usuarioConVinculacion());
+    prisma.usuario.update.mockResolvedValue(usuarioConVinculacion());
+
+    await service.update(1, { vinculacion: { rol: RolUsuario.COORDINADOR } });
+
+    expect(asignaciones.recalcularEnTx).not.toHaveBeenCalled();
+  });
+
+  it('update con `pares: []` (vaciar) recalcula, para revocar las que sobran', async () => {
+    prisma.usuario.findFirst.mockResolvedValue(usuarioConVinculacion());
+    prisma.usuario.update.mockResolvedValue(usuarioConVinculacion());
+
+    await service.update(1, { vinculacion: { pares: [] } });
+
+    expect(asignaciones.recalcularEnTx).toHaveBeenCalledWith(prisma, 1, 'backoffice');
   });
 
   // --- Listado ---

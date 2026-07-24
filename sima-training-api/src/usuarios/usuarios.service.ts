@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma, RolUsuario } from '@prisma/client';
+import { AsignacionesService } from '../asignaciones/asignaciones.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateUsuarioDto, ParPuestoCentroDto } from './dto/create-usuario.dto';
 import { FindAllUsuariosDto } from './dto/find-all-usuarios.dto';
@@ -29,7 +30,10 @@ type UsuarioConVinculacion = Prisma.UsuarioGetPayload<{
 
 @Injectable()
 export class UsuariosService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly asignaciones: AsignacionesService,
+  ) {}
 
   // `actor` va a created_by/updated_by: 'backoffice' en el ABM, 'import' cuando
   // la llama ImportService.
@@ -84,28 +88,51 @@ export class UsuariosService {
           },
           include: USUARIO_INCLUDE,
         });
+        // Recalcular SIEMPRE (no gateado por pares): un usuario revivido puede
+        // arrastrar Asignacion AUTOMATICA vigentes de antes de la baja —
+        // remove() sólo setea deletedAt, no revoca asignaciones—, así que
+        // aunque reviva sin pares hay que revocar las que ya no correspondan.
+        await this.asignaciones.recalcularEnTx(tx, dadoDeBaja.id, actor);
         return this.aRespuesta(revivido);
       });
     }
 
     await this.assertDniDisponible(dto.dni);
-    const creado = await this.prisma.usuario.create({
-      data: {
-        ...identidad,
-        datos: datosJson,
-        createdBy: actor,
-        vinculacion: {
-          create: {
-            organizacionId: vinculacion.organizacionId,
-            rol: vinculacion.rol,
-            createdBy: actor,
-            puestosCentros: { create: puestosCentros },
-          },
+    const data = {
+      ...identidad,
+      datos: datosJson,
+      createdBy: actor,
+      vinculacion: {
+        create: {
+          organizacionId: vinculacion.organizacionId,
+          rol: vinculacion.rol,
+          createdBy: actor,
+          puestosCentros: { create: puestosCentros },
         },
       },
-      include: USUARIO_INCLUDE,
+    } satisfies Prisma.UsuarioCreateInput;
+
+    // Sin pares no hay nada que derivar en un usuario nuevo (requeridos = ∅,
+    // vigentes = ∅): create plano, sin transacción ni recálculo. Es el camino
+    // del import de nómina, que siempre crea sin pares.
+    if (!pares.length) {
+      const creado = await this.prisma.usuario.create({
+        data,
+        include: USUARIO_INCLUDE,
+      });
+      return this.aRespuesta(creado);
+    }
+
+    // Con pares: crear y recalcular en la MISMA transacción, para que las
+    // AUTOMATICA queden consistentes con los pares (o no quede nada — atómico).
+    return this.prisma.$transaction(async (tx) => {
+      const creado = await tx.usuario.create({
+        data,
+        include: USUARIO_INCLUDE,
+      });
+      await this.asignaciones.recalcularEnTx(tx, creado.id, actor);
+      return this.aRespuesta(creado);
     });
-    return this.aRespuesta(creado);
   }
 
   async findAll(query: FindAllUsuariosDto) {
@@ -249,6 +276,13 @@ export class UsuariosService {
         },
         include: USUARIO_INCLUDE,
       });
+      // Recalcular sólo si el request tocó los pares (`pares` presente →
+      // puestosCentros definido). El input del recálculo son los pares y las
+      // reglas: cambiar sólo nombre / rol / organización no lo dispara. Incluye
+      // `pares: []` (vaciar) → sí recalcula, para revocar las que sobran.
+      if (puestosCentros !== undefined) {
+        await this.asignaciones.recalcularEnTx(tx, id, actor);
+      }
       return this.aRespuesta(actualizado);
     });
   }

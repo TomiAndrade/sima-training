@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { RolUsuario, TipoOrganizacion } from '@prisma/client';
 import { Workbook } from 'exceljs';
+import { AsignacionesService } from '../asignaciones/asignaciones.service';
 import { ModulosService } from '../modulos/modulos.service';
 import { PreguntasService } from '../preguntas/preguntas.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -59,6 +60,9 @@ describe('ImportService — usuarios', () => {
         { provide: PrismaService, useValue: prisma },
         { provide: PreguntasService, useValue: {} },
         { provide: ModulosService, useValue: {} },
+        // El import crea usuarios sin pares → recalcularEnTx no llega a
+        // invocarse, pero UsuariosService lo necesita para resolver el DI.
+        { provide: AsignacionesService, useValue: { recalcularEnTx: jest.fn() } },
       ],
     }).compile();
 
