@@ -4,7 +4,10 @@ import Button from '../../components/Button'
 import Modal from '../../components/Modal'
 import { usuariosApi } from '../api/usuarios'
 import { organizacionesApi } from '../api/organizaciones'
+import { puestosApi } from '../api/puestos'
+import { centrosCostoApi } from '../api/centrosCosto'
 import ImportUsuariosModal from '../components/ImportUsuariosModal'
+import ParesPuestoCentro from '../components/ParesPuestoCentro'
 
 const ROLES = ['ADMINISTRADOR', 'COORDINADOR', 'ALUMNO']
 
@@ -43,24 +46,37 @@ const emptyForm = {
 export default function Usuarios() {
   const [usuarios, setUsuarios] = useState([])
   const [organizaciones, setOrganizaciones] = useState([])
+  const [puestos, setPuestos] = useState([])
+  const [centrosCosto, setCentrosCosto] = useState([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(null)
   const [tab, setTab] = useState('todos')
 
   const [modal, setModal] = useState(null)
   const [form, setForm] = useState(emptyForm)
+  const [pares, setPares] = useState([])
+  const [paresTouched, setParesTouched] = useState(false)
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState(null)
   const [importOpen, setImportOpen] = useState(false)
   const [search, setSearch] = useState('')
 
   const fetchAll = async () => {
-    const [us, orgs] = await Promise.all([
+    const [us, orgs, pue, centros] = await Promise.all([
       usuariosApi.list(),
       organizacionesApi.list(),
+      puestosApi.list(),
+      centrosCostoApi.list(),
     ])
     setUsuarios(us)
     setOrganizaciones(orgs)
+    setPuestos(pue)
+    setCentrosCosto(centros)
+  }
+
+  const handleParesChange = (newPares) => {
+    setPares(newPares)
+    setParesTouched(true)
   }
 
   const loadData = async () => {
@@ -105,6 +121,8 @@ export default function Usuarios() {
       rol: defaultRolParaTab(tab),
       organizacionId: defaultOrg,
     })
+    setPares([])
+    setParesTouched(false)
     setFormError(null)
     setModal({ mode: 'create' })
   }
@@ -122,11 +140,41 @@ export default function Usuarios() {
       puesto: datos.puesto ?? '',
       sector: datos.sector ?? '',
     })
+    setPares(
+      (usuario.vinculacion?.pares ?? []).map((par) => ({
+        puestoId: par.puesto.id,
+        centroCostoId: par.centroCosto.id,
+        principal: par.principal,
+      })),
+    )
+    setParesTouched(false)
     setFormError(null)
     setModal({ mode: 'edit', data: usuario })
   }
 
-  const buildPayload = () => {
+  // Valida los pares en memoria y devuelve el array final ordenado (el
+  // principal primero: el backend deriva `principal` de la posición 0, no de
+  // un campo). Si no hay ninguno marcado, el primero se toma como principal.
+  const validarPares = () => {
+    for (const par of pares) {
+      if (!par.puestoId || !par.centroCostoId) {
+        return { error: 'Completá puesto y centro de costo en todos los pares, o quitá la fila' }
+      }
+    }
+    const claves = new Set(pares.map((p) => `${p.puestoId}|${p.centroCostoId}`))
+    if (claves.size !== pares.length) {
+      return { error: 'Hay pares de puesto y centro de costo repetidos' }
+    }
+    if (pares.length === 0) return { pares: [] }
+    const conPrincipal = pares.some((p) => p.principal)
+      ? pares
+      : pares.map((p, i) => ({ ...p, principal: i === 0 }))
+    const principal = conPrincipal.find((p) => p.principal)
+    const resto = conPrincipal.filter((p) => p !== principal)
+    return { pares: [principal, ...resto] }
+  }
+
+  const buildPayload = (paresFinal) => {
     const payload = {
       nombre: form.nombre.trim(),
       apellido: form.apellido.trim(),
@@ -137,6 +185,16 @@ export default function Usuarios() {
       },
     }
     if (form.email.trim()) payload.email = form.email.trim()
+
+    // Los pares se mandan siempre al crear (no hay estado previo que
+    // preservar); al editar, solo si el usuario tocó la sección — mandar el
+    // campo de más pisaría el set completo con lo que había al abrir el form.
+    if (modal.mode === 'create' || paresTouched) {
+      payload.vinculacion.pares = paresFinal.map(({ puestoId, centroCostoId }) => ({
+        puestoId,
+        centroCostoId,
+      }))
+    }
 
     // Datos de nómina, solo para alumnos.
     if (form.rol === 'ALUMNO') {
@@ -154,13 +212,19 @@ export default function Usuarios() {
       setFormError('Nombre, apellido y DNI son obligatorios')
       return
     }
+    const paresValidacion = validarPares()
+    if (paresValidacion.error) {
+      setFormError(paresValidacion.error)
+      return
+    }
     setSaving(true)
     setFormError(null)
     try {
+      const payload = buildPayload(paresValidacion.pares)
       if (modal.mode === 'create') {
-        await usuariosApi.create(buildPayload())
+        await usuariosApi.create(payload)
       } else {
-        await usuariosApi.update(modal.data.id, buildPayload())
+        await usuariosApi.update(modal.data.id, payload)
       }
       setModal(null)
       await loadData()
@@ -409,6 +473,18 @@ export default function Usuarios() {
                 </option>
               ))}
             </select>
+          </div>
+
+          <div className="border-t border-slate-200 pt-4 space-y-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+              Puestos y centros de costo
+            </p>
+            <ParesPuestoCentro
+              pares={pares}
+              onChange={handleParesChange}
+              puestos={puestos}
+              centrosCosto={centrosCosto}
+            />
           </div>
 
           {isAlumnoForm && (
