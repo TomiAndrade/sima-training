@@ -1,5 +1,6 @@
 import { NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AsignacionesService } from './asignaciones.service';
 
@@ -160,9 +161,29 @@ describe('AsignacionesService.recalcular', () => {
     const res = await service.recalcular(1);
 
     expect(res).toEqual({ creadas: 0, revocadas: 0 });
-    expect(prisma.$transaction).not.toHaveBeenCalled();
+    // recalcular() público envuelve todo en una transacción (para que reads +
+    // writes sean atómicos), así que $transaction se llama aunque no haya nada
+    // que escribir. Lo idempotente es que no cree ni revoque.
     expect(prisma.asignacion.createMany).not.toHaveBeenCalled();
     expect(prisma.asignacion.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('recalcularEnTx corre sobre el cliente provisto sin abrir otra transacción', async () => {
+    // Camino embebido: el ABM de usuarios ya está dentro de una transacción y
+    // pasa su `tx`; recalcularEnTx NO debe abrir una anidada.
+    prisma.vinculacionPuestoCentro.findMany.mockResolvedValue([]);
+    prisma.asignacion.findMany.mockResolvedValue([
+      vigente('a1', 'm1', 'AUTOMATICA'),
+    ]);
+    prisma.asignacion.updateMany.mockResolvedValue({ count: 1 });
+
+    const res = await service.recalcularEnTx(
+      prisma as unknown as Prisma.TransactionClient,
+      1,
+    );
+
+    expect(res).toEqual({ creadas: 0, revocadas: 1 });
+    expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
   it('lanza NotFound si el usuario no existe o está dado de baja', async () => {

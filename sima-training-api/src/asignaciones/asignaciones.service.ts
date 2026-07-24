@@ -76,16 +76,33 @@ export class AsignacionesService {
   }
 
   // Recalcula las asignaciones AUTOMATICA de una persona a partir de sus pares
-  // (puesto, centro) activos y las reglas vigentes. Síncrono e idempotente:
+  // (puesto, centro) activos y las reglas vigentes. Wrapper que abre su propia
+  // transacción y delega en recalcularEnTx. Es el punto de entrada del endpoint
+  // standalone; para engancharse a una transacción ya abierta (p. ej. el ABM de
+  // usuarios cuando reemplaza los pares) se llama recalcularEnTx con el `tx`.
+  async recalcular(usuarioId: number, actor = 'backoffice') {
+    return this.prisma.$transaction((tx) =>
+      this.recalcularEnTx(tx, usuarioId, actor),
+    );
+  }
+
+  // Igual que recalcular() pero sobre el cliente transaccional que provee el
+  // caller, para correr en la MISMA transacción que cambió los pares: así el
+  // recálculo ve los pares nuevos y, si algo falla, se revierte todo junto (no
+  // quedan pares nuevos con asignaciones viejas). Síncrono e idempotente:
   //   - crea las AUTOMATICA que faltan (unión de módulos de todos los pares),
   //   - revoca las AUTOMATICA que ya no corresponden a ningún par activo,
   //   - NUNCA toca las MANUAL.
   // Correrlo dos veces seguidas no crea duplicados ni revoca de más.
-  async recalcular(usuarioId: number, actor = 'backoffice') {
-    await this.assertUsuarioExiste(usuarioId);
+  async recalcularEnTx(
+    tx: Prisma.TransactionClient,
+    usuarioId: number,
+    actor = 'backoffice',
+  ) {
+    await this.assertUsuarioExiste(usuarioId, tx);
 
     // 1. Pares (puesto, centro) ACTIVOS de la vinculación (no dada de baja).
-    const pares = await this.prisma.vinculacionPuestoCentro.findMany({
+    const pares = await tx.vinculacionPuestoCentro.findMany({
       where: {
         activo: true,
         vinculacion: { usuarioId, deletedAt: null },
@@ -98,7 +115,7 @@ export class AsignacionesService {
     //    sola asignación. Sin pares no hay nada requerido (evita un OR: []).
     const requeridos = new Set<string>();
     if (pares.length) {
-      const reglas = await this.prisma.reglaAsignacion.findMany({
+      const reglas = await tx.reglaAsignacion.findMany({
         where: {
           activo: true,
           OR: pares.map((par) => ({
@@ -115,7 +132,7 @@ export class AsignacionesService {
     const aprobados = await this.modulosAprobados(usuarioId);
 
     // 4. Asignaciones vigentes actuales.
-    const vigentes = await this.prisma.asignacion.findMany({
+    const vigentes = await tx.asignacion.findMany({
       where: { usuarioId, revocadaAt: null },
       select: { id: true, moduloId: true, origen: true },
     });
@@ -140,24 +157,22 @@ export class AsignacionesService {
     }
 
     const ahora = new Date();
-    await this.prisma.$transaction(async (tx) => {
-      if (aCrear.length) {
-        await tx.asignacion.createMany({
-          data: aCrear.map((moduloId) => ({
-            usuarioId,
-            moduloId,
-            origen: 'AUTOMATICA' as const,
-            createdBy: actor,
-          })),
-        });
-      }
-      if (aRevocar.length) {
-        await tx.asignacion.updateMany({
-          where: { id: { in: aRevocar.map((a) => a.id) } },
-          data: { revocadaAt: ahora, updatedBy: actor },
-        });
-      }
-    });
+    if (aCrear.length) {
+      await tx.asignacion.createMany({
+        data: aCrear.map((moduloId) => ({
+          usuarioId,
+          moduloId,
+          origen: 'AUTOMATICA' as const,
+          createdBy: actor,
+        })),
+      });
+    }
+    if (aRevocar.length) {
+      await tx.asignacion.updateMany({
+        where: { id: { in: aRevocar.map((a) => a.id) } },
+        data: { revocadaAt: ahora, updatedBy: actor },
+      });
+    }
 
     return { creadas: aCrear.length, revocadas: aRevocar.length };
   }
@@ -176,8 +191,11 @@ export class AsignacionesService {
     return new Set();
   }
 
-  private async assertUsuarioExiste(usuarioId: number) {
-    const usuario = await this.prisma.usuario.findFirst({
+  private async assertUsuarioExiste(
+    usuarioId: number,
+    client: Prisma.TransactionClient = this.prisma,
+  ) {
+    const usuario = await client.usuario.findFirst({
       where: { id: usuarioId, deletedAt: null },
       select: { id: true },
     });
