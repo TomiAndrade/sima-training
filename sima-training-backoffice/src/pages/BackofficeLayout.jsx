@@ -1,9 +1,10 @@
-const SIMA_CHECK_PAGES = new Set(['sima-check-overview', 'training-modules', 'questions', 'training-assignments'])
+const SIMA_CHECK_PAGES = new Set(['sima-check-overview', 'training-modules', 'questions', 'assignment-rules', 'training-assignments'])
 
 const SIMA_CHECK_TABS = [
   { id: 'sima-check-overview',  label: 'Resumen' },
   { id: 'training-modules',     label: 'Módulos' },
   { id: 'questions',            label: 'Preguntas' },
+  { id: 'assignment-rules',     label: 'Reglas' },
   { id: 'training-assignments', label: 'Asignaciones' },
 ]
 

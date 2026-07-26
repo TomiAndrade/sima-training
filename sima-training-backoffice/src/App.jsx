@@ -9,6 +9,7 @@ import Overview from './sima-check/pages/Overview'
 import TrainingModules from './sima-check/pages/TrainingModules'
 import TrainingAssignments from './sima-check/pages/TrainingAssignments'
 import Questions from './sima-check/pages/Questions'
+import ReglasAsignacion from './core/pages/ReglasAsignacion'
 
 const PAGES = {
   dashboard: Dashboard,
@@ -19,6 +20,7 @@ const PAGES = {
   'sima-check-overview': Overview,
   'training-modules': TrainingModules,
   questions: Questions,
+  'assignment-rules': ReglasAsignacion,
   'training-assignments': TrainingAssignments,
 }
 
