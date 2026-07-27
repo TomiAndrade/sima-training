@@ -47,9 +47,6 @@ const emptyForm = {
   email: '',
   rol: 'COORDINADOR',
   organizacionId: '',
-  legajo: '',
-  puesto: '',
-  sector: '',
 }
 
 export default function Usuarios() {
@@ -121,8 +118,6 @@ export default function Usuarios() {
       )
     })
 
-  const isAlumnoForm = form.rol === 'ALUMNO'
-
   const openCreate = () => {
     const defaultOrg = organizaciones[0]?.id ?? ''
     setForm({
@@ -137,7 +132,6 @@ export default function Usuarios() {
   }
 
   const openEdit = (usuario) => {
-    const datos = usuario.datos ?? {}
     setForm({
       nombre: usuario.nombre ?? '',
       apellido: usuario.apellido ?? '',
@@ -145,9 +139,6 @@ export default function Usuarios() {
       email: usuario.email ?? '',
       rol: usuario.vinculacion?.rol ?? 'COORDINADOR',
       organizacionId: usuario.vinculacion?.organizacion?.id ?? '',
-      legajo: datos.legajo ?? '',
-      puesto: datos.puesto ?? '',
-      sector: datos.sector ?? '',
     })
     setPares(
       (usuario.vinculacion?.pares ?? []).map((par) => ({
@@ -205,14 +196,6 @@ export default function Usuarios() {
       }))
     }
 
-    // Datos de nómina, solo para alumnos.
-    if (form.rol === 'ALUMNO') {
-      const datos = {}
-      if (form.legajo.trim()) datos.legajo = form.legajo.trim()
-      if (form.puesto.trim()) datos.puesto = form.puesto.trim()
-      if (form.sector.trim()) datos.sector = form.sector.trim()
-      payload.datos = datos
-    }
     return payload
   }
 
@@ -495,47 +478,6 @@ export default function Usuarios() {
               centrosCosto={centrosCosto}
             />
           </div>
-
-          {isAlumnoForm && (
-            <div className="border-t border-slate-200 pt-4 space-y-4">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Datos de nómina</p>
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-slate-700 text-sm font-medium mb-1">
-                    Legajo <span className="text-slate-400 font-normal">(opcional)</span>
-                  </label>
-                  <input
-                    className="w-full bg-white border border-slate-300 rounded px-3 py-2 text-slate-900 text-sm font-mono focus:outline-none focus:border-red-600"
-                    value={form.legajo}
-                    onChange={(e) => setForm((f) => ({ ...f, legajo: e.target.value }))}
-                    placeholder="EJ-4521"
-                  />
-                </div>
-                <div>
-                  <label className="block text-slate-700 text-sm font-medium mb-1">
-                    Puesto <span className="text-slate-400 font-normal">(opcional)</span>
-                  </label>
-                  <input
-                    className="w-full bg-white border border-slate-300 rounded px-3 py-2 text-slate-900 text-sm focus:outline-none focus:border-red-600"
-                    value={form.puesto}
-                    onChange={(e) => setForm((f) => ({ ...f, puesto: e.target.value }))}
-                    placeholder="Operador de Planta"
-                  />
-                </div>
-                <div>
-                  <label className="block text-slate-700 text-sm font-medium mb-1">
-                    Sector <span className="text-slate-400 font-normal">(opcional)</span>
-                  </label>
-                  <input
-                    className="w-full bg-white border border-slate-300 rounded px-3 py-2 text-slate-900 text-sm focus:outline-none focus:border-red-600"
-                    value={form.sector}
-                    onChange={(e) => setForm((f) => ({ ...f, sector: e.target.value }))}
-                    placeholder="Producción"
-                  />
-                </div>
-              </div>
-            </div>
-          )}
         </div>
       </Modal>
 

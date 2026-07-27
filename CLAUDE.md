@@ -314,7 +314,7 @@ sima-check-app/src/
 - **Monolito modular por dominio**, no microservicios (un solo deploy). Cada entidad futura es un módulo NestJS nuevo, no un cambio transversal.
 - **`Usuario` es una sola entidad** para toda persona. Unifica `User` + `Employee` del prototipo. El rol vivió transitoriamente en `Usuario` y ya se movió a `Vinculacion` (ver Sprint 5).
 - **Trazabilidad** (`created_at/updated_at/created_by/updated_by`) y **soft-delete** (`deleted_at`) desde el día 1 — barato ahora, caro de retrofittear.
-- **`datos` (jsonb)** en `Usuario` para nómina flexible hasta cerrar el mapeo del Excel real. El **mapeo de columnas del import queda abierto a propósito**.
+- **`datos` (jsonb)** en `Usuario` para nómina flexible hasta cerrar el mapeo del Excel real. El **mapeo de columnas del import queda abierto a propósito**. Hoy lo escribe únicamente el import de Excel (`legajo`/`puesto`/`sector` + una clave por cada columna no mapeada, ver `src/import/import.service.ts`); el ABM de Usuarios del backoffice ya no lo edita ni lo muestra (se sacó la sección "Datos de nómina" del modal — duplicaba `Puesto`/Centro de Costo con el catálogo real y el PATCH pisaba sin merge las columnas extra que dejaba el import).
 - **Auth básica sin roles**: el backoffice se autentica con credenciales de entorno (`AUTH_USER`/`AUTH_PASSWORD`); el cliente front hace auto-login y cachea el token (no hay pantalla de login todavía). Lecturas abiertas, escrituras con JWT.
 - **Deploy preparado, no activo**: `Dockerfile` + `render.yaml` listos; falta crear la cuenta cloud. CI (`.github/workflows/ci-sima-training.yml`) corre lint + build + test, sin deploy.
 - **Local-first**: PostgreSQL corre en Docker Compose; requiere Docker Desktop.
