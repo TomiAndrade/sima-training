@@ -10,8 +10,9 @@
 > **porqué** de las decisiones; el estado operativo del código está en
 > `sima-training-api/README.md` (Sprint 5) y en `CLAUDE.md`.
 >
-> Lo único pendiente son los **frontends**, que todavía consumen la forma vieja
-> (rol plano en `Usuario`, clasificación), y el ABM de pares en el form de Usuario.
+> Los **frontends también están migrados**: `Usuarios.jsx` consume la forma nueva
+> (rol y organización anidados en `vinculacion`) e incluye el ABM de pares
+> puesto/centro en el form (`ParesPuestoCentro.jsx`).
 >
 > **Revisión de Informática — un cambio sobre el diseño original:** una persona
 > puede estar en **más de un centro de costo**. El centro de costo salió de

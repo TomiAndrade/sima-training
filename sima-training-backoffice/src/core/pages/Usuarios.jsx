@@ -9,11 +9,15 @@ import { centrosCostoApi } from '../api/centrosCosto'
 import ImportUsuariosModal from '../components/ImportUsuariosModal'
 import ParesPuestoCentro from '../components/ParesPuestoCentro'
 
-const ROLES = ['ADMINISTRADOR', 'COORDINADOR', 'ALUMNO']
+// AUDITOR va incluido: es el único rol que la matriz tipo-de-organización ↔ rol
+// permite en una organización CLIENTE, así que sin él el form no puede dar de
+// alta a ningún usuario de un cliente (el backend rechaza todo lo demás con 400).
+const ROLES = ['ADMINISTRADOR', 'COORDINADOR', 'AUDITOR', 'ALUMNO']
 
 const roleBadge = {
   ADMINISTRADOR: 'bg-red-50 text-red-600',
   COORDINADOR:   'bg-blue-50 text-blue-600',
+  AUDITOR:       'bg-violet-50 text-violet-600',
   ALUMNO:        'bg-emerald-50 text-emerald-600',
 }
 
@@ -23,8 +27,13 @@ const TABS = [
   { id: 'operadores', label: 'Operadores' },
 ]
 
+// Los dos buckets son complementarios a propósito: "operadores" es todo lo que
+// no es alumno, no una lista blanca de roles. Con una lista blanca, un rol que
+// no estuviera enumerado (AUDITOR, o cualquiera que se agregue después) quedaba
+// invisible en las dos tabs filtradas y solo aparecía en "Todos", y los contadores
+// no sumaban. Así, Alumnos + Operadores = Todos siempre.
 const esAlumno = (u) => u.vinculacion?.rol === 'ALUMNO'
-const esOperador = (u) => u.vinculacion?.rol === 'ADMINISTRADOR' || u.vinculacion?.rol === 'COORDINADOR'
+const esOperador = (u) => !esAlumno(u)
 const matchTab = (u, t) =>
   t === 'todos' ? true : t === 'alumnos' ? esAlumno(u) : esOperador(u)
 
