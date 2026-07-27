@@ -8,7 +8,14 @@ import { puestosApi } from '../api/puestos'
 import { centrosCostoApi } from '../api/centrosCosto'
 import { modulosApi } from '../api/modulos'
 
-const emptyForm = { centroCostoId: '', puestoIds: new Set(), moduloIds: new Set() }
+const emptyForm = { centroCostoId: '', alcance: 'PUESTO', puestoIds: new Set(), moduloIds: new Set() }
+
+// null y undefined representan el mismo alcance "de centro" (el backend
+// guarda NULL, el body de creación simplemente omite el campo) — se
+// normalizan a un mismo sentinel para que la key de comparación no los
+// trate como casos distintos.
+const puestoKey = (id) => id ?? '∅'
+const reglaKey = (r) => `${puestoKey(r.puestoId)}|${r.centroCostoId}|${r.moduloId}`
 
 export default function ReglasAsignacion() {
   const [reglas, setReglas] = useState([])
@@ -17,6 +24,8 @@ export default function ReglasAsignacion() {
   const [modulos, setModulos] = useState([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(null)
+
+  const [alcanceFiltro, setAlcanceFiltro] = useState('TODOS') // 'TODOS' | 'PUESTO' | 'CENTRO'
 
   const [modal, setModal] = useState(false)
   const [form, setForm] = useState(emptyForm)
@@ -68,9 +77,15 @@ export default function ReglasAsignacion() {
   const centroNombre = useMemo(() => new Map(centrosCosto.map((c) => [c.id, c.nombre])), [centrosCosto])
   const moduloPorId = useMemo(() => new Map(modulos.map((m) => [m.id, m])), [modulos])
 
+  const reglasFiltradas = useMemo(() => {
+    if (alcanceFiltro === 'TODOS') return reglas
+    return reglas.filter((r) => (alcanceFiltro === 'CENTRO' ? r.puestoId == null : r.puestoId != null))
+  }, [reglas, alcanceFiltro])
+
   const openCreate = () => {
     setForm({
       centroCostoId: centrosActivos[0]?.id ?? '',
+      alcance: 'PUESTO',
       puestoIds: new Set(),
       moduloIds: new Set(),
     })
@@ -81,17 +96,18 @@ export default function ReglasAsignacion() {
 
   const closeModal = () => setModal(false)
 
-  // Ergonomía de carga: se elige un centro de costo y uno o varios puestos y
-  // módulos; la pantalla expande eso al producto cartesiano de triples
-  // (puestoId × moduloId, con el mismo centroCostoId) y crea uno por uno. El
-  // triple sigue siendo la unidad atómica del backend — esto es solo azúcar
-  // para no repetir el modal N veces.
+  // Ergonomía de carga: se elige un centro de costo, un alcance y uno o
+  // varios módulos; la pantalla expande eso a la unidad atómica del backend
+  // (una regla por triple) y crea una por una. En alcance "puestos
+  // específicos" además se eligen uno o varios puestos y se arma el
+  // producto cartesiano puestoId × moduloId. En alcance "centro" cada
+  // módulo elegido genera una regla de centro (puestoId ausente).
   const handleSave = async () => {
     if (!form.centroCostoId) {
       setFormError('Elegí un centro de costo')
       return
     }
-    if (form.puestoIds.size === 0) {
+    if (form.alcance === 'PUESTO' && form.puestoIds.size === 0) {
       setFormError('Elegí al menos un puesto')
       return
     }
@@ -108,16 +124,14 @@ export default function ReglasAsignacion() {
       // "nueva" de "ya existía" desde el frontend es comparar contra el
       // listado actual antes de mandar los POST.
       const existentes = await reglasAsignacionApi.list()
-      const existingKeys = new Set(
-        existentes.map((r) => `${r.puestoId}|${r.centroCostoId}|${r.moduloId}`)
-      )
+      const existingKeys = new Set(existentes.map(reglaKey))
 
-      const triples = []
-      for (const puestoId of form.puestoIds) {
-        for (const moduloId of form.moduloIds) {
-          triples.push({ puestoId, centroCostoId: form.centroCostoId, moduloId })
-        }
-      }
+      const triples =
+        form.alcance === 'CENTRO'
+          ? [...form.moduloIds].map((moduloId) => ({ centroCostoId: form.centroCostoId, moduloId }))
+          : [...form.puestoIds].flatMap((puestoId) =>
+              [...form.moduloIds].map((moduloId) => ({ puestoId, centroCostoId: form.centroCostoId, moduloId }))
+            )
 
       const settled = await Promise.allSettled(triples.map((t) => reglasAsignacionApi.create(t)))
 
@@ -126,8 +140,7 @@ export default function ReglasAsignacion() {
       const errors = []
       settled.forEach((res, i) => {
         if (res.status === 'fulfilled') {
-          const key = `${triples[i].puestoId}|${triples[i].centroCostoId}|${triples[i].moduloId}`
-          if (existingKeys.has(key)) existed += 1
+          if (existingKeys.has(reglaKey(triples[i]))) existed += 1
           else created += 1
         } else {
           errors.push(res.reason?.message ?? 'Error desconocido')
@@ -159,7 +172,18 @@ export default function ReglasAsignacion() {
   }
 
   const columns = [
-    { key: 'puestoId', label: 'Puesto', render: (id) => puestoNombre.get(id) ?? '—' },
+    {
+      key: 'puestoId',
+      label: 'Puesto',
+      render: (id) =>
+        id == null ? (
+          <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-600">
+            Todos los puestos
+          </span>
+        ) : (
+          puestoNombre.get(id) ?? '—'
+        ),
+    },
     { key: 'centroCostoId', label: 'Centro de costo', render: (id) => centroNombre.get(id) ?? '—' },
     { key: 'moduloId', label: 'Módulo', render: (id) => moduloLabel(moduloPorId.get(id)) },
     {
@@ -195,15 +219,35 @@ export default function ReglasAsignacion() {
       )}
 
       {!loadError && (
-        <Table
-          columns={columns}
-          data={reglas}
-          actions={(row) => (
-            <Button variant={row.activo ? 'danger' : 'secondary'} size="sm" onClick={() => toggleActivo(row)}>
-              {row.activo ? 'Desactivar' : 'Activar'}
-            </Button>
-          )}
-        />
+        <>
+          <div className="flex items-center gap-2">
+            {[
+              { value: 'TODOS', label: 'Todas' },
+              { value: 'PUESTO', label: 'Por puesto' },
+              { value: 'CENTRO', label: 'De centro' },
+            ].map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => setAlcanceFiltro(opt.value)}
+                className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${
+                  alcanceFiltro === opt.value ? 'bg-red-50 text-red-600 border-red-200' : 'bg-white text-slate-400 border-slate-200'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+          <Table
+            columns={columns}
+            data={reglasFiltradas}
+            actions={(row) => (
+              <Button variant={row.activo ? 'danger' : 'secondary'} size="sm" onClick={() => toggleActivo(row)}>
+                {row.activo ? 'Desactivar' : 'Activar'}
+              </Button>
+            )}
+          />
+        </>
       )}
 
       <Modal
@@ -218,7 +262,12 @@ export default function ReglasAsignacion() {
               <Button variant="secondary" onClick={closeModal} disabled={saving}>Cancelar</Button>
               <Button
                 onClick={handleSave}
-                disabled={saving || !form.centroCostoId || form.puestoIds.size === 0 || form.moduloIds.size === 0}
+                disabled={
+                  saving ||
+                  !form.centroCostoId ||
+                  form.moduloIds.size === 0 ||
+                  (form.alcance === 'PUESTO' && form.puestoIds.size === 0)
+                }
               >
                 {saving ? 'Guardando…' : 'Guardar'}
               </Button>
@@ -261,15 +310,40 @@ export default function ReglasAsignacion() {
               </select>
             </div>
             <div>
-              <label className="block text-slate-700 text-sm font-medium mb-1">Puestos</label>
-              <MultiSelectFilter
-                options={puestosActivos.map((p) => ({ id: p.id, label: p.nombre }))}
-                selectedIds={form.puestoIds}
-                onChange={(ids) => setForm((f) => ({ ...f, puestoIds: ids }))}
-                placeholder="Elegí uno o varios puestos"
-                searchPlaceholder="Buscar puesto..."
-              />
+              <label className="block text-slate-700 text-sm font-medium mb-1">Alcance</label>
+              <div className="flex items-center gap-4">
+                <label className="flex items-center gap-1.5 text-sm text-slate-700">
+                  <input
+                    type="radio"
+                    name="alcance"
+                    checked={form.alcance === 'CENTRO'}
+                    onChange={() => setForm((f) => ({ ...f, alcance: 'CENTRO', puestoIds: new Set() }))}
+                  />
+                  Todo el centro
+                </label>
+                <label className="flex items-center gap-1.5 text-sm text-slate-700">
+                  <input
+                    type="radio"
+                    name="alcance"
+                    checked={form.alcance === 'PUESTO'}
+                    onChange={() => setForm((f) => ({ ...f, alcance: 'PUESTO' }))}
+                  />
+                  Puestos específicos
+                </label>
+              </div>
             </div>
+            {form.alcance === 'PUESTO' && (
+              <div>
+                <label className="block text-slate-700 text-sm font-medium mb-1">Puestos</label>
+                <MultiSelectFilter
+                  options={puestosActivos.map((p) => ({ id: p.id, label: p.nombre }))}
+                  selectedIds={form.puestoIds}
+                  onChange={(ids) => setForm((f) => ({ ...f, puestoIds: ids }))}
+                  placeholder="Elegí uno o varios puestos"
+                  searchPlaceholder="Buscar puesto..."
+                />
+              </div>
+            )}
             <div>
               <label className="block text-slate-700 text-sm font-medium mb-1">Módulos</label>
               <MultiSelectFilter
@@ -280,7 +354,13 @@ export default function ReglasAsignacion() {
                 searchPlaceholder="Buscar módulo..."
               />
             </div>
-            {form.puestoIds.size > 0 && form.moduloIds.size > 0 && (
+            {form.alcance === 'CENTRO' && form.moduloIds.size > 0 && (
+              <p className="text-slate-400 text-xs">
+                Se van a crear hasta {form.moduloIds.size} regla{form.moduloIds.size === 1 ? '' : 's'} de centro
+                ({centroNombre.get(form.centroCostoId) ?? 'centro elegido'} → todos los puestos).
+              </p>
+            )}
+            {form.alcance === 'PUESTO' && form.puestoIds.size > 0 && form.moduloIds.size > 0 && (
               <p className="text-slate-400 text-xs">
                 Se van a crear hasta {form.puestoIds.size * form.moduloIds.size} reglas
                 ({form.puestoIds.size} puesto{form.puestoIds.size === 1 ? '' : 's'} × {form.moduloIds.size} módulo{form.moduloIds.size === 1 ? '' : 's'}).

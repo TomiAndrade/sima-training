@@ -339,21 +339,34 @@ model ModuloVersionPregunta {
   @@map("modulo_version_preguntas")
 }
 
-// ReglaAsignacion: el par (puesto, centro de costo) obliga a rendir un módulo.
-// Apunta a Modulo (el contenedor estable), NO a una ModuloVersion: la obligación
-// es "este módulo", la versión concreta que se rinda se resuelve al momento de
-// rendir. Es el motor de las Asignacion AUTOMATICA (ver AsignacionesService.recalcular):
-// los módulos obligatorios se definen por el PAR EXACTO — "Soldador en YPF" puede
-// pedir módulos distintos que "Soldador en PAE".
+// ReglaAsignacion: qué módulo obliga a rendir. Apunta a Modulo (el contenedor
+// estable), NO a una ModuloVersion: la obligación es "este módulo", la versión
+// concreta que se rinda se resuelve al momento de rendir. Es el motor de las
+// Asignacion AUTOMATICA (ver AsignacionesService.recalcular).
+//
+// Tiene DOS ALCANCES, que conviven:
+//   - puestoId presente → regla por PAR EXACTO: sólo quien ejerce ese puesto en
+//     ese centro. "Soldador en YPF" puede pedir módulos distintos que "Soldador
+//     en PAE" — el par sigue siendo la unidad atómica del dominio.
+//   - puestoId NULL → regla de CENTRO: aplica a TODOS los puestos de ese centro,
+//     la rinde cualquiera con algún par activo ahí (soldador, amolador, lo que sea).
+// Un soldador de Taller alcanzado por las dos recibe los dos módulos, y un módulo
+// pedido por ambas genera UNA sola asignación (recalcular() unifica en un Set).
 model ReglaAsignacion {
   id            String  @id @default(uuid())
-  puestoId      String  @map("puesto_id")
+  // Nullable a propósito: null = regla de centro (ver arriba).
+  puestoId      String? @map("puesto_id")
   centroCostoId String  @map("centro_costo_id")
   moduloId      String  @map("modulo_id")
   // Baja lógica: una regla no se borra, se desactiva (deja de generar obligaciones).
   activo        Boolean @default(true)
 
-  puesto      Puesto      @relation(fields: [puestoId], references: [id])
+  // onDelete explícito: al ser la relación opcional, el default de Prisma pasaría
+  // a SetNull, y eso es peligroso acá — borrar un puesto convertiría en silencio
+  // una regla de par en una regla de CENTRO, aplicándosela a todos los puestos de
+  // ese centro. Restrict mantiene el comportamiento previo (los puestos se dan de
+  // baja con `activo`, no se borran).
+  puesto      Puesto?     @relation(fields: [puestoId], references: [id], onDelete: Restrict)
   centroCosto CentroCosto @relation(fields: [centroCostoId], references: [id])
   modulo      Modulo      @relation(fields: [moduloId], references: [id])
 
@@ -363,8 +376,16 @@ model ReglaAsignacion {
   createdBy String?  @map("created_by")
   updatedBy String?  @map("updated_by")
 
-  // No tiene sentido la misma regla dos veces para el mismo triple. Volver a
-  // agregar una regla dada de baja se resuelve reactivando la fila (activo=true).
+  // No tiene sentido la misma regla dos veces. Volver a agregar una regla dada de
+  // baja se resuelve reactivando la fila (activo=true), no duplicándola.
+  //
+  // Este @@unique cubre EXACTAMENTE las reglas CON puesto: como puesto_id es
+  // nullable y Postgres trata cada NULL como distinto de todos los demás, las
+  // reglas de centro no quedan cubiertas acá. Su unicidad
+  // (un centro + un módulo, una sola regla de centro) la garantiza un índice único
+  // PARCIAL, reglas_asignacion_centro_modulo_sin_puesto, que vive sólo en la
+  // migración — Prisma no expresa WHERE en @@unique (mismo caso que el índice
+  // `principal` de vinculacion_puesto_centro y el de asignación vigente única).
   @@unique([puestoId, centroCostoId, moduloId])
   @@map("reglas_asignacion")
 }

@@ -224,4 +224,121 @@ describe('AsignacionesService.recalcular', () => {
     });
     expect(prisma.asignacion.updateMany).not.toHaveBeenCalled();
   });
+
+  // --- Reglas a NIVEL CENTRO DE COSTO (puestoId null) ---------------------
+
+  it('busca las reglas de centro además de las del par exacto', async () => {
+    // Dos pares en el MISMO centro + uno en otro: los centros se deduplican.
+    prisma.vinculacionPuestoCentro.findMany.mockResolvedValue([
+      par('p-soldador', 'c-taller'),
+      par('p-amolador', 'c-taller'),
+      par('p-soldador', 'c-ypf'),
+    ]);
+    prisma.reglaAsignacion.findMany.mockResolvedValue([]);
+
+    await service.recalcular(1);
+
+    expect(prisma.reglaAsignacion.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          activo: true,
+          OR: [
+            { puestoId: 'p-soldador', centroCostoId: 'c-taller' },
+            { puestoId: 'p-amolador', centroCostoId: 'c-taller' },
+            { puestoId: 'p-soldador', centroCostoId: 'c-ypf' },
+            // La rama de las reglas de centro, con los centros sin repetir.
+            { puestoId: null, centroCostoId: { in: ['c-taller', 'c-ypf'] } },
+          ],
+        },
+      }),
+    );
+  });
+
+  it('una regla de centro le aplica a cualquier puesto de ese centro', async () => {
+    // Un amolador de Taller: ninguna regla por par lo alcanza, sólo la de centro.
+    prisma.vinculacionPuestoCentro.findMany.mockResolvedValue([
+      par('p-amolador', 'c-taller'),
+    ]);
+    prisma.reglaAsignacion.findMany.mockResolvedValue([
+      { moduloId: 'm-basico' },
+    ]);
+    prisma.asignacion.createMany.mockResolvedValue({ count: 1 });
+
+    const res = await service.recalcular(1);
+
+    expect(res).toEqual({ creadas: 1, revocadas: 0 });
+    expect(prisma.asignacion.createMany).toHaveBeenCalledWith({
+      data: [expect.objectContaining({ moduloId: 'm-basico' })],
+    });
+  });
+
+  it('el módulo pedido por una regla de centro Y una de par es UNA sola asignación', async () => {
+    // Soldador de Taller: le pegan las dos reglas y ambas piden Básico, más la
+    // regla de par que pide Soldadura.
+    prisma.vinculacionPuestoCentro.findMany.mockResolvedValue([
+      par('p-soldador', 'c-taller'),
+    ]);
+    prisma.reglaAsignacion.findMany.mockResolvedValue([
+      { moduloId: 'm-basico' }, // regla de centro (null, Taller, Básico)
+      { moduloId: 'm-basico' }, // regla de par (Soldador, Taller, Básico)
+      { moduloId: 'm-soldadura' }, // regla de par (Soldador, Taller, Soldadura)
+    ]);
+    prisma.asignacion.createMany.mockResolvedValue({ count: 2 });
+
+    const res = await service.recalcular(1);
+
+    // Básico entra una sola vez, no dos.
+    expect(res).toEqual({ creadas: 2, revocadas: 0 });
+    expect(prisma.asignacion.createMany).toHaveBeenCalledWith({
+      data: [
+        expect.objectContaining({ moduloId: 'm-basico' }),
+        expect.objectContaining({ moduloId: 'm-soldadura' }),
+      ],
+    });
+  });
+
+  it('revoca la AUTOMATICA de una regla de centro al irse el último par de ese centro', async () => {
+    // Se le sacó el par de Taller y quedó sólo uno en YPF: Taller sale de la
+    // lista de centros y su regla deja de aportar el módulo.
+    prisma.vinculacionPuestoCentro.findMany.mockResolvedValue([
+      par('p-soldador', 'c-ypf'),
+    ]);
+    prisma.reglaAsignacion.findMany.mockResolvedValue([]);
+    prisma.asignacion.findMany.mockResolvedValue([
+      vigente('a1', 'm-basico', 'AUTOMATICA'),
+    ]);
+    prisma.asignacion.updateMany.mockResolvedValue({ count: 1 });
+
+    const res = await service.recalcular(1);
+
+    expect(res).toEqual({ creadas: 0, revocadas: 1 });
+    // c-taller ya no se consulta.
+    expect(prisma.reglaAsignacion.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          OR: expect.arrayContaining([
+            { puestoId: null, centroCostoId: { in: ['c-ypf'] } },
+          ]),
+        }),
+      }),
+    );
+  });
+
+  it('no duplica ni revoca una MANUAL del módulo que pide una regla de centro', async () => {
+    prisma.vinculacionPuestoCentro.findMany.mockResolvedValue([
+      par('p-amolador', 'c-taller'),
+    ]);
+    prisma.reglaAsignacion.findMany.mockResolvedValue([
+      { moduloId: 'm-basico' },
+    ]);
+    prisma.asignacion.findMany.mockResolvedValue([
+      vigente('a1', 'm-basico', 'MANUAL'),
+    ]);
+
+    const res = await service.recalcular(1);
+
+    expect(res).toEqual({ creadas: 0, revocadas: 0 });
+    expect(prisma.asignacion.createMany).not.toHaveBeenCalled();
+    expect(prisma.asignacion.updateMany).not.toHaveBeenCalled();
+  });
 });

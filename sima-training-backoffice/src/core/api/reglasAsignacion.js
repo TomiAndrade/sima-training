@@ -6,6 +6,7 @@ function buildQuery(params) {
   if (params.centroCostoId) qs.set('centroCostoId', params.centroCostoId)
   if (params.moduloId) qs.set('moduloId', params.moduloId)
   if (params.activo !== undefined) qs.set('activo', String(params.activo))
+  if (params.alcance) qs.set('alcance', params.alcance)
   const s = qs.toString()
   return s ? `?${s}` : ''
 }

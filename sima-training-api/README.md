@@ -118,9 +118,9 @@ Ver [`.env.example`](.env.example). Las principales:
 | `POST` | `/asignaciones` | JWT | Alta MANUAL de una asignación puntual. 409 si ya hay una vigente de ese módulo para esa persona (índice único parcial) |
 | `POST` | `/asignaciones/recalcular/:usuarioId` | JWT | Deriva las AUTOMATICA a partir de los pares (puesto, centro) activos y las reglas vigentes: crea las que faltan y revoca las que ya no corresponden. Nunca toca las MANUAL. Devuelve `{ creadas, revocadas }`. **No se dispara solo** — hay que llamarlo explícitamente después de editar los pares de un usuario |
 | `PATCH` | `/asignaciones/:id/revocar` | JWT | Revoca una asignación (nunca se borra). Idempotente |
-| `GET` | `/reglas-asignacion` | — | Lista reglas, filtros `?puestoId=`/`?centroCostoId=`/`?moduloId=`/`?activo=` |
-| `POST` | `/reglas-asignacion` | JWT | Alta de una regla (puesto + centro de costo → módulo obligatorio). Si el triple ya existe dado de baja, la reactiva en vez de duplicar |
-| `PATCH` | `/reglas-asignacion/:id` | JWT | Activa/desactiva la regla (`{ activo }`). El triple puesto/centro/módulo no se edita: para cambiarlo se crea otra regla |
+| `GET` | `/reglas-asignacion` | — | Lista reglas, filtros `?puestoId=`/`?centroCostoId=`/`?moduloId=`/`?activo=`/`?alcance=PUESTO\|CENTRO`. `?puestoId=` es **literal**: trae sólo las de ese puesto, no las de centro |
+| `POST` | `/reglas-asignacion` | JWT | Alta de una regla. Con `puestoId` → regla por par exacto; **sin `puestoId` → regla de CENTRO** (aplica a todos los puestos de ese centro). Si la misma regla ya existe dada de baja, la reactiva en vez de duplicar |
+| `PATCH` | `/reglas-asignacion/:id` | JWT | Activa/desactiva la regla (`{ activo }`). El alcance (puesto/centro) y el módulo no se editan: para cambiarlos se crea otra regla |
 
 Las **lecturas** (`GET`) son abiertas; las **escrituras** requieren `Authorization: Bearer <token>`.
 
@@ -221,9 +221,10 @@ prisma/
 
 ## Decisiones de diseño (Asignaciones automáticas por par)
 
-- **`ReglaAsignacion` es el motor de las `Asignacion` automáticas**: el par exacto (puesto, centro de costo) —no cada eje por separado— obliga a rendir un módulo. Apunta a `Modulo` (el contenedor), no a una `ModuloVersion`: la obligación es "este módulo", la versión concreta se resuelve al rendir.
+- **`ReglaAsignacion` es el motor de las `Asignacion` automáticas**, y tiene **dos alcances que conviven**: con `puestoId` es una regla por **par exacto** (puesto, centro de costo) —"Soldador en YPF" puede pedir módulos distintos que "Soldador en PAE"—; con `puestoId` en **null** es una regla de **centro de costo**, que aplica a todos los puestos de ese centro (la rinde cualquiera con algún par activo ahí). Un soldador de Taller alcanzado por las dos recibe los dos módulos. Apunta a `Modulo` (el contenedor), no a una `ModuloVersion`: la obligación es "este módulo", la versión concreta se resuelve al rendir.
+- **La unicidad de las reglas vive en dos índices.** El `@@unique([puestoId, centroCostoId, moduloId])` cubre las reglas **con** puesto; como Postgres trata cada NULL como distinto, no alcanza para las de centro, así que un índice único **parcial** (`WHERE puesto_id IS NULL` sobre centro+módulo) las cubre desde la migración SQL. Tiene que ser parcial: un UNIQUE común sobre (centro, módulo) impediría que la regla de centro y las de par del mismo centro+módulo coexistan.
 - **`Asignacion` nunca se borra, se revoca** (`revocadaAt`). Un índice único parcial (`WHERE revocada_at IS NULL`) garantiza a lo sumo una vigente por (usuario, módulo) — vive solo en la migración SQL, Prisma no lo expresa.
-- **`recalcular()` es síncrono, idempotente y nunca toca las `MANUAL`.** Compara los pares activos + reglas vigentes contra las asignaciones vigentes actuales: crea las AUTOMATICA que faltan, revoca las AUTOMATICA que ya no corresponden a ningún par activo. Correrlo dos veces seguidas no duplica ni revoca de más.
+- **`recalcular()` es síncrono, idempotente y nunca toca las `MANUAL`.** Compara las reglas vigentes que le aplican a la persona —las de sus pares activos **más** las de centro de los centros donde tiene algún par activo— contra sus asignaciones vigentes: crea las AUTOMATICA que faltan, revoca las AUTOMATICA que ya no pide ninguna regla. Un módulo pedido por una regla de centro **y** una de par es **una sola** asignación (los módulos requeridos se unifican en un `Set`). Correrlo dos veces seguidas no duplica ni revoca de más.
 - **No se dispara solo.** Hoy es un endpoint aparte (`POST /asignaciones/recalcular/:usuarioId`) — editar los pares de una persona desde `/usuarios` no lo invoca todavía (ver pendientes).
 - **El registro de aprobaciones es un hueco explícito**, aislado en `AsignacionesService.modulosAprobados()` (devuelve un Set vacío hasta que exista la entidad de aprobaciones — bloqueado por la conexión de la app tablet). `moduloVersionId` en `Asignacion` queda `null` por el mismo motivo.
 
