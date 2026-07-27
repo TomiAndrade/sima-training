@@ -2,12 +2,13 @@ import { useEffect, useMemo, useState } from 'react'
 import Table from '../../components/Table'
 import Button from '../../components/Button'
 import Modal from '../../components/Modal'
+import MultiSelectFilter from '../../components/MultiSelectFilter'
 import { reglasAsignacionApi } from '../api/reglasAsignacion'
 import { puestosApi } from '../api/puestos'
 import { centrosCostoApi } from '../api/centrosCosto'
 import { modulosApi } from '../api/modulos'
 
-const emptyForm = { puestoId: '', centroCostoId: '', moduloId: '' }
+const emptyForm = { centroCostoId: '', puestoIds: new Set(), moduloIds: new Set() }
 
 export default function ReglasAsignacion() {
   const [reglas, setReglas] = useState([])
@@ -21,6 +22,7 @@ export default function ReglasAsignacion() {
   const [form, setForm] = useState(emptyForm)
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState(null)
+  const [result, setResult] = useState(null) // null | { created, existed, failed, errors }
 
   const fetchAll = async () => {
     const [regs, pue, centros, mods] = await Promise.all([
@@ -68,24 +70,71 @@ export default function ReglasAsignacion() {
 
   const openCreate = () => {
     setForm({
-      puestoId: puestosActivos[0]?.id ?? '',
       centroCostoId: centrosActivos[0]?.id ?? '',
-      moduloId: modulosActivos[0]?.id ?? '',
+      puestoIds: new Set(),
+      moduloIds: new Set(),
     })
     setFormError(null)
+    setResult(null)
     setModal(true)
   }
 
+  const closeModal = () => setModal(false)
+
+  // Ergonomía de carga: se elige un centro de costo y uno o varios puestos y
+  // módulos; la pantalla expande eso al producto cartesiano de triples
+  // (puestoId × moduloId, con el mismo centroCostoId) y crea uno por uno. El
+  // triple sigue siendo la unidad atómica del backend — esto es solo azúcar
+  // para no repetir el modal N veces.
   const handleSave = async () => {
-    if (!form.puestoId || !form.centroCostoId || !form.moduloId) {
-      setFormError('Elegí puesto, centro de costo y módulo')
+    if (!form.centroCostoId) {
+      setFormError('Elegí un centro de costo')
       return
     }
+    if (form.puestoIds.size === 0) {
+      setFormError('Elegí al menos un puesto')
+      return
+    }
+    if (form.moduloIds.size === 0) {
+      setFormError('Elegí al menos un módulo')
+      return
+    }
+
     setSaving(true)
     setFormError(null)
     try {
-      await reglasAsignacionApi.create(form)
-      setModal(false)
+      // El POST reactiva un triple ya existente sin indicar en la respuesta
+      // si lo creó o lo reactivó, así que la única forma de distinguir
+      // "nueva" de "ya existía" desde el frontend es comparar contra el
+      // listado actual antes de mandar los POST.
+      const existentes = await reglasAsignacionApi.list()
+      const existingKeys = new Set(
+        existentes.map((r) => `${r.puestoId}|${r.centroCostoId}|${r.moduloId}`)
+      )
+
+      const triples = []
+      for (const puestoId of form.puestoIds) {
+        for (const moduloId of form.moduloIds) {
+          triples.push({ puestoId, centroCostoId: form.centroCostoId, moduloId })
+        }
+      }
+
+      const settled = await Promise.allSettled(triples.map((t) => reglasAsignacionApi.create(t)))
+
+      let created = 0
+      let existed = 0
+      const errors = []
+      settled.forEach((res, i) => {
+        if (res.status === 'fulfilled') {
+          const key = `${triples[i].puestoId}|${triples[i].centroCostoId}|${triples[i].moduloId}`
+          if (existingKeys.has(key)) existed += 1
+          else created += 1
+        } else {
+          errors.push(res.reason?.message ?? 'Error desconocido')
+        }
+      })
+
+      setResult({ created, existed, failed: errors.length, errors: [...new Set(errors)] })
       await loadData()
     } catch (err) {
       setFormError(err.message)
@@ -159,61 +208,86 @@ export default function ReglasAsignacion() {
 
       <Modal
         open={modal}
-        onClose={() => setModal(false)}
+        onClose={closeModal}
         title="Nueva regla"
         footer={
-          <>
-            <Button variant="secondary" onClick={() => setModal(false)} disabled={saving}>Cancelar</Button>
-            <Button onClick={handleSave} disabled={saving}>{saving ? 'Guardando…' : 'Guardar'}</Button>
-          </>
+          result ? (
+            <Button onClick={closeModal}>Cerrar</Button>
+          ) : (
+            <>
+              <Button variant="secondary" onClick={closeModal} disabled={saving}>Cancelar</Button>
+              <Button
+                onClick={handleSave}
+                disabled={saving || !form.centroCostoId || form.puestoIds.size === 0 || form.moduloIds.size === 0}
+              >
+                {saving ? 'Guardando…' : 'Guardar'}
+              </Button>
+            </>
+          )
         }
       >
-        <div className="space-y-4">
-          {formError && (
-            <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded px-3 py-2">
-              {formError}
+        {result ? (
+          <div className="space-y-3">
+            <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm rounded px-3 py-2">
+              {result.created} regla{result.created === 1 ? '' : 's'} nueva{result.created === 1 ? '' : 's'}
+              {' · '}
+              {result.existed} ya {result.existed === 1 ? 'existía' : 'existían'}
+              {result.failed > 0 && <> · {result.failed} fallaron</>}
             </div>
-          )}
-          <div>
-            <label className="block text-slate-700 text-sm font-medium mb-1">Puesto</label>
-            <select
-              className={selectCls}
-              value={form.puestoId}
-              onChange={(e) => setForm((f) => ({ ...f, puestoId: e.target.value }))}
-            >
-              {puestosActivos.length === 0 && <option value="">— Sin puestos activos —</option>}
-              {puestosActivos.map((p) => (
-                <option key={p.id} value={p.id}>{p.nombre}</option>
-              ))}
-            </select>
+            {result.failed > 0 && (
+              <div className="bg-red-50 border border-red-200 text-red-700 text-xs rounded px-3 py-2 space-y-1">
+                {result.errors.map((msg, i) => <div key={i}>{msg}</div>)}
+              </div>
+            )}
           </div>
-          <div>
-            <label className="block text-slate-700 text-sm font-medium mb-1">Centro de costo</label>
-            <select
-              className={selectCls}
-              value={form.centroCostoId}
-              onChange={(e) => setForm((f) => ({ ...f, centroCostoId: e.target.value }))}
-            >
-              {centrosActivos.length === 0 && <option value="">— Sin centros activos —</option>}
-              {centrosActivos.map((c) => (
-                <option key={c.id} value={c.id}>{c.nombre}</option>
-              ))}
-            </select>
+        ) : (
+          <div className="space-y-4">
+            {formError && (
+              <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded px-3 py-2">
+                {formError}
+              </div>
+            )}
+            <div>
+              <label className="block text-slate-700 text-sm font-medium mb-1">Centro de costo</label>
+              <select
+                className={selectCls}
+                value={form.centroCostoId}
+                onChange={(e) => setForm((f) => ({ ...f, centroCostoId: e.target.value }))}
+              >
+                {centrosActivos.length === 0 && <option value="">— Sin centros activos —</option>}
+                {centrosActivos.map((c) => (
+                  <option key={c.id} value={c.id}>{c.nombre}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-slate-700 text-sm font-medium mb-1">Puestos</label>
+              <MultiSelectFilter
+                options={puestosActivos.map((p) => ({ id: p.id, label: p.nombre }))}
+                selectedIds={form.puestoIds}
+                onChange={(ids) => setForm((f) => ({ ...f, puestoIds: ids }))}
+                placeholder="Elegí uno o varios puestos"
+                searchPlaceholder="Buscar puesto..."
+              />
+            </div>
+            <div>
+              <label className="block text-slate-700 text-sm font-medium mb-1">Módulos</label>
+              <MultiSelectFilter
+                options={modulosActivos.map((m) => ({ id: m.id, label: moduloLabel(m) }))}
+                selectedIds={form.moduloIds}
+                onChange={(ids) => setForm((f) => ({ ...f, moduloIds: ids }))}
+                placeholder="Elegí uno o varios módulos"
+                searchPlaceholder="Buscar módulo..."
+              />
+            </div>
+            {form.puestoIds.size > 0 && form.moduloIds.size > 0 && (
+              <p className="text-slate-400 text-xs">
+                Se van a crear hasta {form.puestoIds.size * form.moduloIds.size} reglas
+                ({form.puestoIds.size} puesto{form.puestoIds.size === 1 ? '' : 's'} × {form.moduloIds.size} módulo{form.moduloIds.size === 1 ? '' : 's'}).
+              </p>
+            )}
           </div>
-          <div>
-            <label className="block text-slate-700 text-sm font-medium mb-1">Módulo</label>
-            <select
-              className={selectCls}
-              value={form.moduloId}
-              onChange={(e) => setForm((f) => ({ ...f, moduloId: e.target.value }))}
-            >
-              {modulosActivos.length === 0 && <option value="">— Sin módulos activos —</option>}
-              {modulosActivos.map((m) => (
-                <option key={m.id} value={m.id}>{moduloLabel(m)}</option>
-              ))}
-            </select>
-          </div>
-        </div>
+        )}
       </Modal>
     </div>
   )

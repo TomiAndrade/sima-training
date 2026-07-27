@@ -4,7 +4,7 @@ const inputCls = 'w-full bg-white border border-slate-300 rounded px-3 py-2 text
 
 // Dropdown reusable: botón trigger + panel con búsqueda, "seleccionar todos"
 // (de los filtrados) y lista de checkboxes. Cierra al click afuera.
-export default function MultiSelectFilter({ options, selectedIds, onChange, placeholder = 'Filtrar...' }) {
+export default function MultiSelectFilter({ options, selectedIds, onChange, placeholder = 'Filtrar...', searchPlaceholder = 'Buscar módulo...' }) {
   const [open, setOpen] = useState(false)
   const [q, setQ] = useState('')
   const ref = useRef(null)
@@ -60,7 +60,7 @@ export default function MultiSelectFilter({ options, selectedIds, onChange, plac
               className={inputCls}
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Buscar módulo..."
+              placeholder={searchPlaceholder}
             />
           </div>
           <label className="flex items-center gap-2 px-3 py-2 border-b border-slate-100 cursor-pointer hover:bg-slate-50 text-sm text-slate-600">
