@@ -99,7 +99,7 @@ Al finalizar, la asignación cambia de `pending → completed` en el estado de l
 >
 > Una persona puede tener **varios pares** (puesto, centro de costo) y debe hacer los módulos que le corresponden por **todos** ellos — el par marcado como `principal` es solo el que se muestra en el listado. Qué roles admite cada tipo de organización lo fija una matriz (`INTERNA` → todos · `CLIENTE` → auditor · `SUBCONTRATISTA` → alumno) que el backend valida tanto en el alta manual como en el import de Excel. Detalle en [`docs/modelo-vinculacion-propuesto.md`](docs/modelo-vinculacion-propuesto.md) y en el [README del backend](sima-training-api/README.md).
 >
-> ⚠️ El **backoffice todavía consume la forma vieja** de `GET /usuarios` (rol plano, clasificación): migrarlo es trabajo pendiente (ver [`docs/pendientes.md`](docs/pendientes.md)).
+> El backoffice ya consume la **forma nueva** de `GET /usuarios`: rol y organización anidados en `vinculacion`, más el ABM de pares puesto/centro. La clasificación se disolvió como concepto y no se persiste en ningún lado.
 
 | Entidad | Origen | Detalle |
 |---|---|---|
@@ -107,10 +107,10 @@ Al finalizar, la asignación cambia de `pending → completed` en el estado de l
 | Usuarios | **Backend** (API real) | `Usuario` es **identidad pura** (nombre, apellido, DNI, email). La pertenencia vive en `Vinculacion` — una por usuario, con **organización y rol** (`ADMINISTRADOR` · `COORDINADOR` · `AUDITOR` · `ALUMNO`) — y el par **puesto + centro de costo** en `VinculacionPuestoCentro` |
 | Puestos / Centros de Costo | **Backend** (API real) | Catálogos de nómina, baja lógica con `activo` |
 | Preguntas | **Backend** (API real) | Banco único y reutilizable entre módulos, con detección de duplicados/similares en el import de Excel |
-| Módulos | **Backend** (API real) | Versionados e inmutables (`ModuloVersion`, numeración `AÑO.MAYOR.MENOR`). El mock `training-modules.js` sobrevive solo para metadata liviana en pantallas que no migraron (Dashboard, Resumen, Asignaciones) |
-| Asignaciones | Mock en backoffice (el backend ya modela `Asignacion`/`ReglaAsignacion`, ver arriba) | 27 asignaciones con `status: pending \| completed \| expired` |
+| Módulos | **Backend** (API real) | Versionados e inmutables (`ModuloVersion`, numeración `AÑO.MAYOR.MENOR`). El mock `training-modules.js` sobrevive solo para metadata liviana en `Dashboard.jsx` |
+| Asignaciones | **Backend** (API real) | `Asignacion` (Vigente/Revocada, origen AUTOMATICA/MANUAL) + `ReglaAsignacion` (por par puesto+centro o a nivel centro). Dos pantallas: Reglas y Asignaciones por persona. El mock `training-assignments.js` quedó solo para los KPIs de Dashboard y Resumen |
 | Evaluaciones | Mock | 20 registros históricos, para el dashboard |
-| `UsuarioMock` (persona evaluada) | Mock (`usuarios-mock.js`) | 15 personas con DNI, nombre y cliente — consumido por Dashboard y Asignaciones, no confundir con el `Usuario` real del backend |
+| `UsuarioMock` (persona evaluada) | Mock (`usuarios-mock.js`) | 15 personas con DNI, nombre y cliente — hoy solo lo consume Dashboard; no confundir con el `Usuario` real del backend |
 
 ---
 
@@ -152,9 +152,11 @@ sima-check-app/src/
 
 | Contexto | Uso | Clase |
 |---|---|---|
-| Backoffice | Fondos | `zinc-950` / `zinc-900` / `zinc-800` |
+| Backoffice | Fondos | Modo **claro**, paleta `slate`: `slate-50` (root) / `slate-200` (contenido) / `bg-white` (cards, tablas, modales) |
+| Backoffice | Bordes | `slate-200` |
 | Backoffice | Acento | `red-600` |
 | App tablet | Fondo | Imagen de industria (`SIMACHECK-FONDO.png`), modo **claro** |
 | App tablet | Cards | `bg-white` / texto `slate-900` (principal) · `slate-500` (secundario) |
-| Ambos | Aprobado | `emerald-500` |
+| Ambos | Aprobado | `emerald`, tríada `-50` fondo / `-200` borde / `-600` texto |
+| Ambos | Advertencia | `amber`, misma tríada |
 | Ambos | Desaprobado / peligro / acento | `red-600` |
