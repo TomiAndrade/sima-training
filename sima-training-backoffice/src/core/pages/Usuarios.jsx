@@ -454,7 +454,7 @@ export default function Usuarios() {
           </div>
           <div>
             <label className="block text-slate-700 text-sm font-medium mb-1">Rol</label>
-            {modal.mode === 'create' ? (
+            {modal?.mode === 'create' ? (
               <span
                 className={`inline-block px-2.5 py-1 rounded-full text-xs font-semibold capitalize ${roleBadge[ROL_ALTA]}`}
               >
