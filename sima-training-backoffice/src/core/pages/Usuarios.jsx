@@ -9,11 +9,6 @@ import { centrosCostoApi } from '../api/centrosCosto'
 import ImportUsuariosModal from '../components/ImportUsuariosModal'
 import ParesPuestoCentro from '../components/ParesPuestoCentro'
 
-// AUDITOR va incluido: es el único rol que la matriz tipo-de-organización ↔ rol
-// permite en una organización CLIENTE, así que sin él el form no puede dar de
-// alta a ningún usuario de un cliente (el backend rechaza todo lo demás con 400).
-const ROLES = ['ADMINISTRADOR', 'COORDINADOR', 'AUDITOR', 'ALUMNO']
-
 const roleBadge = {
   ADMINISTRADOR: 'bg-red-50 text-red-600',
   COORDINADOR:   'bg-blue-50 text-blue-600',
@@ -21,31 +16,43 @@ const roleBadge = {
   ALUMNO:        'bg-emerald-50 text-emerald-600',
 }
 
+// Decisión de producto: el backoffice solo da de alta ALUMNOS por ahora (la
+// abstracción de roles del sistema todavía no está definida). El backend
+// sigue soportando los cuatro roles (ADMINISTRADOR/COORDINADOR/AUDITOR/ALUMNO)
+// sin cambios — esto es una simplificación temporal solo de este formulario.
+const ROL_ALTA = 'ALUMNO'
+
+// Espejo de sima-training-api/src/usuarios/matriz-rol-organizacion.ts —
+// si esa matriz cambia, actualizar acá también. Se usa para filtrar el select
+// de Organización según el rol efectivo (ROL_ALTA al crear, el rol ya guardado
+// al editar), para no ofrecer una combinación rol/organización que el backend
+// vaya a rechazar con 400.
+const TIPOS_ORG_POR_ROL = {
+  ADMINISTRADOR: ['INTERNA'],
+  COORDINADOR:   ['INTERNA'],
+  AUDITOR:       ['INTERNA', 'CLIENTE'],
+  ALUMNO:        ['INTERNA', 'SUBCONTRATISTA'],
+}
+
 const TABS = [
-  { id: 'todos',      label: 'Todos' },
-  { id: 'alumnos',    label: 'Alumnos' },
-  { id: 'operadores', label: 'Operadores' },
+  { id: 'todas',           label: 'Todas' },
+  { id: 'internas',        label: 'Internas',        tipo: 'INTERNA' },
+  { id: 'subcontratistas', label: 'Subcontratistas', tipo: 'SUBCONTRATISTA' },
+  { id: 'clientes',        label: 'Clientes',        tipo: 'CLIENTE' },
 ]
 
-// Los dos buckets son complementarios a propósito: "operadores" es todo lo que
-// no es alumno, no una lista blanca de roles. Con una lista blanca, un rol que
-// no estuviera enumerado (AUDITOR, o cualquiera que se agregue después) quedaba
-// invisible en las dos tabs filtradas y solo aparecía en "Todos", y los contadores
-// no sumaban. Así, Alumnos + Operadores = Todos siempre.
-const esAlumno = (u) => u.vinculacion?.rol === 'ALUMNO'
-const esOperador = (u) => !esAlumno(u)
-const matchTab = (u, t) =>
-  t === 'todos' ? true : t === 'alumnos' ? esAlumno(u) : esOperador(u)
-
-// Rol por defecto al crear, según la tab activa.
-const defaultRolParaTab = (t) => (t === 'alumnos' ? 'ALUMNO' : 'COORDINADOR')
+const matchTab = (u, t) => {
+  if (t === 'todas') return true
+  const tab = TABS.find((x) => x.id === t)
+  return u.vinculacion?.organizacion?.tipo === tab?.tipo
+}
 
 const emptyForm = {
   nombre: '',
   apellido: '',
   dni: '',
   email: '',
-  rol: 'COORDINADOR',
+  rol: ROL_ALTA,
   organizacionId: '',
 }
 
@@ -56,7 +63,7 @@ export default function Usuarios() {
   const [centrosCosto, setCentrosCosto] = useState([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(null)
-  const [tab, setTab] = useState('todos')
+  const [tab, setTab] = useState('todas')
 
   const [modal, setModal] = useState(null)
   const [form, setForm] = useState(emptyForm)
@@ -106,6 +113,9 @@ export default function Usuarios() {
     return () => { active = false }
   }, [])
 
+  const tiposOrgValidos = TIPOS_ORG_POR_ROL[form.rol] ?? []
+  const organizacionesValidas = organizaciones.filter((o) => tiposOrgValidos.includes(o.tipo))
+
   const usuariosFiltrados = usuarios
     .filter((u) => matchTab(u, tab))
     .filter((u) => {
@@ -119,10 +129,11 @@ export default function Usuarios() {
     })
 
   const openCreate = () => {
-    const defaultOrg = organizaciones[0]?.id ?? ''
+    const tiposValidos = TIPOS_ORG_POR_ROL[ROL_ALTA]
+    const defaultOrg = organizaciones.find((o) => tiposValidos.includes(o.tipo))?.id ?? ''
     setForm({
       ...emptyForm,
-      rol: defaultRolParaTab(tab),
+      rol: ROL_ALTA,
       organizacionId: defaultOrg,
     })
     setPares([])
@@ -137,7 +148,7 @@ export default function Usuarios() {
       apellido: usuario.apellido ?? '',
       dni: usuario.dni ?? '',
       email: usuario.email ?? '',
-      rol: usuario.vinculacion?.rol ?? 'COORDINADOR',
+      rol: usuario.vinculacion?.rol ?? ROL_ALTA,
       organizacionId: usuario.vinculacion?.organizacion?.id ?? '',
     })
     setPares(
@@ -180,8 +191,12 @@ export default function Usuarios() {
       apellido: form.apellido.trim(),
       dni: form.dni.trim(),
       vinculacion: {
-        rol: form.rol,
         organizacionId: form.organizacionId ? Number(form.organizacionId) : undefined,
+        // El rol solo se manda al crear (siempre ALUMNO). Al editar se omite
+        // a propósito: UpdateVinculacionDto.rol es opcional y el backend no
+        // toca lo que no viene, así que el rol real de un usuario legacy
+        // (ADMINISTRADOR/COORDINADOR/AUDITOR) nunca se pisa en silencio.
+        ...(modal.mode === 'create' ? { rol: ROL_ALTA } : {}),
       },
     }
     if (form.email.trim()) payload.email = form.email.trim()
@@ -382,7 +397,7 @@ export default function Usuarios() {
             <Button variant="secondary" onClick={() => setModal(null)} disabled={saving}>
               Cancelar
             </Button>
-            <Button onClick={handleSave} disabled={saving}>
+            <Button onClick={handleSave} disabled={saving || organizacionesValidas.length === 0}>
               {saving ? 'Guardando…' : 'Guardar'}
             </Button>
           </>
@@ -439,32 +454,45 @@ export default function Usuarios() {
           </div>
           <div>
             <label className="block text-slate-700 text-sm font-medium mb-1">Rol</label>
-            <select
-              className="w-full bg-white border border-slate-300 rounded px-3 py-2 text-slate-900 text-sm focus:outline-none focus:border-red-600"
-              value={form.rol}
-              onChange={(e) => setForm((f) => ({ ...f, rol: e.target.value }))}
-            >
-              {ROLES.map((r) => (
-                <option key={r} value={r}>
-                  {r.charAt(0) + r.slice(1).toLowerCase()}
-                </option>
-              ))}
-            </select>
+            {modal.mode === 'create' ? (
+              <span
+                className={`inline-block px-2.5 py-1 rounded-full text-xs font-semibold capitalize ${roleBadge[ROL_ALTA]}`}
+              >
+                {ROL_ALTA.toLowerCase()}
+              </span>
+            ) : (
+              <>
+                <span
+                  className={`inline-block px-2.5 py-1 rounded-full text-xs font-semibold capitalize ${roleBadge[form.rol] ?? 'bg-slate-100 text-slate-600'}`}
+                >
+                  {form.rol.toLowerCase()}
+                </span>
+                <p className="text-slate-400 text-xs mt-1">
+                  El rol no se puede cambiar desde este formulario.
+                </p>
+              </>
+            )}
           </div>
           <div>
             <label className="block text-slate-700 text-sm font-medium mb-1">Organización</label>
-            <select
-              className="w-full bg-white border border-slate-300 rounded px-3 py-2 text-slate-900 text-sm focus:outline-none focus:border-red-600"
-              value={form.organizacionId}
-              onChange={(e) => setForm((f) => ({ ...f, organizacionId: e.target.value }))}
-            >
-              <option value="">— Sin organización —</option>
-              {organizaciones.map((o) => (
-                <option key={o.id} value={o.id}>
-                  {o.nombre}
-                </option>
-              ))}
-            </select>
+            {organizacionesValidas.length === 0 ? (
+              <p className="bg-amber-50 border border-amber-200 text-amber-700 text-sm rounded px-3 py-2">
+                No hay organizaciones de tipo {tiposOrgValidos.join(' o ')} cargadas para el rol{' '}
+                {form.rol.toLowerCase()}. Creá una organización de ese tipo antes de continuar.
+              </p>
+            ) : (
+              <select
+                className="w-full bg-white border border-slate-300 rounded px-3 py-2 text-slate-900 text-sm focus:outline-none focus:border-red-600"
+                value={form.organizacionId}
+                onChange={(e) => setForm((f) => ({ ...f, organizacionId: e.target.value }))}
+              >
+                {organizacionesValidas.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.nombre}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
 
           <div className="border-t border-slate-200 pt-4 space-y-3">
