@@ -14,28 +14,17 @@ const SAMPLE_ROWS = 10;
 // Las columnas "datos_*" se guardan en el jsonb con la clave que sigue al prefijo.
 // `puesto` sigue yendo al jsonb (texto libre de nómina): los pares
 // (puesto, centro de costo) del catálogo se cargan desde el ABM, no por Excel.
+// Sin columnas "rol"/"empresa"/"email": todo usuario importado se crea como
+// ALUMNO en la organización que se elige una sola vez para todo el import
+// (un Excel es siempre de una sola empresa), no por fila.
 const COLUMN_MAP: Record<string, string> = {
   dni: 'dni',
   nombre: 'nombre',
   apellido: 'apellido',
-  email: 'email',
-  empresa: 'empresa',
-  rol: 'rol',
   // Campos extra de nómina → datos jsonb
   legajo: 'datos_legajo',
   puesto: 'datos_puesto',
   sector: 'datos_sector',
-};
-
-// Valor de la columna "rol" (normalizado) → enum RolUsuario. Sin columna de rol
-// se asume ALUMNO, que es lo que trae una nómina.
-const ROL_MAP: Record<string, RolUsuario> = {
-  administrador: RolUsuario.ADMINISTRADOR,
-  admin: RolUsuario.ADMINISTRADOR,
-  coordinador: RolUsuario.COORDINADOR,
-  auditor: RolUsuario.AUDITOR,
-  alumno: RolUsuario.ALUMNO,
-  empleado: RolUsuario.ALUMNO,
 };
 
 export interface ImportPreview {
@@ -183,7 +172,7 @@ export class ImportService {
 
   async confirmarUsuarios(
     file?: Express.Multer.File,
-    defaultOrganizacionId?: number,
+    organizacionId?: number,
   ): Promise<ImportResult> {
     if (!file) {
       throw new BadRequestException('No se recibió ningún archivo');
@@ -191,16 +180,13 @@ export class ImportService {
     if (!/\.xlsx$/i.test(file.originalname)) {
       throw new BadRequestException('El archivo debe ser un .xlsx');
     }
+    if (!organizacionId) {
+      throw new BadRequestException(
+        'Debe indicar la organización a la que pertenecen los usuarios del Excel',
+      );
+    }
 
     const { sheet, headers } = await this.parseSheet(file);
-
-    // Cargar todas las organizaciones para resolver "Empresa" → id.
-    const orgs = await this.prisma.organizacion.findMany({
-      select: { id: true, nombre: true },
-    });
-    const orgByName = new Map(
-      orgs.map((o) => [o.nombre.toLowerCase().trim(), o.id]),
-    );
 
     // Índices de columnas mapeadas (case-insensitive).
     const colIdx: Record<string, number> = {};
@@ -232,9 +218,6 @@ export class ImportService {
       const dni = getCol('dni');
       const nombre = getCol('nombre');
       const apellido = getCol('apellido');
-      const email = getCol('email') || undefined;
-      const empresaNombre = getCol('empresa');
-      const rolRaw = getCol('rol');
 
       // Campos obligatorios.
       if (!dni || !nombre || !apellido) {
@@ -259,31 +242,7 @@ export class ImportService {
         continue;
       }
 
-      const rol = rolRaw ? ROL_MAP[normalizar(rolRaw)] : RolUsuario.ALUMNO;
-      if (!rol) {
-        skipped++;
-        errors.push({ row: r, dni, motivo: `Rol no reconocido: "${rolRaw}"` });
-        continue;
-      }
-
-      // Resolver organización. Ahora es obligatoria: la vinculación no puede
-      // existir sin organización (`Vinculacion.organizacionId` es NOT NULL), así
-      // que una fila que no la resuelve es un error, no un usuario huérfano.
-      const organizacionId =
-        (empresaNombre
-          ? orgByName.get(empresaNombre.toLowerCase().trim())
-          : undefined) ?? defaultOrganizacionId;
-      if (!organizacionId) {
-        skipped++;
-        errors.push({
-          row: r,
-          dni,
-          motivo: empresaNombre
-            ? `No existe la organización "${empresaNombre}"`
-            : 'Falta la empresa y no se eligió una organización por defecto',
-        });
-        continue;
-      }
+      const rol = RolUsuario.ALUMNO;
 
       // Campos de nómina (datos_*) + columnas no mapeadas → jsonb.
       const mappedKeys = new Set(Object.values(colIdx));
@@ -310,7 +269,6 @@ export class ImportService {
             nombre,
             apellido,
             dni,
-            ...(email ? { email } : {}),
             datos,
             // Sin pares: el Excel de nómina no trae el par (puesto, centro) del
             // catálogo. Se cargan después desde el ABM.

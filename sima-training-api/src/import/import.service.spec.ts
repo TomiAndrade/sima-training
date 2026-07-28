@@ -24,7 +24,7 @@ async function nomina(
 describe('ImportService — usuarios', () => {
   let service: ImportService;
   let prisma: {
-    organizacion: { findMany: jest.Mock; findUnique: jest.Mock };
+    organizacion: { findUnique: jest.Mock };
     usuario: { findUnique: jest.Mock; findFirst: jest.Mock; create: jest.Mock };
     puesto: { findMany: jest.Mock };
     centroCosto: { findMany: jest.Mock };
@@ -32,13 +32,13 @@ describe('ImportService — usuarios', () => {
     $transaction: jest.Mock;
   };
 
-  const YPF = { id: 2, nombre: 'YPF', tipo: TipoOrganizacion.CLIENTE };
+  const YPF_ID = 2; // organización CLIENTE: no admite ALUMNO
+  const SIMA_ID = 1; // organización INTERNA: admite ALUMNO
 
   beforeEach(async () => {
     prisma = {
       organizacion: {
-        findMany: jest.fn().mockResolvedValue([YPF]),
-        findUnique: jest.fn().mockResolvedValue({ tipo: YPF.tipo }),
+        findUnique: jest.fn().mockResolvedValue({ tipo: TipoOrganizacion.CLIENTE }),
       },
       usuario: {
         findUnique: jest.fn().mockResolvedValue(null),
@@ -69,30 +69,46 @@ describe('ImportService — usuarios', () => {
     service = module.get(ImportService);
   });
 
-  it('rechaza un COORDINADOR en una organización CLIENTE (matriz, por el camino del import)', async () => {
+  it('rechaza el import completo si no se indica organización', async () => {
     const file = await nomina(
-      ['dni', 'nombre', 'apellido', 'empresa', 'rol'],
-      [['30111222', 'Ana', 'Paz', 'YPF', 'Coordinador']],
+      ['dni', 'nombre', 'apellido'],
+      [['30111222', 'Ana', 'Paz']],
     );
 
-    const result = await service.confirmarUsuarios(file);
+    await expect(service.confirmarUsuarios(file, undefined)).rejects.toThrow(
+      'Debe indicar la organización',
+    );
+    expect(prisma.usuario.create).not.toHaveBeenCalled();
+  });
+
+  it('todo usuario importado entra como ALUMNO — rechazado en una organización CLIENTE', async () => {
+    const file = await nomina(
+      ['dni', 'nombre', 'apellido'],
+      [['30111222', 'Ana', 'Paz']],
+    );
+
+    const result = await service.confirmarUsuarios(file, YPF_ID);
 
     expect(result.created).toBe(0);
     expect(result.skipped).toBe(1);
     expect(result.errors[0]).toEqual(
       expect.objectContaining({ dni: '30111222' }),
     );
-    expect(result.errors[0].motivo).toContain('COORDINADOR');
+    expect(result.errors[0].motivo).toContain('ALUMNO');
     expect(prisma.usuario.create).not.toHaveBeenCalled();
   });
 
-  it('acepta un AUDITOR en esa misma organización CLIENTE', async () => {
+  it('ignora una eventual columna "rol" del Excel: siempre crea con ALUMNO', async () => {
+    prisma.organizacion.findUnique.mockResolvedValue({
+      tipo: TipoOrganizacion.INTERNA,
+    });
+
     const file = await nomina(
-      ['dni', 'nombre', 'apellido', 'empresa', 'rol'],
-      [['30111222', 'Ana', 'Paz', 'YPF', 'Auditor']],
+      ['dni', 'nombre', 'apellido', 'rol'],
+      [['30111222', 'Ana', 'Paz', 'Coordinador']],
     );
 
-    const result = await service.confirmarUsuarios(file);
+    const result = await service.confirmarUsuarios(file, SIMA_ID);
 
     expect(result).toEqual({ created: 1, skipped: 0, errors: [] });
     expect(prisma.usuario.create).toHaveBeenCalledWith(
@@ -100,8 +116,8 @@ describe('ImportService — usuarios', () => {
         data: expect.objectContaining({
           vinculacion: {
             create: expect.objectContaining({
-              organizacionId: 2,
-              rol: RolUsuario.AUDITOR,
+              organizacionId: SIMA_ID,
+              rol: RolUsuario.ALUMNO,
               createdBy: 'import',
             }),
           },
@@ -110,44 +126,17 @@ describe('ImportService — usuarios', () => {
     );
   });
 
-  it('sin columna de rol asume ALUMNO (y por eso lo rechaza en un CLIENTE)', async () => {
-    const file = await nomina(
-      ['dni', 'nombre', 'apellido', 'empresa'],
-      [['30111222', 'Ana', 'Paz', 'YPF']],
-    );
-
-    const result = await service.confirmarUsuarios(file);
-
-    expect(result.created).toBe(0);
-    expect(result.errors[0].motivo).toContain('ALUMNO');
-  });
-
-  it('marca la fila como error si no puede resolver la organización', async () => {
-    const file = await nomina(
-      ['dni', 'nombre', 'apellido', 'empresa'],
-      [['30111222', 'Ana', 'Paz', 'Empresa Fantasma']],
-    );
-
-    const result = await service.confirmarUsuarios(file);
-
-    expect(result.created).toBe(0);
-    expect(result.errors[0].motivo).toContain('Empresa Fantasma');
-  });
-
-  it('crea el usuario cuando la organización interna admite el rol', async () => {
-    prisma.organizacion.findMany.mockResolvedValue([
-      { id: 1, nombre: 'Ingeniería SIMA' },
-    ]);
+  it('crea el usuario cuando la organización interna admite ALUMNO', async () => {
     prisma.organizacion.findUnique.mockResolvedValue({
       tipo: TipoOrganizacion.INTERNA,
     });
 
     const file = await nomina(
-      ['dni', 'nombre', 'apellido', 'empresa', 'legajo'],
-      [['30111222', 'Ana', 'Paz', 'Ingeniería SIMA', 'A-42']],
+      ['dni', 'nombre', 'apellido', 'legajo'],
+      [['30111222', 'Ana', 'Paz', 'A-42']],
     );
 
-    const result = await service.confirmarUsuarios(file);
+    const result = await service.confirmarUsuarios(file, SIMA_ID);
 
     expect(result.created).toBe(1);
     // El legajo sigue yendo al jsonb de nómina, no al catálogo de puestos.
