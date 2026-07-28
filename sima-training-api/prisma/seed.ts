@@ -20,10 +20,12 @@ const MODULOS = [
 
 async function main() {
   // Idempotente: limpiar en orden de dependencia. Todas las FK son
-  // ON DELETE RESTRICT, así que hay que ir de las hijas a las padres:
-  // pares (puesto, centro) → vinculaciones → usuarios/organizaciones.
-  // Borrar usuarios antes que sus vinculaciones falla en cuanto la base tenga
-  // alguna (con la base vacía el orden no se notaba).
+  // ON DELETE RESTRICT, así que hay que ir de las hijas a las padres.
+  // Ojo: Asignacion tiene una FK DIRECTA a Usuario (no pasa por Vinculacion),
+  // así que es su propia rama, no una hija de vinculacionPuestoCentro/vinculacion.
+  // Borrar usuarios antes de vaciar cualquiera de las dos ramas falla en cuanto
+  // la base tenga filas (con la base vacía el orden no se notaba).
+  await prisma.asignacion.deleteMany();
   await prisma.vinculacionPuestoCentro.deleteMany();
   await prisma.vinculacion.deleteMany();
   await prisma.usuario.deleteMany();
