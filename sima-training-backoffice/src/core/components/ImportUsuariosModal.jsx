@@ -1,15 +1,28 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Modal from '../../components/Modal'
 import Button from '../../components/Button'
 import { importApi } from '../api/import'
+import { organizacionesApi } from '../api/organizaciones'
+
+// Espejo de matriz-rol-organizacion.ts (ver TIPOS_ORG_POR_ROL en Usuarios.jsx):
+// el import siempre da de alta usuarios como ALUMNO, así que solo tiene sentido
+// elegir una organización que admita ese rol (INTERNA o SUBCONTRATISTA).
+const TIPOS_ORG_ALUMNO = ['INTERNA', 'SUBCONTRATISTA']
 
 // step: 'select' | 'preview' | 'result'
-const INITIAL = { step: 'select', file: null, preview: null, result: null, loading: false, error: null }
+const INITIAL = { step: 'select', file: null, organizacionId: '', preview: null, result: null, loading: false, error: null }
 
 export default function ImportUsuariosModal({ open, onClose, onImported }) {
   const [state, setState] = useState(INITIAL)
+  const [organizaciones, setOrganizaciones] = useState([])
 
   const set = (patch) => setState((s) => ({ ...s, ...patch }))
+
+  useEffect(() => {
+    if (open) organizacionesApi.list().then(setOrganizaciones).catch(() => setOrganizaciones([]))
+  }, [open])
+
+  const organizacionesValidas = organizaciones.filter((o) => TIPOS_ORG_ALUMNO.includes(o.tipo))
 
   const handleClose = () => {
     setState(INITIAL)
@@ -36,14 +49,14 @@ export default function ImportUsuariosModal({ open, onClose, onImported }) {
     if (!state.file) return
     set({ loading: true, error: null })
     try {
-      const result = await importApi.confirmarUsuarios(state.file)
+      const result = await importApi.confirmarUsuarios(state.file, state.organizacionId)
       set({ result, step: 'result', loading: false })
     } catch (err) {
       set({ error: err.message, loading: false })
     }
   }
 
-  const { step, file, preview, result, loading, error } = state
+  const { step, file, organizacionId, preview, result, loading, error } = state
 
   const footer = (() => {
     if (step === 'select') {
@@ -52,7 +65,7 @@ export default function ImportUsuariosModal({ open, onClose, onImported }) {
           <Button variant="secondary" onClick={handleClose} disabled={loading}>
             Cancelar
           </Button>
-          <Button onClick={handleAnalyze} disabled={!file || loading}>
+          <Button onClick={handleAnalyze} disabled={!file || !organizacionId || loading}>
             {loading ? 'Analizando…' : 'Analizar archivo'}
           </Button>
         </>
@@ -104,8 +117,28 @@ export default function ImportUsuariosModal({ open, onClose, onImported }) {
                 className="w-full text-sm text-slate-700 file:mr-3 file:py-2 file:px-4 file:rounded file:border-0 file:bg-red-600 file:text-white file:text-sm file:font-medium hover:file:bg-red-700 file:cursor-pointer"
               />
             </div>
+            <div>
+              <label className="block text-slate-700 text-sm font-medium mb-1">Organización</label>
+              {organizacionesValidas.length === 0 ? (
+                <p className="bg-amber-50 border border-amber-200 text-amber-700 text-sm rounded px-3 py-2">
+                  No hay organizaciones de tipo {TIPOS_ORG_ALUMNO.join(' o ')} cargadas. Creá una
+                  organización de ese tipo antes de importar usuarios.
+                </p>
+              ) : (
+                <select
+                  className="w-full bg-white border border-slate-300 rounded px-3 py-2 text-slate-900 text-sm focus:outline-none focus:border-red-600"
+                  value={organizacionId}
+                  onChange={(e) => set({ organizacionId: e.target.value })}
+                >
+                  <option value="">— Elegir organización —</option>
+                  {organizacionesValidas.map((o) => (
+                    <option key={o.id} value={o.id}>{o.nombre}</option>
+                  ))}
+                </select>
+              )}
+            </div>
             <p className="text-xs text-slate-400">
-              Formato esperado: columnas <strong>DNI · Nombre · Apellido · Email · Empresa</strong> (encabezados en la primera fila).
+              Formato esperado: columnas <strong>DNI · Nombre · Apellido</strong> (obligatorias) y opcionalmente <strong>Legajo · Puesto · Sector</strong> (encabezados en la primera fila). Todos los usuarios se importan como <strong>Alumno</strong> en la organización elegida arriba — un Excel es siempre de una sola empresa.
             </p>
           </>
         )}
@@ -115,7 +148,8 @@ export default function ImportUsuariosModal({ open, onClose, onImported }) {
           <div className="space-y-3">
             <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm rounded px-3 py-2">
               Se importarán <strong>{preview.totalRows}</strong> usuario{preview.totalRows !== 1 ? 's' : ''} desde{' '}
-              <span className="font-mono text-xs">{preview.fileName}</span>.
+              <span className="font-mono text-xs">{preview.fileName}</span> a{' '}
+              <strong>{organizaciones.find((o) => String(o.id) === String(organizacionId))?.nombre}</strong>.
             </div>
 
             <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-slate-600">
