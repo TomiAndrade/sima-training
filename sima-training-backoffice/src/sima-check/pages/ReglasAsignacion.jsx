@@ -3,10 +3,10 @@ import Table from '../../components/Table'
 import Button from '../../components/Button'
 import Modal from '../../components/Modal'
 import MultiSelectFilter from '../../components/MultiSelectFilter'
-import { reglasAsignacionApi } from '../api/reglasAsignacion'
-import { puestosApi } from '../api/puestos'
-import { centrosCostoApi } from '../api/centrosCosto'
-import { modulosApi } from '../api/modulos'
+import { reglasAsignacionApi } from '../../core/api/reglasAsignacion'
+import { puestosApi } from '../../core/api/puestos'
+import { centrosCostoApi } from '../../core/api/centrosCosto'
+import { modulosApi } from '../../core/api/modulos'
 
 const emptyForm = { centroCostoId: '', alcance: 'PUESTO', puestoIds: new Set(), moduloIds: new Set() }
 

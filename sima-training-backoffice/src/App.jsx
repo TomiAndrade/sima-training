@@ -9,7 +9,7 @@ import Overview from './sima-check/pages/Overview'
 import TrainingModules from './sima-check/pages/TrainingModules'
 import TrainingAssignments from './sima-check/pages/TrainingAssignments'
 import Questions from './sima-check/pages/Questions'
-import ReglasAsignacion from './core/pages/ReglasAsignacion'
+import ReglasAsignacion from './sima-check/pages/ReglasAsignacion'
 
 const PAGES = {
   dashboard: Dashboard,
