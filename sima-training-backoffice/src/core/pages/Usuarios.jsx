@@ -36,7 +36,7 @@ const TIPOS_ORG_POR_ROL = {
 
 const TABS = [
   { id: 'todas',           label: 'Todas' },
-  { id: 'internas',        label: 'Internas',        tipo: 'INTERNA' },
+  { id: 'internas',        label: 'SIMA',            tipo: 'INTERNA' },
   { id: 'subcontratistas', label: 'Subcontratistas', tipo: 'SUBCONTRATISTA' },
   { id: 'clientes',        label: 'Clientes',        tipo: 'CLIENTE' },
 ]
