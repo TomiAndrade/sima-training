@@ -25,7 +25,7 @@ export default function ReglasAsignacion() {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(null)
 
-  const [alcanceFiltro, setAlcanceFiltro] = useState('TODOS') // 'TODOS' | 'PUESTO' | 'CENTRO'
+  const [expandidos, setExpandidos] = useState(() => new Set())
 
   const [modal, setModal] = useState(false)
   const [form, setForm] = useState(emptyForm)
@@ -77,10 +77,93 @@ export default function ReglasAsignacion() {
   const centroNombre = useMemo(() => new Map(centrosCosto.map((c) => [c.id, c.nombre])), [centrosCosto])
   const moduloPorId = useMemo(() => new Map(modulos.map((m) => [m.id, m])), [modulos])
 
-  const reglasFiltradas = useMemo(() => {
-    if (alcanceFiltro === 'TODOS') return reglas
-    return reglas.filter((r) => (alcanceFiltro === 'CENTRO' ? r.puestoId == null : r.puestoId != null))
-  }, [reglas, alcanceFiltro])
+  // El listado se lee por centro de costo: cada centro es un grupo desplegable y
+  // las reglas quedan adentro. El centro deja de repetirse fila por fila y se
+  // puede ver de un vistazo qué tiene configurado cada uno.
+  const gruposPorCentro = useMemo(() => {
+    const porCentro = new Map()
+    reglas.forEach((r) => {
+      const acc = porCentro.get(r.centroCostoId)
+      if (acc) acc.push(r)
+      else porCentro.set(r.centroCostoId, [r])
+    })
+
+    // Ordenar por el nombre crudo del módulo y no por moduloLabel(): esa función
+    // se declara más abajo con const, y el callback de useMemo corre acá, así que
+    // usarla tiraría un ReferenceError por TDZ. El sufijo "(sin versión
+    // publicada)" no cambiaría el orden igual.
+    const moduloNombre = (id) => moduloPorId.get(id)?.nombre ?? ''
+    const ordenarReglas = (a, b) => {
+      const aEsCentro = a.puestoId == null
+      const bEsCentro = b.puestoId == null
+      if (aEsCentro !== bEsCentro) return aEsCentro ? -1 : 1
+      if (!aEsCentro) {
+        const porPuesto = (puestoNombre.get(a.puestoId) ?? '').localeCompare(puestoNombre.get(b.puestoId) ?? '', 'es')
+        if (porPuesto !== 0) return porPuesto
+      }
+      return moduloNombre(a.moduloId).localeCompare(moduloNombre(b.moduloId), 'es')
+    }
+
+    const armarGrupo = (centro, inactivo) => {
+      const propias = [...(porCentro.get(centro.id) ?? [])].sort(ordenarReglas)
+      return {
+        centro,
+        inactivo,
+        reglas: propias,
+        puestosCount: new Set(propias.filter((r) => r.puestoId != null).map((r) => r.puestoId)).size,
+      }
+    }
+
+    // Los centros dados de baja no están en `centrosActivos`, pero sus reglas
+    // siguen existiendo. Se derivan de las claves del índice y no de
+    // `centrosCosto.filter(c => !c.activo)` para cubrir también el caso de un
+    // centroCostoId que no figure en el catálogo: filtrando el catálogo esas
+    // reglas desaparecerían de la pantalla sin dejar rastro.
+    const idsActivos = new Set(centrosActivos.map((c) => c.id))
+    const gruposActivos = centrosActivos.map((c) => armarGrupo(c, false))
+    const gruposInactivos = [...porCentro.keys()]
+      .filter((id) => !idsActivos.has(id))
+      .map((id) => armarGrupo(centrosCosto.find((c) => c.id === id) ?? { id, nombre: '— Centro desconocido —' }, true))
+
+    // Lo configurado arriba, lo pendiente de configurar agrupado abajo.
+    const porNombre = (a, b) => a.centro.nombre.localeCompare(b.centro.nombre, 'es')
+    return [
+      ...gruposActivos.filter((g) => g.reglas.length > 0).sort(porNombre),
+      ...gruposActivos.filter((g) => g.reglas.length === 0).sort(porNombre),
+      ...gruposInactivos.sort(porNombre),
+    ]
+  }, [reglas, centrosActivos, centrosCosto, puestoNombre, moduloPorId])
+
+  const centrosConReglas = useMemo(
+    () => gruposPorCentro.filter((g) => g.reglas.length > 0).length,
+    [gruposPorCentro]
+  )
+
+  // Expandir abre solo los grupos con contenido (abrir los vacíos es ruido);
+  // colapsar vacía el Set entero, así no queda abierto un grupo vacío que el
+  // usuario haya desplegado a mano.
+  const expandibles = useMemo(
+    () => gruposPorCentro.filter((g) => g.reglas.length > 0).map((g) => g.centro.id),
+    [gruposPorCentro]
+  )
+  const todosExpandidos = expandibles.length > 0 && expandibles.every((id) => expandidos.has(id))
+
+  const toggleExpandido = (id) =>
+    setExpandidos((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+
+  const toggleTodos = () => setExpandidos(todosExpandidos ? new Set() : new Set(expandibles))
+
+  const contadorGrupo = (g) => {
+    if (g.reglas.length === 0) return 'sin reglas'
+    const reglasTxt = `${g.reglas.length} regla${g.reglas.length === 1 ? '' : 's'}`
+    if (g.puestosCount === 0) return reglasTxt
+    return `${g.puestosCount} puesto${g.puestosCount === 1 ? '' : 's'} · ${reglasTxt}`
+  }
 
   const openCreate = () => {
     setForm({
@@ -171,7 +254,8 @@ export default function ReglasAsignacion() {
     return sinVersionActiva ? `${m.nombre} (sin versión publicada)` : m.nombre
   }
 
-  const columns = [
+  // Sin columna "Centro de costo": pasó a ser el header del grupo.
+  const columnsGrupo = [
     {
       key: 'puestoId',
       label: 'Puesto',
@@ -184,7 +268,6 @@ export default function ReglasAsignacion() {
           puestoNombre.get(id) ?? '—'
         ),
     },
-    { key: 'centroCostoId', label: 'Centro de costo', render: (id) => centroNombre.get(id) ?? '—' },
     { key: 'moduloId', label: 'Módulo', render: (id) => moduloLabel(moduloPorId.get(id)) },
     {
       key: 'activo',
@@ -205,7 +288,9 @@ export default function ReglasAsignacion() {
         <div>
           <h2 className="text-slate-900 font-bold text-xl">Reglas de asignación</h2>
           <p className="text-slate-400 text-sm">
-            {loading ? 'Cargando…' : `${reglas.length} regla${reglas.length !== 1 ? 's' : ''} registradas`}
+            {loading
+              ? 'Cargando…'
+              : `${reglas.length} regla${reglas.length === 1 ? '' : 's'} en ${centrosConReglas} centro${centrosConReglas === 1 ? '' : 's'} de costo`}
           </p>
         </div>
         <Button onClick={openCreate} disabled={loading || !!loadError}>+ Nueva regla</Button>
@@ -220,33 +305,74 @@ export default function ReglasAsignacion() {
 
       {!loadError && (
         <>
-          <div className="flex items-center gap-2">
-            {[
-              { value: 'TODOS', label: 'Todas' },
-              { value: 'PUESTO', label: 'Por puesto' },
-              { value: 'CENTRO', label: 'De centro' },
-            ].map((opt) => (
+          {expandibles.length > 0 && (
+            <div className="flex items-center justify-end">
               <button
-                key={opt.value}
                 type="button"
-                onClick={() => setAlcanceFiltro(opt.value)}
-                className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${
-                  alcanceFiltro === opt.value ? 'bg-red-50 text-red-600 border-red-200' : 'bg-white text-slate-400 border-slate-200'
-                }`}
+                onClick={toggleTodos}
+                className="text-slate-500 hover:text-slate-700 text-xs font-semibold transition-colors"
               >
-                {opt.label}
+                {todosExpandidos ? 'Colapsar todos' : 'Expandir todos'}
               </button>
-            ))}
-          </div>
-          <Table
-            columns={columns}
-            data={reglasFiltradas}
-            actions={(row) => (
-              <Button variant={row.activo ? 'danger' : 'secondary'} size="sm" onClick={() => toggleActivo(row)}>
-                {row.activo ? 'Desactivar' : 'Activar'}
-              </Button>
-            )}
-          />
+            </div>
+          )}
+
+          {loading ? (
+            <p className="text-slate-400 text-[11px] font-mono uppercase tracking-widest text-center py-10">
+              — Cargando… —
+            </p>
+          ) : gruposPorCentro.length === 0 ? (
+            <p className="text-slate-400 text-[11px] font-mono uppercase tracking-widest text-center py-10">
+              — Sin centros de costo — creá uno para configurar reglas —
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {gruposPorCentro.map((g) => {
+                const abierto = expandidos.has(g.centro.id)
+                const cuerpoId = `grupo-${g.centro.id}`
+                return (
+                  <div key={g.centro.id} className="bg-white border border-slate-200 rounded overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={() => toggleExpandido(g.centro.id)}
+                      aria-expanded={abierto}
+                      aria-controls={cuerpoId}
+                      className="w-full flex items-center gap-2 px-4 py-3 text-left hover:bg-slate-50 transition-colors duration-100"
+                    >
+                      <span className="text-xs text-slate-400">{abierto ? '▾' : '▸'}</span>
+                      <span className="font-semibold text-slate-900">{g.centro.nombre}</span>
+                      {g.inactivo && (
+                        <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-500">
+                          Centro inactivo
+                        </span>
+                      )}
+                      <span className="ml-auto text-slate-400 text-xs">{contadorGrupo(g)}</span>
+                    </button>
+                    {abierto && (
+                      <div id={cuerpoId} className="border-t border-slate-200">
+                        {g.reglas.length > 0 ? (
+                          <Table
+                            flush
+                            columns={columnsGrupo}
+                            data={g.reglas}
+                            actions={(row) => (
+                              <Button variant={row.activo ? 'danger' : 'secondary'} size="sm" onClick={() => toggleActivo(row)}>
+                                {row.activo ? 'Desactivar' : 'Activar'}
+                              </Button>
+                            )}
+                          />
+                        ) : (
+                          <p className="px-4 py-6 text-center text-slate-400 text-sm">
+                            Este centro no tiene reglas configuradas
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </>
       )}
 

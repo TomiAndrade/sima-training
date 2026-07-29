@@ -1,6 +1,10 @@
-export default function Table({ columns, data, actions }) {
+// `flush` saca el marco propio de la tabla (borde, rounded, sombra) para poder
+// anidarla dentro de un contenedor que ya lo trae — si no, quedan dos bordes
+// pegados y esquinas redondeadas encontradas. El default preserva el look de
+// siempre, así que ningún consumidor existente cambia.
+export default function Table({ columns, data, actions, flush = false }) {
   return (
-    <div className="overflow-x-auto bg-white border border-slate-200 rounded shadow-sm">
+    <div className={flush ? 'overflow-x-auto' : 'overflow-x-auto bg-white border border-slate-200 rounded shadow-sm'}>
       <table className="w-full text-sm">
         <thead>
           <tr className="bg-slate-50 border-b border-slate-200">
