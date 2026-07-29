@@ -21,8 +21,15 @@ async function nomina(
   return { originalname: 'nomina.xlsx', buffer } as Express.Multer.File;
 }
 
+// Catálogo de prueba: scores verificados con similitud.ts (ver import.service.spec.ts
+// history) — 'Soldadr'/'Talle' son typos por encima de UMBRAL_PARECIDA (0.7),
+// 'Amolador'/'Oficina' no se parecen a nada del catálogo.
+const PUESTO_SOLDADOR = { id: 'puesto-1', nombre: 'Soldador' };
+const CENTRO_TALLER = { id: 'centro-1', nombre: 'Taller' };
+
 describe('ImportService — usuarios', () => {
   let service: ImportService;
+  let asignaciones: { recalcularEnTx: jest.Mock };
   let prisma: {
     organizacion: { findUnique: jest.Mock };
     usuario: { findUnique: jest.Mock; findFirst: jest.Mock; create: jest.Mock };
@@ -38,21 +45,24 @@ describe('ImportService — usuarios', () => {
   beforeEach(async () => {
     prisma = {
       organizacion: {
-        findUnique: jest.fn().mockResolvedValue({ tipo: TipoOrganizacion.CLIENTE }),
+        findUnique: jest
+          .fn()
+          .mockResolvedValue({ tipo: TipoOrganizacion.INTERNA }),
       },
       usuario: {
         findUnique: jest.fn().mockResolvedValue(null),
         findFirst: jest.fn().mockResolvedValue(null),
         create: jest.fn().mockResolvedValue({ id: 1, vinculacion: null }),
       },
-      puesto: { findMany: jest.fn() },
-      centroCosto: { findMany: jest.fn() },
+      puesto: { findMany: jest.fn().mockResolvedValue([PUESTO_SOLDADOR]) },
+      centroCosto: { findMany: jest.fn().mockResolvedValue([CENTRO_TALLER]) },
       vinculacionPuestoCentro: { deleteMany: jest.fn() },
       $transaction: jest.fn((cb: (tx: unknown) => unknown) => cb(prisma)),
     };
+    asignaciones = { recalcularEnTx: jest.fn() };
 
     // UsuariosService va real, no mockeado: el punto de estos tests es que el
-    // import pase por la MISMA validación de la matriz que el alta manual.
+    // import pase por la MISMA validación (matriz, pares, DNI) que el alta manual.
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ImportService,
@@ -60,90 +70,274 @@ describe('ImportService — usuarios', () => {
         { provide: PrismaService, useValue: prisma },
         { provide: PreguntasService, useValue: {} },
         { provide: ModulosService, useValue: {} },
-        // El import crea usuarios sin pares → recalcularEnTx no llega a
-        // invocarse, pero UsuariosService lo necesita para resolver el DI.
-        { provide: AsignacionesService, useValue: { recalcularEnTx: jest.fn() } },
+        { provide: AsignacionesService, useValue: asignaciones },
       ],
     }).compile();
 
     service = module.get(ImportService);
   });
 
-  it('rechaza el import completo si no se indica organización', async () => {
-    const file = await nomina(
-      ['dni', 'nombre', 'apellido'],
-      [['30111222', 'Ana', 'Paz']],
-    );
+  describe('previewUsuarios', () => {
+    const headers = ['dni', 'nombre', 'apellido', 'puesto', 'centro de costo'];
 
-    await expect(service.confirmarUsuarios(file, undefined)).rejects.toThrow(
-      'Debe indicar la organización',
-    );
-    expect(prisma.usuario.create).not.toHaveBeenCalled();
-  });
+    it('clasifica match exacto de puesto y centro de costo como duplicada', async () => {
+      const file = await nomina(headers, [
+        ['30111222', 'Ana', 'Paz', 'Soldador', 'Taller'],
+      ]);
 
-  it('todo usuario importado entra como ALUMNO — rechazado en una organización CLIENTE', async () => {
-    const file = await nomina(
-      ['dni', 'nombre', 'apellido'],
-      [['30111222', 'Ana', 'Paz']],
-    );
+      const preview = await service.previewUsuarios(file);
 
-    const result = await service.confirmarUsuarios(file, YPF_ID);
-
-    expect(result.created).toBe(0);
-    expect(result.skipped).toBe(1);
-    expect(result.errors[0]).toEqual(
-      expect.objectContaining({ dni: '30111222' }),
-    );
-    expect(result.errors[0].motivo).toContain('ALUMNO');
-    expect(prisma.usuario.create).not.toHaveBeenCalled();
-  });
-
-  it('ignora una eventual columna "rol" del Excel: siempre crea con ALUMNO', async () => {
-    prisma.organizacion.findUnique.mockResolvedValue({
-      tipo: TipoOrganizacion.INTERNA,
+      expect(preview.filas).toHaveLength(1);
+      const fila = preview.filas[0];
+      expect(fila.estado).toBe('ok');
+      expect(fila.puesto).toEqual({
+        texto: 'Soldador',
+        estado: 'duplicada',
+        similar: { preguntaId: 'puesto-1', texto: 'Soldador', score: 1 },
+      });
+      expect(fila.centroCosto).toEqual({
+        texto: 'Taller',
+        estado: 'duplicada',
+        similar: { preguntaId: 'centro-1', texto: 'Taller', score: 1 },
+      });
     });
 
-    const file = await nomina(
-      ['dni', 'nombre', 'apellido', 'rol'],
-      [['30111222', 'Ana', 'Paz', 'Coordinador']],
-    );
+    it('detecta un típeo como parecida, con el sugerido y el score', async () => {
+      const file = await nomina(headers, [
+        ['30111222', 'Ana', 'Paz', 'Soldadr', 'Talle'],
+      ]);
 
-    const result = await service.confirmarUsuarios(file, SIMA_ID);
+      const preview = await service.previewUsuarios(file);
 
-    expect(result).toEqual({ created: 1, skipped: 0, errors: [] });
-    expect(prisma.usuario.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
-          vinculacion: {
-            create: expect.objectContaining({
-              organizacionId: SIMA_ID,
-              rol: RolUsuario.ALUMNO,
-              createdBy: 'import',
+      const fila = preview.filas[0];
+      expect(fila.estado).toBe('ok');
+      expect(fila.puesto).toEqual({
+        texto: 'Soldadr',
+        estado: 'parecida',
+        similar: { preguntaId: 'puesto-1', texto: 'Soldador', score: 0.71 },
+      });
+      expect(fila.centroCosto).toEqual({
+        texto: 'Talle',
+        estado: 'parecida',
+        similar: { preguntaId: 'centro-1', texto: 'Taller', score: 0.77 },
+      });
+    });
+
+    it('marca como nueva cuando no hay nada parecido en el catálogo', async () => {
+      const file = await nomina(headers, [
+        ['30111222', 'Ana', 'Paz', 'Amolador', 'Oficina'],
+      ]);
+
+      const preview = await service.previewUsuarios(file);
+
+      const fila = preview.filas[0];
+      expect(fila.puesto).toEqual({ texto: 'Amolador', estado: 'nueva' });
+      expect(fila.centroCosto).toEqual({ texto: 'Oficina', estado: 'nueva' });
+    });
+
+    it('dos filas con el mismo puesto nuevo clasifican ambas como nueva de forma independiente', async () => {
+      const file = await nomina(headers, [
+        ['30111222', 'Ana', 'Paz', 'Amolador', 'Taller'],
+        ['30222333', 'Bruno', 'Diaz', 'Amolador', 'Taller'],
+      ]);
+
+      const preview = await service.previewUsuarios(file);
+
+      expect(preview.filas[0].puesto?.estado).toBe('nueva');
+      expect(preview.filas[1].puesto?.estado).toBe('nueva');
+    });
+
+    it('marca error si falta el puesto o el centro de costo', async () => {
+      const file = await nomina(headers, [
+        ['30111222', 'Ana', 'Paz', '', 'Taller'],
+      ]);
+
+      const preview = await service.previewUsuarios(file);
+
+      const fila = preview.filas[0];
+      expect(fila.estado).toBe('error');
+      expect(fila.errores).toContain('Falta el puesto');
+      expect(fila.puesto).toBeNull();
+    });
+
+    it('marca error si falta el DNI', async () => {
+      const file = await nomina(headers, [
+        ['', 'Ana', 'Paz', 'Soldador', 'Taller'],
+      ]);
+
+      const preview = await service.previewUsuarios(file);
+
+      expect(preview.filas[0].estado).toBe('error');
+      expect(preview.filas[0].errores).toContain('Falta el DNI');
+    });
+
+    it('marca error si el DNI ya existe activo en la base', async () => {
+      prisma.usuario.findUnique.mockResolvedValue({ deletedAt: null });
+      const file = await nomina(headers, [
+        ['30111222', 'Ana', 'Paz', 'Soldador', 'Taller'],
+      ]);
+
+      const preview = await service.previewUsuarios(file);
+
+      expect(preview.filas[0].errores).toContain(
+        'DNI duplicado (ya existe un usuario activo)',
+      );
+    });
+
+    it('marca error en la segunda fila si el DNI se repite dentro del archivo', async () => {
+      const file = await nomina(headers, [
+        ['30111222', 'Ana', 'Paz', 'Soldador', 'Taller'],
+        ['30111222', 'Otro', 'Nombre', 'Soldador', 'Taller'],
+      ]);
+
+      const preview = await service.previewUsuarios(file);
+
+      expect(preview.filas[0].estado).toBe('ok');
+      expect(preview.filas[1].estado).toBe('error');
+      expect(preview.filas[1].errores).toContain('DNI duplicado en el archivo');
+    });
+
+    it('legajo va a data; ya no existe un campo de puesto en el jsonb', async () => {
+      const file = await nomina(
+        [...headers, 'legajo'],
+        [['30111222', 'Ana', 'Paz', 'Soldador', 'Taller', 'A-42']],
+      );
+
+      const preview = await service.previewUsuarios(file);
+
+      expect(preview.filas[0].data).toEqual({
+        dni: '30111222',
+        nombre: 'Ana',
+        apellido: 'Paz',
+        legajo: 'A-42',
+      });
+    });
+
+    it('avisa si falta la columna puesto o centro de costo en todo el archivo', async () => {
+      const file = await nomina(
+        ['dni', 'nombre', 'apellido'],
+        [['30111222', 'Ana', 'Paz']],
+      );
+
+      const preview = await service.previewUsuarios(file);
+
+      expect(preview.warnings).toEqual(
+        expect.arrayContaining([
+          'No se encontró la columna "puesto"',
+          'No se encontró la columna "centro de costo"',
+        ]),
+      );
+    });
+  });
+
+  describe('confirmarUsuarios', () => {
+    const filaBase = {
+      dni: '30111222',
+      nombre: 'Ana',
+      apellido: 'Paz',
+      puestoId: PUESTO_SOLDADOR.id,
+      centroCostoId: CENTRO_TALLER.id,
+    };
+
+    it('crea el usuario con el par (puesto, centro de costo) ya resuelto', async () => {
+      const result = await service.confirmarUsuarios({
+        organizacionId: SIMA_ID,
+        usuarios: [filaBase],
+      });
+
+      expect(result).toEqual({ created: 1, skipped: 0, errors: [] });
+      expect(prisma.usuario.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            vinculacion: expect.objectContaining({
+              create: expect.objectContaining({
+                organizacionId: SIMA_ID,
+                rol: RolUsuario.ALUMNO,
+                puestosCentros: {
+                  create: [
+                    {
+                      puestoId: PUESTO_SOLDADOR.id,
+                      centroCostoId: CENTRO_TALLER.id,
+                      principal: true,
+                      createdBy: 'import',
+                    },
+                  ],
+                },
+              }),
             }),
-          },
+          }),
         }),
-      }),
-    );
-  });
-
-  it('crea el usuario cuando la organización interna admite ALUMNO', async () => {
-    prisma.organizacion.findUnique.mockResolvedValue({
-      tipo: TipoOrganizacion.INTERNA,
+      );
+      // Con pares no vacíos, UsuariosService.create toma la rama transaccional
+      // que recalcula asignaciones automáticas — sin cambios ahí, solo lo
+      // confirmamos acá porque antes el import nunca mandaba pares.
+      expect(asignaciones.recalcularEnTx).toHaveBeenCalled();
     });
 
-    const file = await nomina(
-      ['dni', 'nombre', 'apellido', 'legajo'],
-      [['30111222', 'Ana', 'Paz', 'A-42']],
-    );
+    it('rechaza ALUMNO en una organización CLIENTE (matriz, por el camino del import)', async () => {
+      prisma.organizacion.findUnique.mockResolvedValue({
+        tipo: TipoOrganizacion.CLIENTE,
+      });
 
-    const result = await service.confirmarUsuarios(file, SIMA_ID);
+      const result = await service.confirmarUsuarios({
+        organizacionId: YPF_ID,
+        usuarios: [filaBase],
+      });
 
-    expect(result.created).toBe(1);
-    // El legajo sigue yendo al jsonb de nómina, no al catálogo de puestos.
-    expect(prisma.usuario.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({ datos: { legajo: 'A-42' } }),
-      }),
-    );
+      expect(result.created).toBe(0);
+      expect(result.skipped).toBe(1);
+      expect(result.errors[0]).toEqual(
+        expect.objectContaining({ dni: '30111222', row: 2 }),
+      );
+      expect(result.errors[0].motivo).toContain('ALUMNO');
+      expect(prisma.usuario.create).not.toHaveBeenCalled();
+    });
+
+    it('revalida DNI duplicado activo en base al confirmar (aunque el preview ya lo haya marcado)', async () => {
+      prisma.usuario.findFirst.mockImplementation(
+        ({ where }: { where: { deletedAt: unknown } }) =>
+          Promise.resolve(where.deletedAt === null ? { id: 99 } : null),
+      );
+
+      const result = await service.confirmarUsuarios({
+        organizacionId: SIMA_ID,
+        usuarios: [filaBase],
+      });
+
+      expect(result.created).toBe(0);
+      expect(result.skipped).toBe(1);
+      expect(result.errors[0].motivo).toContain(
+        'Ya existe un usuario con el DNI',
+      );
+      expect(prisma.usuario.create).not.toHaveBeenCalled();
+    });
+
+    it('saltea la segunda fila si el DNI se repite dentro del mismo DTO', async () => {
+      const result = await service.confirmarUsuarios({
+        organizacionId: SIMA_ID,
+        usuarios: [
+          filaBase,
+          { ...filaBase, nombre: 'Otra', apellido: 'Persona' },
+        ],
+      });
+
+      expect(result.created).toBe(1);
+      expect(result.skipped).toBe(1);
+      expect(result.errors[0].motivo).toBe('DNI duplicado en el archivo');
+      expect(prisma.usuario.create).toHaveBeenCalledTimes(1);
+    });
+
+    it('filaIndex se refleja en errors[].row cuando viene', async () => {
+      prisma.organizacion.findUnique.mockResolvedValue({
+        tipo: TipoOrganizacion.CLIENTE,
+      });
+
+      const result = await service.confirmarUsuarios({
+        organizacionId: YPF_ID,
+        usuarios: [{ ...filaBase, filaIndex: 7 }],
+      });
+
+      expect(result.errors[0].row).toBe(7);
+    });
   });
 });

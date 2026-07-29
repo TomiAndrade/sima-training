@@ -6,36 +6,61 @@ import { PreguntasService } from '../preguntas/preguntas.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { UsuariosService } from '../usuarios/usuarios.service';
 import { ConfirmarImportPreguntasDto } from './dto/confirmar-import-preguntas.dto';
+import { ConfirmarImportUsuariosDto } from './dto/confirmar-import-usuarios.dto';
 import { clasificar, normalizar, RefSimilitud, toRef } from './similitud';
 
-const SAMPLE_ROWS = 10;
-
-// Columnas del Excel → campo del modelo / datos jsonb.
-// Las columnas "datos_*" se guardan en el jsonb con la clave que sigue al prefijo.
-// `puesto` sigue yendo al jsonb (texto libre de nómina): los pares
-// (puesto, centro de costo) del catálogo se cargan desde el ABM, no por Excel.
+// Columnas del Excel → campo del modelo / datos jsonb. Header normalizado
+// (sin acentos, espacios colapsados) → campo, igual criterio que
+// COLUMN_MAP_PREGUNTAS. `puesto` y "centro de costo" ya NO van al jsonb: son
+// insumo puro para resolver contra el catálogo real (ver previewUsuarios).
 // Sin columnas "rol"/"empresa"/"email": todo usuario importado se crea como
 // ALUMNO en la organización que se elige una sola vez para todo el import
 // (un Excel es siempre de una sola empresa), no por fila.
-const COLUMN_MAP: Record<string, string> = {
+const COLUMN_MAP_USUARIOS: Record<string, string> = {
   dni: 'dni',
   nombre: 'nombre',
   apellido: 'apellido',
-  // Campos extra de nómina → datos jsonb
   legajo: 'datos_legajo',
-  puesto: 'datos_puesto',
-  sector: 'datos_sector',
+  puesto: 'puestoTexto',
+  'centro de costo': 'centroCostoTexto',
+  'centro costo': 'centroCostoTexto',
+  cc: 'centroCostoTexto',
 };
 
-export interface ImportPreview {
+export interface UsuarioImportData {
+  dni: string;
+  nombre: string;
+  apellido: string;
+  legajo?: string;
+}
+
+// Mismo vocabulario que similitud.ts: duplicada = match exacto en el catálogo
+// (se asigna automático), parecida = típeo probable (se recomienda), nueva =
+// no hay nada parecido (se recomienda crear). El campo `preguntaId` de
+// `similar` es el nombre genérico que ya define similitud.ts — no vale la pena
+// tocar ese archivo compartido solo por naming.
+export interface ClasificacionCatalogo {
+  texto: string;
+  estado: 'nueva' | 'duplicada' | 'parecida';
+  similar?: { preguntaId: string | null; texto: string; score: number };
+}
+
+export interface FilaImportUsuario {
+  index: number;
+  data: UsuarioImportData;
+  puesto: ClasificacionCatalogo | null;
+  centroCosto: ClasificacionCatalogo | null;
+  estado: 'ok' | 'error';
+  errores?: string[];
+}
+
+export interface ImportUsuariosPreview {
   fileName: string;
   sheetName: string;
-  totalColumns: number;
   totalRows: number;
   headers: string[];
-  sample: Record<string, unknown>[];
   warnings: string[];
-  persisted: false;
+  filas: FilaImportUsuario[];
 }
 
 export interface ImportError {
@@ -125,7 +150,9 @@ export class ImportService {
     private readonly usuarios: UsuariosService,
   ) {}
 
-  async previewUsuarios(file?: Express.Multer.File): Promise<ImportPreview> {
+  async previewUsuarios(
+    file?: Express.Multer.File,
+  ): Promise<ImportUsuariosPreview> {
     if (!file) {
       throw new BadRequestException('No se recibió ningún archivo');
     }
@@ -135,23 +162,110 @@ export class ImportService {
 
     const { sheet, headers, warnings } = await this.parseSheet(file);
 
-    const dataRows: Record<string, unknown>[] = [];
+    const colIdx: Record<string, number> = {};
+    headers.forEach((h, i) => {
+      const key = COLUMN_MAP_USUARIOS[normalizar(h)];
+      if (key) colIdx[key] = i;
+    });
+    if (colIdx['puestoTexto'] === undefined) {
+      warnings.push('No se encontró la columna "puesto"');
+    }
+    if (colIdx['centroCostoTexto'] === undefined) {
+      warnings.push('No se encontró la columna "centro de costo"');
+    }
+
+    // Bancos de catálogo (solo activos) para clasificar puesto/centro de
+    // costo por fila, mismo mecanismo que previewPreguntas usa contra el
+    // banco de preguntas.
+    const [puestos, centros] = await Promise.all([
+      this.prisma.puesto.findMany({
+        where: { activo: true },
+        select: { id: true, nombre: true },
+      }),
+      this.prisma.centroCosto.findMany({
+        where: { activo: true },
+        select: { id: true, nombre: true },
+      }),
+    ]);
+    const refsPuesto: RefSimilitud[] = puestos.map((p) =>
+      toRef(p.nombre, p.id),
+    );
+    const refsCentro: RefSimilitud[] = centros.map((c) =>
+      toRef(c.nombre, c.id),
+    );
+
+    const getCol = (row: ReturnType<typeof sheet.getRow>, field: string) => {
+      const idx = colIdx[field];
+      return idx === undefined
+        ? ''
+        : this.cellToString(row.getCell(idx + 1).value);
+    };
+
+    const filas: FilaImportUsuario[] = [];
+    const dnisVistos = new Set<string>();
     let totalRows = 0;
+
     for (let r = 2; r <= sheet.rowCount; r++) {
       const row = sheet.getRow(r);
-      const obj: Record<string, unknown> = {};
+
       let hasValue = false;
-      headers.forEach((header, idx) => {
-        const cell = row.getCell(idx + 1);
-        const value = this.cellToString(cell.value);
-        obj[header] = value;
-        if (value) hasValue = true;
+      headers.forEach((_, i) => {
+        if (this.cellToString(row.getCell(i + 1).value)) hasValue = true;
       });
       if (!hasValue) continue;
       totalRows++;
-      if (dataRows.length < SAMPLE_ROWS) {
-        dataRows.push(obj);
+
+      const dni = getCol(row, 'dni');
+      const nombre = getCol(row, 'nombre');
+      const apellido = getCol(row, 'apellido');
+      const legajo = getCol(row, 'datos_legajo') || undefined;
+      const puestoTexto = getCol(row, 'puestoTexto');
+      const centroCostoTexto = getCol(row, 'centroCostoTexto');
+
+      const errores: string[] = [];
+      if (!dni) errores.push('Falta el DNI');
+      if (!nombre) errores.push('Falta el nombre');
+      if (!apellido) errores.push('Falta el apellido');
+      if (!puestoTexto) errores.push('Falta el puesto');
+      if (!centroCostoTexto) errores.push('Falta el centro de costo');
+
+      if (dni) {
+        if (dnisVistos.has(dni)) {
+          errores.push('DNI duplicado en el archivo');
+        } else {
+          dnisVistos.add(dni);
+          const existente = await this.prisma.usuario.findUnique({
+            where: { dni },
+            select: { deletedAt: true },
+          });
+          if (existente && existente.deletedAt === null) {
+            errores.push('DNI duplicado (ya existe un usuario activo)');
+          }
+        }
       }
+
+      // Clasificar SOLO contra el catálogo real — a diferencia de
+      // previewPreguntas (que empuja cada fila válida de vuelta a `refs` para
+      // detectar duplicados intra-archivo), acá NO se empuja nada: dos filas
+      // con el mismo puesto nuevo ("Soldador" x2) deben salir ambas 'nueva'
+      // de forma independiente, no 'duplicada' entre sí (el catálogo real
+      // todavía no tiene "Soldador"). El dedupe de creación de catálogo
+      // nuevo repetido queda del lado del frontend, agrupando por texto.
+      const puesto = puestoTexto
+        ? this.clasificarCatalogo(puestoTexto, refsPuesto)
+        : null;
+      const centroCosto = centroCostoTexto
+        ? this.clasificarCatalogo(centroCostoTexto, refsCentro)
+        : null;
+
+      filas.push({
+        index: r,
+        data: { dni, nombre, apellido, legajo },
+        puesto,
+        centroCosto,
+        estado: errores.length ? 'error' : 'ok',
+        ...(errores.length ? { errores } : {}),
+      });
     }
 
     if (totalRows === 0) {
@@ -161,118 +275,65 @@ export class ImportService {
     return {
       fileName: file.originalname,
       sheetName: sheet.name,
-      totalColumns: headers.length,
       totalRows,
       headers,
-      sample: dataRows,
       warnings,
-      persisted: false,
+      filas,
     };
   }
 
+  private clasificarCatalogo(
+    texto: string,
+    refs: RefSimilitud[],
+  ): ClasificacionCatalogo {
+    const { estado, similar } = clasificar(texto, refs);
+    return { texto, estado, similar };
+  }
+
   async confirmarUsuarios(
-    file?: Express.Multer.File,
-    organizacionId?: number,
+    dto: ConfirmarImportUsuariosDto,
   ): Promise<ImportResult> {
-    if (!file) {
-      throw new BadRequestException('No se recibió ningún archivo');
-    }
-    if (!/\.xlsx$/i.test(file.originalname)) {
-      throw new BadRequestException('El archivo debe ser un .xlsx');
-    }
-    if (!organizacionId) {
-      throw new BadRequestException(
-        'Debe indicar la organización a la que pertenecen los usuarios del Excel',
-      );
-    }
-
-    const { sheet, headers } = await this.parseSheet(file);
-
-    // Índices de columnas mapeadas (case-insensitive).
-    const colIdx: Record<string, number> = {};
-    headers.forEach((h, i) => {
-      const key = COLUMN_MAP[h.toLowerCase().trim()];
-      if (key) colIdx[key] = i;
-    });
-
     const errors: ImportError[] = [];
     let created = 0;
     let skipped = 0;
+    const dnisVistos = new Set<string>();
 
-    for (let r = 2; r <= sheet.rowCount; r++) {
-      const row = sheet.getRow(r);
+    for (const [i, fila] of dto.usuarios.entries()) {
+      const row = fila.filaIndex ?? i + 2;
 
-      const getCol = (field: string): string => {
-        const idx = colIdx[field];
-        if (idx === undefined) return '';
-        return this.cellToString(row.getCell(idx + 1).value);
-      };
-
-      // Verificar fila vacía.
-      let hasValue = false;
-      headers.forEach((_, i) => {
-        if (this.cellToString(row.getCell(i + 1).value)) hasValue = true;
-      });
-      if (!hasValue) continue;
-
-      const dni = getCol('dni');
-      const nombre = getCol('nombre');
-      const apellido = getCol('apellido');
-
-      // Campos obligatorios.
-      if (!dni || !nombre || !apellido) {
+      if (dnisVistos.has(fila.dni)) {
         skipped++;
         errors.push({
-          row: r,
-          dni: dni || undefined,
-          motivo: 'Faltan campos obligatorios (DNI, Nombre o Apellido)',
+          row,
+          dni: fila.dni,
+          motivo: 'DNI duplicado en el archivo',
         });
         continue;
       }
+      dnisVistos.add(fila.dni);
 
-      // DNI existente: si está activo es duplicado real (se saltea); si está
-      // dado de baja lo revive UsuariosService.create, más abajo.
-      const existente = await this.prisma.usuario.findUnique({
-        where: { dni },
-        select: { id: true, deletedAt: true },
-      });
-      if (existente && existente.deletedAt === null) {
-        skipped++;
-        errors.push({ row: r, dni, motivo: 'DNI duplicado' });
-        continue;
-      }
-
-      const rol = RolUsuario.ALUMNO;
-
-      // Campos de nómina (datos_*) + columnas no mapeadas → jsonb.
-      const mappedKeys = new Set(Object.values(colIdx));
       const datos: Record<string, string> = {};
-      const legajo = getCol('datos_legajo');
-      const puesto = getCol('datos_puesto');
-      const sector = getCol('datos_sector');
-      if (legajo) datos['legajo'] = legajo;
-      if (puesto) datos['puesto'] = puesto;
-      if (sector) datos['sector'] = sector;
-      headers.forEach((h, i) => {
-        if (!mappedKeys.has(i)) {
-          const val = this.cellToString(row.getCell(i + 1).value);
-          if (val) datos[h] = val;
-        }
-      });
+      if (fila.legajo) datos['legajo'] = fila.legajo;
 
       // El alta pasa por UsuariosService: así el import comparte con el ABM
-      // manual la validación de la matriz tipo-de-organización ↔ rol (y el
-      // revive del DNI dado de baja), en vez de tener su propia copia.
+      // manual la validación de la matriz tipo-de-organización ↔ rol, la
+      // validación de que puestoId/centroCostoId existan de verdad, el
+      // revive del DNI dado de baja, y el recálculo de asignaciones
+      // automáticas (se dispara solo porque `pares` no viene vacío).
       try {
         await this.usuarios.create(
           {
-            nombre,
-            apellido,
-            dni,
+            nombre: fila.nombre,
+            apellido: fila.apellido,
+            dni: fila.dni,
             datos,
-            // Sin pares: el Excel de nómina no trae el par (puesto, centro) del
-            // catálogo. Se cargan después desde el ABM.
-            vinculacion: { organizacionId, rol },
+            vinculacion: {
+              organizacionId: dto.organizacionId,
+              rol: RolUsuario.ALUMNO,
+              pares: [
+                { puestoId: fila.puestoId, centroCostoId: fila.centroCostoId },
+              ],
+            },
           },
           'import',
         );
@@ -280,8 +341,8 @@ export class ImportService {
       } catch (err) {
         skipped++;
         errors.push({
-          row: r,
-          dni,
+          row,
+          dni: fila.dni,
           motivo: err instanceof Error ? err.message : 'Error al crear',
         });
       }
