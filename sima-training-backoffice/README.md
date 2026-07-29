@@ -6,7 +6,8 @@ Backoffice de la plataforma **SIMA TRAINING** de Ingeniería Sima. Administra cl
 
 - Vite + React (sin router — navegación con `useState`)
 - Tailwind CSS v3
-- Consume la API real (`sima-training-api`) para **Usuarios, Puestos, Centros de Costo, Preguntas y Módulos** (100% backend, sin mock); el resto (Clientes, Resumen de SIMA CHECK salvo el StatCard de Módulos activos, Asignaciones) sigue con datos mockeados en `src/` (se migra ABM por ABM). ⚠️ **Usuarios todavía consume la forma vieja de `GET /usuarios`** (`usuario.rol` plano, `clasificacion`) — el backend ya expone `vinculacion` anidada; migrarlo es trabajo pendiente (ver [`../docs/pendientes.md`](../docs/pendientes.md))
+- Consume la API real (`sima-training-api`) para **Usuarios, Puestos, Centros de Costo, Preguntas, Módulos, Reglas y Asignaciones** (100% backend, sin mock). Lo que sigue con datos mockeados en `src/` es **Clientes**, el **Dashboard** y el **Resumen** de SIMA CHECK salvo el StatCard de Módulos activos (se migra ABM por ABM — ver [`../docs/pendientes.md`](../docs/pendientes.md))
+- Usuarios lee y escribe la **forma anidada** de `GET /usuarios` (`usuario.vinculacion.rol` / `.organizacion` / `.pares` / `.parPrincipal`), no los campos planos que el backend dejó de exponer. `clasificacion` se disolvió como concepto y no aparece en ningún frontend
 
 ## Cómo correr
 
@@ -25,18 +26,20 @@ src/
 ├── core/                # Entidades compartidas por toda la plataforma
 │   ├── api/              client.js · usuarios.js · organizaciones.js · puestos.js ·
 │   │                     centrosCosto.js · preguntas.js · modulos.js · etiquetas.js ·
-│   │                     import.js  (capa HTTP)
+│   │                     import.js · reglasAsignacion.js · asignaciones.js  (capa HTTP)
 │   ├── data/              clients.js · users.js · usuarios-mock.js  (mock, en migración)
-│   ├── components/        ImportUsuariosModal.jsx · ImportPreguntasModal.jsx
-│   └── pages/             Clients.jsx · Usuarios.jsx · Puestos.jsx · CentrosCosto.jsx
-│                          (Usuarios/Puestos/CentrosCosto ya usan la API real)
+│   ├── components/        ImportUsuariosModal.jsx · ImportPreguntasModal.jsx ·
+│   │                     ParesPuestoCentro.jsx · estadoSimilitudBadge.jsx
+│   └── pages/             Clients.jsx (mock) · Usuarios.jsx · Puestos.jsx ·
+│                          CentrosCosto.jsx  (los tres últimos, API real)
 ├── sima-check/          # Producto: capacitaciones y evaluaciones
 │   ├── data/              training-modules.js · training-assignments.js · evaluations.js
-│   │                     (mock; Módulos y Preguntas ya no lo usan, ver abajo)
+│   │                     (mock; hoy solo alimentan Dashboard y Resumen)
 │   ├── components/        BancoPreguntas.jsx  (banco/asignación de preguntas,
 │   │                     compartido entre Preguntas y Módulos) · bancoModulo.jsx
-│   └── pages/             Overview.jsx · TrainingModules.jsx (100% backend) ·
-│                          Questions.jsx (100% backend) · TrainingAssignments.jsx (mock)
+│   └── pages/             Overview.jsx (mock) · TrainingModules.jsx · Questions.jsx ·
+│                          ReglasAsignacion.jsx · TrainingAssignments.jsx
+│                          (los cuatro últimos, 100% backend)
 ├── pages/               # Shell: BackofficeLayout.jsx · Dashboard.jsx
 ├── components/          # Button · Card · Modal · Table · StatCard · ProgressBar · MultiSelectFilter
 └── hooks/               # useNavigation.js
@@ -48,10 +51,10 @@ src/
 |---|---|
 | (root) | Panel Principal (Dashboard) |
 | Administración | Clientes · Usuarios · Puestos · Centros de Costo |
-| SIMA CHECK | Resumen · Módulos · Preguntas · Asignaciones |
+| SIMA CHECK | Resumen · Módulos · Preguntas · Reglas · Asignaciones |
 | Configuración | *(placeholder — Roles y Permisos futuros)* |
 
-> El backend ya tiene un modelo completo de `Asignacion`/`ReglaAsignacion` (asignaciones automáticas por par puesto+centro → módulo), pero la pantalla "Asignaciones" todavía no lo consume: sigue siendo el mock viejo de `training-assignments.js`. Ver [`../docs/pendientes.md`](../docs/pendientes.md).
+> **Reglas** y **Asignaciones** son las dos caras del motor de asignación automática. En Reglas se configura qué módulo es obligatorio para un par (puesto, centro de costo) o para un centro entero; Asignaciones es una pantalla de **consulta por persona** que muestra qué le corresponde y por qué. Las asignaciones no se cargan una por una: las deriva el motor a partir de las reglas y de los pares de cada quien.
 
 ## Agregar un producto futuro
 

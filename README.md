@@ -1,6 +1,6 @@
 # SIMA TRAINING — MVP
 
-> **Estado: MVP con backend real.** El backend (NestJS + PostgreSQL) ya expone **Usuarios** (con su vinculación a organización/rol y sus pares puesto+centro de costo), **Puestos**, **Centros de Costo**, **Organizaciones**, el banco de **Preguntas**, los **Módulos** versionados y el motor de **Asignaciones automáticas** (regla puesto+centro → módulo). El backoffice ya consume 100% del backend para Usuarios, Puestos, Centros de Costo, Preguntas y Módulos; Clientes y la pantalla de Asignaciones todavía son mock. La app tablet sigue 100% mockeada, sin conexión al backend.
+> **Estado: MVP con backend real.** El backend (NestJS + PostgreSQL) ya expone **Usuarios** (con su vinculación a organización/rol y sus pares puesto+centro de costo), **Puestos**, **Centros de Costo**, **Organizaciones**, el banco de **Preguntas**, los **Módulos** versionados y el motor de **Asignaciones automáticas** (regla puesto+centro → módulo). El backoffice ya consume 100% del backend para Usuarios, Puestos, Centros de Costo, Preguntas, Módulos, Reglas de Asignación y Asignaciones; quedan mockeados Clientes, el Dashboard y casi todo el Resumen de SIMA CHECK. La app tablet sigue 100% mockeada, sin conexión al backend.
 
 MVP de alta fidelidad para **Ingeniería Sima**, orientado a la industria Oil & Gas. Arquitectura multi-producto: **SIMA CHECK** (capacitaciones y evaluaciones) es el primer producto integrado. El sistema está preparado para incorporar SIMA INSPECTIONS, SIMA AUDITS, etc.
 
@@ -76,7 +76,8 @@ Sidebar global con tres secciones:
 | Resumen | Métricas operacionales + gráfico SVG de aprobación por módulo + últimas evaluaciones (mock, salvo el StatCard "Módulos activos" que ya es dato real) |
 | Módulos | **100% backend**: tabla de módulos contra `/modulos`, con su ciclo de vida (BORRADOR/ACTIVO/ARCHIVADO) y versionado (`AÑO.MAYOR.MENOR`) |
 | Preguntas | **100% backend**: banco de preguntas contra `/preguntas`, filtros combinables por módulo/texto/papelera, asignación a módulos |
-| Asignaciones | Mock (`training-assignments.js`) — el backend ya tiene el modelo real (`Asignacion`/`ReglaAsignacion`, asignación automática por par puesto+centro → módulo) pero esta pantalla todavía no lo consume |
+| Reglas | **100% backend**: ABM de `ReglaAsignacion` contra `/reglas-asignacion`, en acordeón por centro de costo. Una regla puede ser por par exacto (puesto, centro) o de centro (todos sus puestos) |
+| Asignaciones | **100% backend**: pantalla de **consulta por persona**, no de acción — las asignaciones las deriva el motor desde las reglas y los pares de cada quien. Muestra vigentes con su origen (AUTOMATICA/MANUAL) y el porqué, más las revocadas en una sección aparte |
 
 ---
 
@@ -95,7 +96,7 @@ Al finalizar, la asignación cambia de `pending → completed` en el estado de l
 
 ## Datos
 
-> **Usuarios, Organizaciones, Puestos, Centros de Costo, Preguntas y Módulos** ya viven en el backend real (PostgreSQL); el seed carga la organización interna (Ingeniería SIMA) y los módulos base, sin datos de prueba. **Clientes** y la pantalla de **Asignaciones** siguen mockeados en archivos `.js`.
+> **Usuarios, Organizaciones, Puestos, Centros de Costo, Preguntas, Módulos, Reglas y Asignaciones** ya viven en el backend real (PostgreSQL); el seed carga la organización interna (Ingeniería SIMA) y los módulos base, sin datos de prueba. Lo que sigue mockeado en archivos `.js` es **Clientes**, el **Dashboard** y casi todo el **Resumen** de SIMA CHECK.
 >
 > Una persona puede tener **varios pares** (puesto, centro de costo) y debe hacer los módulos que le corresponden por **todos** ellos — el par marcado como `principal` es solo el que se muestra en el listado. Qué roles admite cada tipo de organización lo fija una matriz (`INTERNA` → todos · `CLIENTE` → auditor · `SUBCONTRATISTA` → alumno) que el backend valida tanto en el alta manual como en el import de Excel. Detalle en [`docs/modelo-vinculacion-propuesto.md`](docs/modelo-vinculacion-propuesto.md) y en el [README del backend](sima-training-api/README.md).
 >
@@ -126,14 +127,18 @@ sima-training-api/                # Backend NestJS
 sima-training-backoffice/src/
 ├── core/
 │   ├── api/        client.js · usuarios.js · organizaciones.js · puestos.js ·
-│   │               centrosCosto.js · preguntas.js · modulos.js · etiquetas.js  # capa HTTP
+│   │               centrosCosto.js · preguntas.js · modulos.js · etiquetas.js ·
+│   │               import.js · reglasAsignacion.js · asignaciones.js   # capa HTTP
 │   ├── data/       clients.js · users.js · usuarios-mock.js (mock, en migración)
-│   └── pages/      Clients.jsx · Usuarios.jsx · Puestos.jsx · CentrosCosto.jsx
-│                   (Usuarios/Puestos/CentrosCosto ya usan la API real)
+│   ├── components/ ImportUsuariosModal.jsx · ImportPreguntasModal.jsx ·
+│   │               ParesPuestoCentro.jsx · estadoSimilitudBadge.jsx
+│   └── pages/      Clients.jsx (mock) · Usuarios.jsx · Puestos.jsx · CentrosCosto.jsx
 ├── sima-check/
-│   ├── data/       training-modules.js · training-assignments.js · evaluations.js (mock)
-│   └── pages/      Overview.jsx · TrainingModules.jsx (backend) · Questions.jsx (backend)
-│                   · TrainingAssignments.jsx (mock)
+│   ├── data/       training-modules.js · training-assignments.js · evaluations.js
+│   │               (mock; hoy solo alimentan Dashboard y Resumen)
+│   ├── components/ BancoPreguntas.jsx · bancoModulo.jsx
+│   └── pages/      Overview.jsx (mock) · TrainingModules.jsx · Questions.jsx ·
+│                   ReglasAsignacion.jsx · TrainingAssignments.jsx   (los 4, backend)
 ├── pages/          BackofficeLayout.jsx · Dashboard.jsx
 ├── components/     Button · Card · Modal · Table · StatCard · ProgressBar · MultiSelectFilter
 └── hooks/          useNavigation.js
