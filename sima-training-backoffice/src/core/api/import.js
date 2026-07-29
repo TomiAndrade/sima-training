@@ -3,10 +3,10 @@ import { api } from './client'
 export const importApi = {
   previewUsuarios: (file) => api.upload('/import/usuarios/preview', file),
 
-  confirmarUsuarios: (file, organizacionId) => {
-    const extra = organizacionId ? { organizacionId: String(organizacionId) } : {}
-    return api.upload('/import/usuarios/confirm', file, 'file', extra)
-  },
+  // Igual que confirmarPreguntas: las filas ya vienen resueltas (puesto/centro
+  // de costo matcheados o creados) desde el preview, no se re-sube el Excel.
+  confirmarUsuarios: (organizacionId, usuarios) =>
+    api.post('/import/usuarios/confirm', { organizacionId: Number(organizacionId), usuarios }),
 
   // Import de preguntas: preview sube el Excel (multipart); confirm manda las
   // preguntas ya seleccionadas del preview como JSON (no re-sube el archivo).

@@ -4,6 +4,7 @@ import Button from '../../components/Button'
 import { importApi } from '../api/import'
 import { modulosApi } from '../api/modulos'
 import { backendTypeBadge } from '../../sima-check/components/bancoModulo'
+import EstadoSimilitudBadge from './estadoSimilitudBadge'
 
 // step: 'select' | 'preview' | 'result'
 const INITIAL = {
@@ -15,28 +16,6 @@ const INITIAL = {
   loading: false,
   error: null,
   selected: new Set(),
-}
-
-function estadoSimBadge(estado, similar) {
-  const map = {
-    nueva: 'bg-emerald-50 text-emerald-600 border-emerald-200',
-    parecida: 'bg-amber-50 text-amber-600 border-amber-200',
-    duplicada: 'bg-red-50 text-red-600 border-red-200',
-    error: 'bg-slate-100 text-slate-500 border-slate-200',
-  }
-  const label =
-    estado === 'parecida' && similar
-      ? `Parecida ${Math.round(similar.score * 100)}%`
-      : estado === 'nueva'
-        ? 'Nueva'
-        : estado === 'duplicada'
-          ? 'Duplicada'
-          : 'Error'
-  return (
-    <span className={`px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide border ${map[estado]}`}>
-      {label}
-    </span>
-  )
 }
 
 export default function ImportPreguntasModal({ open, onClose, onImported }) {
@@ -207,7 +186,7 @@ export default function ImportPreguntasModal({ open, onClose, onImported }) {
                         {f.data.tipo ? backendTypeBadge(f.data.tipo) : <span className="text-slate-400">—</span>}
                       </td>
                       <td className="px-3 py-2 space-y-1">
-                        {estadoSimBadge(f.estado, f.similar)}
+                        <EstadoSimilitudBadge estado={f.estado} similar={f.similar} />
                         {f.estado === 'parecida' && f.similar && (
                           <div className="text-[10px] text-slate-400 line-clamp-1">≈ {f.similar.texto}</div>
                         )}
