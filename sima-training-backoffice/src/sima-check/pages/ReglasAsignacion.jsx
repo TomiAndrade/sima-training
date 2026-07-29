@@ -17,6 +17,8 @@ const emptyForm = { centroCostoId: '', alcance: 'PUESTO', puestoIds: new Set(), 
 const puestoKey = (id) => id ?? '∅'
 const reglaKey = (r) => `${puestoKey(r.puestoId)}|${r.centroCostoId}|${r.moduloId}`
 
+const badgeBase = 'px-2.5 py-1 rounded-full text-xs font-semibold'
+
 export default function ReglasAsignacion() {
   const [reglas, setReglas] = useState([])
   const [puestos, setPuestos] = useState([])
@@ -263,21 +265,27 @@ export default function ReglasAsignacion() {
     {
       key: 'puestoId',
       label: 'Puesto',
-      render: (id) =>
-        id == null ? (
-          <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-600">
-            Todos los puestos
-          </span>
-        ) : (
-          puestoNombre.get(id) ?? '—'
-        ),
+      // Las dos variantes son el mismo eje (el alcance de la regla), así que
+      // van con la misma píldora en dos colores de la familia categórica:
+      // indigo el caso "todo el centro", sky el puesto concreto. El fallback
+      // queda como texto plano a propósito — un "—" adentro de una píldora se
+      // leería como un puesto llamado así, y es justo el caso en el que el
+      // nombre no se pudo resolver contra el catálogo.
+      render: (id) => {
+        if (id == null) {
+          return <span className={`${badgeBase} bg-indigo-50 text-indigo-600`}>Todos los puestos</span>
+        }
+        const nombre = puestoNombre.get(id)
+        if (!nombre) return '—'
+        return <span className={`${badgeBase} bg-sky-50 text-sky-600`}>{nombre}</span>
+      },
     },
     { key: 'moduloId', label: 'Módulo', render: (id) => moduloLabel(moduloPorId.get(id)) },
     {
       key: 'activo',
       label: 'Estado',
       render: (val) => (
-        <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${val ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-500'}`}>
+        <span className={`${badgeBase} ${val ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-500'}`}>
           {val ? 'Activa' : 'Inactiva'}
         </span>
       ),
@@ -346,7 +354,7 @@ export default function ReglasAsignacion() {
                       <span className="text-xs text-slate-400">{abierto ? '▾' : '▸'}</span>
                       <span className="font-semibold text-slate-900">{g.centro.nombre}</span>
                       {g.inactivo && (
-                        <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-500">
+                        <span className={`${badgeBase} bg-slate-100 text-slate-500`}>
                           Centro inactivo
                         </span>
                       )}
