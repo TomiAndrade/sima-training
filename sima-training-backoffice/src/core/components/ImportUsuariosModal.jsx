@@ -127,8 +127,14 @@ export default function ImportUsuariosModal({ open, onClose, onImported }) {
   useEffect(() => {
     if (!open) return
     organizacionesApi.list().then(setOrganizaciones).catch(() => setOrganizaciones([]))
-    puestosApi.list().then(setPuestos).catch(() => setPuestos([]))
-    centrosCostoApi.list().then(setCentrosCosto).catch(() => setCentrosCosto([]))
+    // Solo activos: estos dos catálogos alimentan el <select> de "elegir del
+    // catálogo" del resolver, o sea que se ofrecen para asignar a un usuario
+    // nuevo — un puesto/centro dado de baja no es una opción válida ahí.
+    // (crearOResolverCatalogo sí pide la lista completa: el @unique de nombre
+    // del backend no distingue activos, así que un choque puede ser contra uno
+    // inactivo y hay que poder recuperarlo.)
+    puestosApi.list({ activo: true }).then(setPuestos).catch(() => setPuestos([]))
+    centrosCostoApi.list({ activo: true }).then(setCentrosCosto).catch(() => setCentrosCosto([]))
   }, [open])
 
   const organizacionesValidas = organizaciones.filter((o) => TIPOS_ORG_ALUMNO.includes(o.tipo))

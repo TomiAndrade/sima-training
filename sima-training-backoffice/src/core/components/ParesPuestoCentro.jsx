@@ -22,7 +22,8 @@ export default function ParesPuestoCentro({ pares, onChange, puestos, centrosCos
     onChange(pares.map((par, i) => ({ ...par, principal: i === index })))
   }
 
-  // Los catálogos solo traen activos, pero si el par ya tenía cargado un
+  // El padre pasa los catálogos COMPLETOS (no usa el `?activo=` de la API) justo
+  // para esto: se ofrecen solo los activos, pero si el par ya tenía cargado un
   // puesto/centro que después se desactivó, lo mantenemos en las opciones
   // (marcado) para no perder el dato al editar.
   const optionsFor = (catalogo, currentId) => {

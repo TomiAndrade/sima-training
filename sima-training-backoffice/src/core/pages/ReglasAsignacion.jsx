@@ -67,8 +67,12 @@ export default function ReglasAsignacion() {
     return () => { active = false }
   }, [])
 
-  // Ninguno de los tres catálogos soporta `?activo=` en el listado (ver
-  // core/pages/Usuarios.jsx), así que se filtra a activos en el cliente.
+  // Se piden los catálogos COMPLETOS a propósito, aunque /puestos y
+  // /centros-costo ya soporten `?activo=`: más abajo hacen falta las dos cosas
+  // a la vez — el subconjunto activo para los selects del modal de alta, y el
+  // catálogo entero para los mapas id → nombre (las reglas viejas pueden
+  // apuntar a un puesto o centro dado de baja, y ahí el nombre igual se
+  // muestra). Por eso el filtro a activos sigue siendo del lado del cliente.
   const puestosActivos = useMemo(() => puestos.filter((p) => p.activo), [puestos])
   const centrosActivos = useMemo(() => centrosCosto.filter((c) => c.activo), [centrosCosto])
   const modulosActivos = useMemo(() => modulos.filter((m) => m.activo), [modulos])

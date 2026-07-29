@@ -6,11 +6,13 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CentrosCostoService } from './centros-costo.service';
 import { CreateCentroCostoDto } from './dto/create-centro-costo.dto';
+import { FindCentrosCostoDto } from './dto/find-centros-costo.dto';
 import { UpdateCentroCostoDto } from './dto/update-centro-costo.dto';
 
 @Controller('centros-costo')
@@ -24,8 +26,8 @@ export class CentrosCostoController {
   }
 
   @Get()
-  findAll() {
-    return this.centrosCosto.findAll();
+  findAll(@Query() query: FindCentrosCostoDto) {
+    return this.centrosCosto.findAll(query);
   }
 
   @Patch(':id')

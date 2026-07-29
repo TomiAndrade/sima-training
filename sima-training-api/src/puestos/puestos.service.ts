@@ -1,6 +1,7 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreatePuestoDto } from './dto/create-puesto.dto';
+import { FindPuestosDto } from './dto/find-puestos.dto';
 import { UpdatePuestoDto } from './dto/update-puesto.dto';
 
 @Injectable()
@@ -14,8 +15,14 @@ export class PuestosService {
     });
   }
 
-  findAll() {
-    return this.prisma.puesto.findMany({ orderBy: { nombre: 'asc' } });
+  // Sin ?activo= devuelve el catálogo completo (activos y dados de baja): hay
+  // consumidores que lo necesitan para poder nombrar un puesto ya elegido que
+  // después se desactivó.
+  findAll(query: FindPuestosDto = {}) {
+    return this.prisma.puesto.findMany({
+      where: query.activo !== undefined ? { activo: query.activo } : {},
+      orderBy: { nombre: 'asc' },
+    });
   }
 
   async update(id: string, dto: UpdatePuestoDto) {

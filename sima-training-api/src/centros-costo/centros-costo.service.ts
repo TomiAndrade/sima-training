@@ -1,6 +1,7 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateCentroCostoDto } from './dto/create-centro-costo.dto';
+import { FindCentrosCostoDto } from './dto/find-centros-costo.dto';
 import { UpdateCentroCostoDto } from './dto/update-centro-costo.dto';
 
 @Injectable()
@@ -14,8 +15,14 @@ export class CentrosCostoService {
     });
   }
 
-  findAll() {
-    return this.prisma.centroCosto.findMany({ orderBy: { nombre: 'asc' } });
+  // Sin ?activo= devuelve el catálogo completo (activos y dados de baja): hay
+  // consumidores que lo necesitan para poder nombrar un centro ya elegido que
+  // después se desactivó.
+  findAll(query: FindCentrosCostoDto = {}) {
+    return this.prisma.centroCosto.findMany({
+      where: query.activo !== undefined ? { activo: query.activo } : {},
+      orderBy: { nombre: 'asc' },
+    });
   }
 
   async update(id: string, dto: UpdateCentroCostoDto) {

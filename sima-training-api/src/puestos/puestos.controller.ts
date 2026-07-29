@@ -6,10 +6,12 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CreatePuestoDto } from './dto/create-puesto.dto';
+import { FindPuestosDto } from './dto/find-puestos.dto';
 import { UpdatePuestoDto } from './dto/update-puesto.dto';
 import { PuestosService } from './puestos.service';
 
@@ -24,8 +26,8 @@ export class PuestosController {
   }
 
   @Get()
-  findAll() {
-    return this.puestos.findAll();
+  findAll(@Query() query: FindPuestosDto) {
+    return this.puestos.findAll(query);
   }
 
   @Patch(':id')
