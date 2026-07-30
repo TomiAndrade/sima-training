@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react'
-import Table from '../../components/Table'
 import Button from '../../components/Button'
 import Modal from '../../components/Modal'
 import MultiSelectFilter from '../../components/MultiSelectFilter'
@@ -139,10 +138,30 @@ export default function ReglasAsignacion() {
 
     const armarGrupo = (centro, inactivo) => {
       const propias = [...(porCentro.get(centro.id) ?? [])].sort(ordenarReglas)
+
+      // Segundo nivel de agrupación: las reglas del centro se juntan por ALCANCE
+      // (el puesto, o "todos los puestos"). Es la unidad sobre la que opera
+      // "Editar módulos", así que agrupar evita repetir ese botón en cada fila.
+      // Se recorre `propias` ya ordenada, así el orden de los alcances sale
+      // gratis del mismo criterio (centro primero, después por nombre de puesto).
+      const porAlcance = new Map()
+      const alcances = []
+      propias.forEach((r) => {
+        const clave = puestoKey(r.puestoId)
+        let acc = porAlcance.get(clave)
+        if (!acc) {
+          acc = { clave, puestoId: r.puestoId ?? null, reglas: [] }
+          porAlcance.set(clave, acc)
+          alcances.push(acc)
+        }
+        acc.reglas.push(r)
+      })
+
       return {
         centro,
         inactivo,
         reglas: propias,
+        alcances,
         puestosCount: new Set(propias.filter((r) => r.puestoId != null).map((r) => r.puestoId)).size,
       }
     }
@@ -457,38 +476,6 @@ export default function ReglasAsignacion() {
     })
   }, [modal, modulosActivos, moduloPorId])
 
-  // Sin columna "Centro de costo": pasó a ser el header del grupo.
-  const columnsGrupo = [
-    {
-      key: 'puestoId',
-      label: 'Puesto',
-      // Las dos variantes son el mismo eje (el alcance de la regla), así que
-      // van con la misma píldora en dos colores de la familia categórica:
-      // indigo el caso "todo el centro", sky el puesto concreto. El fallback
-      // queda como texto plano a propósito — un "—" adentro de una píldora se
-      // leería como un puesto llamado así, y es justo el caso en el que el
-      // nombre no se pudo resolver contra el catálogo.
-      render: (id) => {
-        if (id == null) {
-          return <span className={`${badgeBase} bg-indigo-50 text-indigo-600`}>Todos los puestos</span>
-        }
-        const nombre = puestoNombre.get(id)
-        if (!nombre) return '—'
-        return <span className={`${badgeBase} bg-sky-50 text-sky-600`}>{nombre}</span>
-      },
-    },
-    { key: 'moduloId', label: 'Módulo', render: (id) => moduloLabel(moduloPorId.get(id)) },
-    {
-      key: 'activo',
-      label: 'Estado',
-      render: (val) => (
-        <span className={`${badgeBase} ${val ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-500'}`}>
-          {val ? 'Activa' : 'Inactiva'}
-        </span>
-      ),
-    },
-  ]
-
   const selectCls = 'w-full bg-white border border-slate-300 rounded px-3 py-2 text-slate-900 text-sm focus:outline-none focus:border-red-600'
 
   return (
@@ -584,28 +571,66 @@ export default function ReglasAsignacion() {
                     </button>
                     {abierto && (
                       <div id={cuerpoId} className="border-t border-slate-200">
-                        {g.reglas.length > 0 ? (
-                          <Table
-                            flush
-                            columns={columnsGrupo}
-                            data={g.reglas}
-                            actions={(row) => (
-                              <>
-                                {/* Por ALCANCE, no por fila: abre el mismo modal
-                                    del alta con los módulos de este puesto (o de
-                                    todo el centro) tildados. */}
-                                <Button variant="ghost" size="sm" onClick={() => openEditAlcance(row)}>
-                                  Editar módulos
-                                </Button>
-                                <Button variant="secondary" size="sm" onClick={() => toggleActivo(row)}>
-                                  {row.activo ? 'Desactivar' : 'Activar'}
-                                </Button>
-                                <Button variant="danger" size="sm" onClick={() => setModalEliminar({ regla: row, saving: false, error: null })}>
-                                  Eliminar
-                                </Button>
-                              </>
-                            )}
-                          />
+                        {g.alcances.length > 0 ? (
+                          <div className="divide-y divide-slate-200">
+                            {g.alcances.map((a) => (
+                              <div key={a.clave} className="px-4 py-3">
+                                {/* Sub-header del alcance: acá vive "Editar
+                                    módulos", una sola vez, porque el alcance es
+                                    la unidad sobre la que opera. */}
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  {a.puestoId == null ? (
+                                    <span className={`${badgeBase} bg-indigo-50 text-indigo-600`}>Todos los puestos</span>
+                                  ) : puestoNombre.get(a.puestoId) ? (
+                                    <span className={`${badgeBase} bg-sky-50 text-sky-600`}>
+                                      {puestoNombre.get(a.puestoId)}
+                                    </span>
+                                  ) : (
+                                    // Sin píldora a propósito: es el caso en que
+                                    // el nombre no se resolvió contra el catálogo,
+                                    // y un "—" dentro de una píldora se leería
+                                    // como un puesto llamado así.
+                                    <span className="text-slate-400 text-sm">—</span>
+                                  )}
+                                  <span className="text-slate-400 text-xs">
+                                    {plural(a.reglas.length, 'módulo')}
+                                  </span>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="ml-auto"
+                                    onClick={() => openEditAlcance(a.reglas[0])}
+                                  >
+                                    Editar módulos
+                                  </Button>
+                                </div>
+                                <div className="mt-1.5 space-y-1">
+                                  {a.reglas.map((r) => (
+                                    <div key={r.id} className="flex items-center gap-3 pl-1">
+                                      <span className="text-slate-700 text-sm flex-1 min-w-0 truncate">
+                                        {moduloLabel(moduloPorId.get(r.moduloId))}
+                                      </span>
+                                      <span
+                                        className={`${badgeBase} shrink-0 ${r.activo ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-500'}`}
+                                      >
+                                        {r.activo ? 'Activa' : 'Inactiva'}
+                                      </span>
+                                      <Button variant="secondary" size="sm" onClick={() => toggleActivo(r)}>
+                                        {r.activo ? 'Desactivar' : 'Activar'}
+                                      </Button>
+                                      <Button
+                                        variant="danger"
+                                        size="sm"
+                                        onClick={() => setModalEliminar({ regla: r, saving: false, error: null })}
+                                      >
+                                        Eliminar
+                                      </Button>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
                         ) : (
                           <p className="px-4 py-6 text-center text-slate-400 text-sm">
                             Este centro no tiene reglas configuradas
