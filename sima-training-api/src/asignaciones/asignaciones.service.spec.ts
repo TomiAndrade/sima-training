@@ -242,6 +242,7 @@ describe('AsignacionesService.recalcular', () => {
       expect.objectContaining({
         where: {
           activo: true,
+          deletedAt: null,
           OR: [
             { puestoId: 'p-soldador', centroCostoId: 'c-taller' },
             { puestoId: 'p-amolador', centroCostoId: 'c-taller' },
@@ -252,6 +253,25 @@ describe('AsignacionesService.recalcular', () => {
         },
       }),
     );
+  });
+
+  it('una regla ELIMINADA no aporta módulos: queda fuera del matching', async () => {
+    // La garantía vive en el where — una regla con deleted_at nunca llega a la
+    // unión de requeridos, así que no puede generar una AUTOMATICA.
+    prisma.vinculacionPuestoCentro.findMany.mockResolvedValue([
+      par('p-soldador', 'c-ypf'),
+    ]);
+    prisma.reglaAsignacion.findMany.mockResolvedValue([]);
+
+    const res = await service.recalcular(1);
+
+    expect(prisma.reglaAsignacion.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ activo: true, deletedAt: null }),
+      }),
+    );
+    expect(res).toEqual({ creadas: 0, revocadas: 0 });
+    expect(prisma.asignacion.createMany).not.toHaveBeenCalled();
   });
 
   it('una regla de centro le aplica a cualquier puesto de ese centro', async () => {

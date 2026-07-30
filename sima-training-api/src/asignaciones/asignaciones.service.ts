@@ -124,6 +124,10 @@ export class AsignacionesService {
       const reglas = await tx.reglaAsignacion.findMany({
         where: {
           activo: true,
+          // Los dos ejes de baja de una regla: `activo` es la pausa reversible,
+          // deletedAt es la eliminación. Si este filtro falta, una regla eliminada
+          // sigue generando asignaciones AUTOMATICA.
+          deletedAt: null,
           // Las dos ramas son disjuntas en SQL: la primera genera `puesto_id = 'x'`
           // (que nunca matchea NULL) y la segunda `puesto_id IS NULL`. Ninguna regla
           // se lee dos veces — y si se leyera, el Set de abajo lo absorbe igual.

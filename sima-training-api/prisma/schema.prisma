@@ -371,22 +371,29 @@ model ReglaAsignacion {
   modulo      Modulo      @relation(fields: [moduloId], references: [id])
 
   // Trazabilidad
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-  createdBy String?  @map("created_by")
-  updatedBy String?  @map("updated_by")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  createdBy String?   @map("created_by")
+  updatedBy String?   @map("updated_by")
+  // Eliminada: eje DISTINTO de `activo`. Desactivada sigue visible en el
+  // backoffice y es reactivable; eliminada deja de existir a todos los efectos
+  // (listado, matching de recalcular(), índices únicos). La fila no se borra
+  // nunca: es la única evidencia de por qué alguien tuvo que rendir un módulo.
+  deletedAt DateTime? @map("deleted_at")
 
-  // No tiene sentido la misma regla dos veces. Volver a agregar una regla dada de
-  // baja se resuelve reactivando la fila (activo=true), no duplicándola.
-  //
-  // Este @@unique cubre EXACTAMENTE las reglas CON puesto: como puesto_id es
-  // nullable y Postgres trata cada NULL como distinto de todos los demás, las
-  // reglas de centro no quedan cubiertas acá. Su unicidad
-  // (un centro + un módulo, una sola regla de centro) la garantiza un índice único
-  // PARCIAL, reglas_asignacion_centro_modulo_sin_puesto, que vive sólo en la
-  // migración — Prisma no expresa WHERE en @@unique (mismo caso que el índice
-  // `principal` de vinculacion_puesto_centro y el de asignación vigente única).
-  @@unique([puestoId, centroCostoId, moduloId])
+  // OJO: esta tabla NO declara ningún @@unique. Sus DOS unicidades son índices
+  // únicos PARCIALES que viven sólo en el SQL de las migraciones, porque Prisma
+  // no expresa WHERE en @@unique (mismo caso que el índice `principal` de
+  // vinculacion_puesto_centro y el de asignación vigente única):
+  //   - reglas_asignacion_par_modulo_vivas: (puesto, centro, módulo)
+  //     WHERE deleted_at IS NULL. Cubre EXACTAMENTE las reglas CON puesto: con
+  //     puesto_id NULL, Postgres trata cada fila como distinta de las demás.
+  //   - reglas_asignacion_centro_modulo_sin_puesto: (centro, módulo)
+  //     WHERE puesto_id IS NULL AND deleted_at IS NULL, la unicidad de las
+  //     reglas de centro, que al índice de arriba se le escapan.
+  // Los dos predicados son ortogonales: puesto_id elige QUÉ ALCANCE gobierna el
+  // índice, deleted_at elige QUÉ FILAS están vivas. Volver a agregar una regla
+  // dada de baja o eliminada reactiva/revive la fila (ver create()), no duplica.
   @@map("reglas_asignacion")
 }
 
