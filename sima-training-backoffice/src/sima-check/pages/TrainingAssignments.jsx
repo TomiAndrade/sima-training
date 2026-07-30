@@ -32,8 +32,14 @@ function moduloLabel(m) {
 // AsignacionesService.recalcular() en el backend: por par exacto (puesto +
 // centro) o por regla de centro (puestoId null, aplica a todos los puestos del
 // centro). Si no aparece ninguna regla activa que la explique, se muestra como
-// desconocida en vez de inventar — puede pasar si la regla se desactivó y
-// todavía no se recalculó.
+// desconocida en vez de inventar.
+//
+// Ese caso se volvió raro: tocar una regla o los pares de una persona ahora
+// recalcula en el acto, así que la asignación se habría revocado sola. Lo que
+// queda son residuos — asignaciones derivadas antes de que el recálculo fuera
+// automático, o datos cambiados por fuera de la app — y las reglas que esta
+// pantalla trae una sola vez al montar (si otra sesión edita una regla mientras
+// tanto, acá se ve vieja). Sigue siendo la señal que justifica "Recalcular".
 function explicarAutomatica(asignacion, paresActivos, reglasActivas) {
   const candidatas = reglasActivas.filter((r) => r.moduloId === asignacion.moduloId)
   for (const par of paresActivos) {
@@ -331,7 +337,7 @@ export default function TrainingAssignments() {
                   size="sm"
                   onClick={handleRecalcular}
                   disabled={recalculando}
-                  title="Recalcula las automáticas contra las reglas vigentes. Solo hace falta si cambiaron las reglas — editar los pares de la persona ya recalcula solo."
+                  title="Vuelve a derivar las automáticas de esta persona desde sus pares y las reglas vigentes. Ya no es parte del flujo normal: tocar los pares o las reglas recalcula solo. Queda para forzar una verificación cuando algo cambió por fuera de esos dos caminos."
                 >
                   {recalculando ? 'Recalculando…' : 'Recalcular'}
                 </Button>
