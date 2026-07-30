@@ -11,10 +11,23 @@ function buildQuery(params) {
   return s ? `?${s}` : ''
 }
 
+// Las tres mutaciones (create/update/remove) devuelven
+// `{ regla, recalculo: { usuarios, creadas, revocadas } }`, no la regla pelada:
+// tocar una regla recalcula en el acto las asignaciones AUTOMATICA de toda la
+// gente con un par activo en ese centro de costo, y el resumen viaja en la
+// respuesta para poder mostrar la consecuencia real.
 export const reglasAsignacionApi = {
   list: (params = {}) => api.get(`/reglas-asignacion${buildQuery(params)}`),
   create: (data) => api.post('/reglas-asignacion', data),
-  // Baja/alta lógica: el triple (puesto, centro, módulo) no se edita — para
-  // cambiarlo hay que crear otra regla.
-  setActivo: (id, activo) => api.patch(`/reglas-asignacion/${id}`, { activo }),
+  // Edición parcial: `{ moduloId?, activo? }`, al menos uno. Se corrige a qué
+  // módulo obliga la regla; el ALCANCE (puesto + centro) no se edita — moverla
+  // de lugar es eliminarla y crear otra.
+  update: (id, data) => api.patch(`/reglas-asignacion/${id}`, data),
+  // Baja/alta lógica: la pausa reversible. La regla sigue en el listado.
+  setActivo: (id, activo) => reglasAsignacionApi.update(id, { activo }),
+  // Eje distinto de `activo`: la regla sale del listado y no se puede recuperar
+  // desde el backoffice. En la base es baja lógica (`deletedAt`, la fila es la
+  // evidencia de por qué alguien tuvo que rendir un módulo), pero el GET filtra
+  // las eliminadas y no hay filtro para verlas — de cara a esta pantalla, se fue.
+  remove: (id) => api.del(`/reglas-asignacion/${id}`),
 }

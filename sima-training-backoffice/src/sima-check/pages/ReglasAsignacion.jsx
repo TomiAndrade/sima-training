@@ -19,6 +19,26 @@ const reglaKey = (r) => `${puestoKey(r.puestoId)}|${r.centroCostoId}|${r.moduloI
 
 const badgeBase = 'px-2.5 py-1 rounded-full text-xs font-semibold'
 
+// Todas las mutaciones de regla devuelven `{ regla, recalculo }` y todas las de
+// una misma tanda tocan el MISMO centro de costo, así que `usuarios` es siempre
+// la misma gente: se toma el máximo, no la suma (sumar contaría N veces a cada
+// persona). Las asignaciones sí se acumulan: son eventos distintos.
+// SUPUESTO: un solo centro por tanda, invariante que hoy garantiza el modal de
+// alta (un `<select>` de centro, N puestos × N módulos). Si alguna vez se
+// permite elegir varios centros, este máximo subcuenta en silencio y no hay
+// forma de arreglarlo desde acá: la API devuelve un conteo, no los ids, así que
+// la unión real de personas no se puede calcular en el cliente.
+const acumularRecalculo = (acc, r) => ({
+  usuarios: Math.max(acc.usuarios, r?.usuarios ?? 0),
+  creadas: acc.creadas + (r?.creadas ?? 0),
+  revocadas: acc.revocadas + (r?.revocadas ?? 0),
+})
+
+const RECALCULO_CERO = { usuarios: 0, creadas: 0, revocadas: 0 }
+
+// El plural irregular se pasa a mano ("asignación" → "asignaciones").
+const plural = (n, singular, pl = `${singular}s`) => `${n} ${n === 1 ? singular : pl}`
+
 export default function ReglasAsignacion() {
   const [reglas, setReglas] = useState([])
   const [puestos, setPuestos] = useState([])
@@ -33,7 +53,15 @@ export default function ReglasAsignacion() {
   const [form, setForm] = useState(emptyForm)
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState(null)
-  const [result, setResult] = useState(null) // null | { created, existed, failed, errors }
+  const [result, setResult] = useState(null) // null | { created, existed, failed, errors, recalculo }
+
+  // Tocar una regla recalcula en el acto a toda la gente con un par activo en su
+  // centro de costo. El resumen se muestra acá arriba porque la consecuencia no
+  // se ve en el listado: lo que cambia son las asignaciones de otras personas.
+  const [aviso, setAviso] = useState(null) // null | { texto, recalculo }
+
+  const [modalModulo, setModalModulo] = useState(null) // null | { regla, moduloId, saving, error }
+  const [modalEliminar, setModalEliminar] = useState(null) // null | { regla, saving, error }
 
   const fetchAll = async () => {
     const [regs, pue, centros, mods] = await Promise.all([
@@ -62,7 +90,6 @@ export default function ReglasAsignacion() {
 
   useEffect(() => {
     let active = true
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchAll()
       .catch((err) => active && setLoadError(err.message))
       .finally(() => active && setLoading(false))
@@ -207,6 +234,7 @@ export default function ReglasAsignacion() {
 
     setSaving(true)
     setFormError(null)
+    setAviso(null)
     try {
       // El POST reactiva un triple ya existente sin indicar en la respuesta
       // si lo creó o lo reactivó, así que la única forma de distinguir
@@ -222,21 +250,33 @@ export default function ReglasAsignacion() {
               [...form.moduloIds].map((moduloId) => ({ puestoId, centroCostoId: form.centroCostoId, moduloId }))
             )
 
-      const settled = await Promise.allSettled(triples.map((t) => reglasAsignacionApi.create(t)))
-
       let created = 0
       let existed = 0
       const errors = []
-      settled.forEach((res, i) => {
-        if (res.status === 'fulfilled') {
-          if (existingKeys.has(reglaKey(triples[i]))) existed += 1
-          else created += 1
-        } else {
-          errors.push(res.reason?.message ?? 'Error desconocido')
-        }
-      })
+      let recalculo = RECALCULO_CERO
 
-      setResult({ created, existed, failed: errors.length, errors: [...new Set(errors)] })
+      // Secuencial, no en paralelo: cada POST abre una transacción que recalcula
+      // a toda la gente del centro, y todos los triples de esta tanda comparten
+      // centro. Mandarlos juntos serían N transacciones peleándose por las
+      // mismas filas de asignaciones.
+      for (const triple of triples) {
+        try {
+          const res = await reglasAsignacionApi.create(triple)
+          if (existingKeys.has(reglaKey(triple))) existed += 1
+          else created += 1
+          recalculo = acumularRecalculo(recalculo, res?.recalculo)
+        } catch (err) {
+          errors.push(err?.message ?? 'Error desconocido')
+        }
+      }
+
+      setResult({ created, existed, failed: errors.length, errors: [...new Set(errors)], recalculo })
+      if (created > 0 || existed > 0) {
+        setAviso({
+          texto: created > 0 ? plural(created, 'regla creada', 'reglas creadas') : 'Reglas actualizadas',
+          recalculo,
+        })
+      }
       await loadData()
     } catch (err) {
       setFormError(err.message)
@@ -246,11 +286,50 @@ export default function ReglasAsignacion() {
   }
 
   const toggleActivo = async (regla) => {
+    setAviso(null)
     try {
-      await reglasAsignacionApi.setActivo(regla.id, !regla.activo)
+      const res = await reglasAsignacionApi.setActivo(regla.id, !regla.activo)
+      setAviso({
+        texto: regla.activo ? 'Regla desactivada' : 'Regla activada',
+        recalculo: res?.recalculo,
+      })
       await loadData()
     } catch (err) {
       window.alert(`No se pudo actualizar: ${err.message}`)
+    }
+  }
+
+  // El módulo es lo único editable de una regla: el alcance (puesto + centro) es
+  // dónde vive en el listado, y moverla de lugar es eliminarla y crear otra.
+  const openCambiarModulo = (regla) => {
+    setModalModulo({ regla, moduloId: regla.moduloId, saving: false, error: null })
+  }
+
+  const handleCambiarModulo = async () => {
+    const { regla, moduloId } = modalModulo
+    setModalModulo((m) => ({ ...m, saving: true, error: null }))
+    setAviso(null)
+    try {
+      const res = await reglasAsignacionApi.update(regla.id, { moduloId })
+      setModalModulo(null)
+      setAviso({ texto: 'Módulo de la regla actualizado', recalculo: res?.recalculo })
+      await loadData()
+    } catch (err) {
+      setModalModulo((m) => ({ ...m, saving: false, error: err.message }))
+    }
+  }
+
+  const handleEliminar = async () => {
+    const { regla } = modalEliminar
+    setModalEliminar((m) => ({ ...m, saving: true, error: null }))
+    setAviso(null)
+    try {
+      const res = await reglasAsignacionApi.remove(regla.id)
+      setModalEliminar(null)
+      setAviso({ texto: 'Regla eliminada', recalculo: res?.recalculo })
+      await loadData()
+    } catch (err) {
+      setModalEliminar((m) => ({ ...m, saving: false, error: err.message }))
     }
   }
 
@@ -258,6 +337,39 @@ export default function ReglasAsignacion() {
     if (!m) return '—'
     const sinVersionActiva = !m.vigente || m.vigente.estado !== 'ACTIVO'
     return sinVersionActiva ? `${m.nombre} (sin versión publicada)` : m.nombre
+  }
+
+  // En prosa, para los modales: "Soldador en Taller Central" / "todos los
+  // puestos de Taller Central".
+  const describirAlcance = (regla) => {
+    const centro = centroNombre.get(regla.centroCostoId) ?? 'ese centro de costo'
+    return regla.puestoId == null
+      ? `todos los puestos de ${centro}`
+      : `${puestoNombre.get(regla.puestoId) ?? 'ese puesto'} en ${centro}`
+  }
+
+  // El triple (alcance, centro, módulo) es único entre las reglas vivas, así que
+  // cambiar el módulo a uno que ese mismo alcance ya tiene configurado devuelve
+  // 409. Se calcula acá para deshabilitar esas opciones en vez de dejar que el
+  // usuario elija y falle; el catch del modal queda igual como red de seguridad
+  // (otra sesión puede crear la regla en el medio).
+  const opcionesModuloPara = (regla) => {
+    const ocupados = new Set(
+      reglas
+        .filter(
+          (r) =>
+            r.id !== regla.id &&
+            r.centroCostoId === regla.centroCostoId &&
+            puestoKey(r.puestoId) === puestoKey(regla.puestoId)
+        )
+        .map((r) => r.moduloId)
+    )
+    // El módulo actual puede estar dado de baja (la regla es vieja): se agrega a
+    // mano para que el select no arranque en blanco.
+    const modulos = modulosActivos.some((m) => m.id === regla.moduloId)
+      ? modulosActivos
+      : [moduloPorId.get(regla.moduloId), ...modulosActivos].filter(Boolean)
+    return modulos.map((m) => ({ modulo: m, ocupado: ocupados.has(m.id) }))
   }
 
   // Sin columna "Centro de costo": pasó a ser el header del grupo.
@@ -315,6 +427,31 @@ export default function ReglasAsignacion() {
         </div>
       )}
 
+      {aviso && (
+        <div className="bg-indigo-50 border border-indigo-200 text-indigo-700 text-sm rounded px-4 py-3 flex items-start justify-between gap-4">
+          <div>
+            <p className="font-medium">
+              {aviso.texto} · {plural(aviso.recalculo?.usuarios ?? 0, 'persona recalculada', 'personas recalculadas')}
+            </p>
+            {(aviso.recalculo?.creadas > 0 || aviso.recalculo?.revocadas > 0) && (
+              <p className="text-indigo-600 text-xs mt-0.5">
+                {plural(aviso.recalculo.creadas, 'asignación nueva', 'asignaciones nuevas')}
+                {' · '}
+                {plural(aviso.recalculo.revocadas, 'revocada', 'revocadas')}
+              </p>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={() => setAviso(null)}
+            className="text-indigo-400 hover:text-indigo-700 text-xs font-semibold transition-colors"
+            aria-label="Cerrar aviso"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       {!loadError && (
         <>
           {expandibles.length > 0 && (
@@ -368,9 +505,17 @@ export default function ReglasAsignacion() {
                             columns={columnsGrupo}
                             data={g.reglas}
                             actions={(row) => (
-                              <Button variant={row.activo ? 'danger' : 'secondary'} size="sm" onClick={() => toggleActivo(row)}>
-                                {row.activo ? 'Desactivar' : 'Activar'}
-                              </Button>
+                              <>
+                                <Button variant="ghost" size="sm" onClick={() => openCambiarModulo(row)}>
+                                  Cambiar módulo
+                                </Button>
+                                <Button variant="secondary" size="sm" onClick={() => toggleActivo(row)}>
+                                  {row.activo ? 'Desactivar' : 'Activar'}
+                                </Button>
+                                <Button variant="danger" size="sm" onClick={() => setModalEliminar({ regla: row, saving: false, error: null })}>
+                                  Eliminar
+                                </Button>
+                              </>
                             )}
                           />
                         ) : (
@@ -421,6 +566,19 @@ export default function ReglasAsignacion() {
               {result.existed} ya {result.existed === 1 ? 'existía' : 'existían'}
               {result.failed > 0 && <> · {result.failed} fallaron</>}
             </div>
+            {result.recalculo?.usuarios > 0 && (
+              <div className="bg-indigo-50 border border-indigo-200 text-indigo-700 text-sm rounded px-3 py-2">
+                {plural(result.recalculo.usuarios, 'persona recalculada', 'personas recalculadas')}
+                {(result.recalculo.creadas > 0 || result.recalculo.revocadas > 0) && (
+                  <>
+                    {' · '}
+                    {plural(result.recalculo.creadas, 'asignación nueva', 'asignaciones nuevas')}
+                    {' · '}
+                    {plural(result.recalculo.revocadas, 'revocada', 'revocadas')}
+                  </>
+                )}
+              </div>
+            )}
             {result.failed > 0 && (
               <div className="bg-red-50 border border-red-200 text-red-700 text-xs rounded px-3 py-2 space-y-1">
                 {result.errors.map((msg, i) => <div key={i}>{msg}</div>)}
@@ -506,6 +664,102 @@ export default function ReglasAsignacion() {
             )}
           </div>
         )}
+      </Modal>
+
+      {/* Igual que en el resto del backoffice, el contenido de <Modal> se evalúa
+          aunque esté cerrado: siempre `modalModulo?.campo`, nunca `modalModulo.campo`. */}
+      <Modal
+        open={!!modalModulo}
+        onClose={() => setModalModulo(null)}
+        title="Cambiar módulo de la regla"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setModalModulo(null)} disabled={modalModulo?.saving}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleCambiarModulo}
+              disabled={
+                modalModulo?.saving ||
+                !modalModulo?.moduloId ||
+                modalModulo?.moduloId === modalModulo?.regla?.moduloId
+              }
+            >
+              {modalModulo?.saving ? 'Guardando…' : 'Guardar'}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          {modalModulo?.error && (
+            <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded px-3 py-2">
+              {modalModulo.error}
+            </div>
+          )}
+          {modalModulo && (
+            <p className="text-slate-500 text-xs bg-slate-50 border border-slate-200 rounded px-3 py-2">
+              Se cambia solo a qué módulo obliga la regla. El alcance ({describirAlcance(modalModulo.regla)}) no se
+              edita: para moverla de lugar hay que eliminarla y crear otra.
+            </p>
+          )}
+          <div>
+            <label className="block text-slate-700 text-sm font-medium mb-1">Módulo</label>
+            <select
+              className={selectCls}
+              value={modalModulo?.moduloId ?? ''}
+              onChange={(e) => setModalModulo((m) => ({ ...m, moduloId: e.target.value, error: null }))}
+            >
+              {modalModulo &&
+                opcionesModuloPara(modalModulo.regla).map(({ modulo, ocupado }) => (
+                  <option key={modulo.id} value={modulo.id} disabled={ocupado}>
+                    {moduloLabel(modulo)}
+                    {ocupado ? ' · ya configurado' : ''}
+                  </option>
+                ))}
+            </select>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        open={!!modalEliminar}
+        onClose={() => setModalEliminar(null)}
+        title="Eliminar regla"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setModalEliminar(null)} disabled={modalEliminar?.saving}>
+              Cancelar
+            </Button>
+            <Button variant="danger" onClick={handleEliminar} disabled={modalEliminar?.saving}>
+              {modalEliminar?.saving ? 'Eliminando…' : 'Eliminar regla'}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          {modalEliminar?.error && (
+            <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded px-3 py-2">
+              {modalEliminar.error}
+            </div>
+          )}
+          {modalEliminar && (
+            <>
+              <p className="text-slate-700 text-sm">
+                Se va a eliminar la regla que obliga a{' '}
+                <span className="font-semibold">{describirAlcance(modalEliminar.regla)}</span> a rendir{' '}
+                <span className="font-semibold">{moduloLabel(moduloPorId.get(modalEliminar.regla.moduloId))}</span>.
+              </p>
+              <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded px-3 py-2">
+                La regla sale del listado y no se puede recuperar desde el backoffice. Las asignaciones automáticas
+                que justificaba se revocan en el acto.
+              </div>
+              <p className="text-slate-500 text-xs">
+                Si solo querés dejarla en pausa, usá <span className="font-semibold">Desactivar</span>: la regla deja
+                de generar obligaciones pero sigue acá y se puede volver a activar.
+              </p>
+            </>
+          )}
+        </div>
       </Modal>
     </div>
   )
