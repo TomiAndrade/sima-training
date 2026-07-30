@@ -19,9 +19,14 @@ function buildQuery(params) {
 export const reglasAsignacionApi = {
   list: (params = {}) => api.get(`/reglas-asignacion${buildQuery(params)}`),
   create: (data) => api.post('/reglas-asignacion', data),
-  // Edición parcial: `{ moduloId?, activo? }`, al menos uno. Se corrige a qué
-  // módulo obliga la regla; el ALCANCE (puesto + centro) no se edita — moverla
-  // de lugar es eliminarla y crear otra.
+  // Edición parcial: `{ moduloId?, activo? }`, al menos uno. El ALCANCE (puesto +
+  // centro) no se edita — moverla de lugar es eliminarla y crear otra.
+  // OJO: hoy el único caller es `setActivo`. `moduloId` está implementado en el
+  // backend pero la pantalla de Reglas NO lo usa: cambiar el módulo en el lugar
+  // conserva el id y el createdAt de la fila, así que la regla queda diciendo
+  // que siempre obligó al módulo nuevo y —sin AuditLog todavía— el anterior no
+  // queda registrado en ningún lado. La edición se resuelve por diff (alta de lo
+  // agregado + baja de lo quitado), que deja los dos hechos.
   update: (id, data) => api.patch(`/reglas-asignacion/${id}`, data),
   // Baja/alta lógica: la pausa reversible. La regla sigue en el listado.
   setActivo: (id, activo) => reglasAsignacionApi.update(id, { activo }),

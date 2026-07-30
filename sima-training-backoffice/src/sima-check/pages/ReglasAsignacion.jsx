@@ -49,7 +49,8 @@ export default function ReglasAsignacion() {
 
   const [expandidos, setExpandidos] = useState(() => new Set())
 
-  const [modal, setModal] = useState(false)
+  // null | { mode: 'create' } | { mode: 'edit', puestoId, centroCostoId, originales, reglaPorModulo }
+  const [modal, setModal] = useState(null)
   const [form, setForm] = useState(emptyForm)
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState(null)
@@ -60,7 +61,6 @@ export default function ReglasAsignacion() {
   // se ve en el listado: lo que cambia son las asignaciones de otras personas.
   const [aviso, setAviso] = useState(null) // null | { texto, recalculo }
 
-  const [modalModulo, setModalModulo] = useState(null) // null | { regla, moduloId, saving, error }
   const [modalEliminar, setModalEliminar] = useState(null) // null | { regla, saving, error }
 
   const fetchAll = async () => {
@@ -207,10 +207,49 @@ export default function ReglasAsignacion() {
     })
     setFormError(null)
     setResult(null)
-    setModal(true)
+    setModal({ mode: 'create' })
   }
 
-  const closeModal = () => setModal(false)
+  // Editar es el MISMO modal que el alta, con el alcance fijo y los módulos ya
+  // configurados tildados: el alta siempre trabajó por alcance (centro + puestos
+  // × módulos), así que editar fila por fila era la asimetría. Se guarda por
+  // diff (tildar crea o revive, destildar elimina) en vez de con
+  // `PATCH { moduloId }`: cambiar el módulo en el lugar conserva el id y el
+  // createdAt de la fila, así que la regla queda diciendo que siempre obligó al
+  // módulo nuevo y —sin AuditLog todavía— el anterior no queda registrado en
+  // ningún lado. Alta + baja deja los dos hechos.
+  const openEditAlcance = (regla) => {
+    const delAlcance = reglas.filter(
+      (r) => r.centroCostoId === regla.centroCostoId && puestoKey(r.puestoId) === puestoKey(regla.puestoId)
+    )
+    setForm({
+      centroCostoId: regla.centroCostoId,
+      alcance: regla.puestoId == null ? 'CENTRO' : 'PUESTO',
+      puestoIds: regla.puestoId == null ? new Set() : new Set([regla.puestoId]),
+      moduloIds: new Set(delAlcance.map((r) => r.moduloId)),
+    })
+    setFormError(null)
+    setResult(null)
+    setModal({
+      mode: 'edit',
+      puestoId: regla.puestoId ?? null,
+      centroCostoId: regla.centroCostoId,
+      // Foto de lo configurado al abrir: es contra esto que se diffea al guardar.
+      originales: new Set(delAlcance.map((r) => r.moduloId)),
+      // Para poder pasar de moduloId al id de la regla que hay que eliminar.
+      reglaPorModulo: new Map(delAlcance.map((r) => [r.moduloId, r])),
+    })
+  }
+
+  const closeModal = () => setModal(null)
+
+  // Diff en vivo del modo edición, para el preview y para el guardado.
+  const diffEdicion = useMemo(() => {
+    if (modal?.mode !== 'edit') return null
+    const agregados = [...form.moduloIds].filter((id) => !modal.originales.has(id))
+    const eliminados = [...modal.originales].filter((id) => !form.moduloIds.has(id))
+    return { agregados, eliminados }
+  }, [modal, form.moduloIds])
 
   // Ergonomía de carga: se elige un centro de costo, un alcance y uno o
   // varios módulos; la pantalla expande eso a la unidad atómica del backend
@@ -219,6 +258,8 @@ export default function ReglasAsignacion() {
   // producto cartesiano puestoId × moduloId. En alcance "centro" cada
   // módulo elegido genera una regla de centro (puestoId ausente).
   const handleSave = async () => {
+    if (modal?.mode === 'edit') return handleSaveEdicion()
+
     if (!form.centroCostoId) {
       setFormError('Elegí un centro de costo')
       return
@@ -285,6 +326,73 @@ export default function ReglasAsignacion() {
     }
   }
 
+  // Aplica el diff del modo edición: alta para lo tildado que no estaba, baja
+  // para lo destildado. Secuencial por el mismo motivo que el alta — cada
+  // llamada recalcula todo el centro dentro de su propia transacción.
+  const handleSaveEdicion = async () => {
+    const { agregados, eliminados } = diffEdicion
+    if (agregados.length === 0 && eliminados.length === 0) {
+      setFormError('No hay cambios para guardar')
+      return
+    }
+
+    setSaving(true)
+    setFormError(null)
+    setAviso(null)
+    try {
+      const errors = []
+      let recalculo = RECALCULO_CERO
+      let creadas = 0
+      let borradas = 0
+
+      for (const moduloId of agregados) {
+        try {
+          const res = await reglasAsignacionApi.create({
+            ...(modal.puestoId ? { puestoId: modal.puestoId } : {}),
+            centroCostoId: modal.centroCostoId,
+            moduloId,
+          })
+          creadas += 1
+          recalculo = acumularRecalculo(recalculo, res?.recalculo)
+        } catch (err) {
+          errors.push(err?.message ?? 'Error desconocido')
+        }
+      }
+
+      for (const moduloId of eliminados) {
+        const regla = modal.reglaPorModulo.get(moduloId)
+        if (!regla) continue
+        try {
+          const res = await reglasAsignacionApi.remove(regla.id)
+          borradas += 1
+          recalculo = acumularRecalculo(recalculo, res?.recalculo)
+        } catch (err) {
+          errors.push(err?.message ?? 'Error desconocido')
+        }
+      }
+
+      setResult({
+        mode: 'edit',
+        creadas,
+        borradas,
+        failed: errors.length,
+        errors: [...new Set(errors)],
+        recalculo,
+      })
+      if (creadas > 0 || borradas > 0) {
+        const partes = []
+        if (creadas > 0) partes.push(plural(creadas, 'regla agregada', 'reglas agregadas'))
+        if (borradas > 0) partes.push(plural(borradas, 'eliminada', 'eliminadas'))
+        setAviso({ texto: partes.join(' · '), recalculo })
+      }
+      await loadData()
+    } catch (err) {
+      setFormError(err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
   const toggleActivo = async (regla) => {
     setAviso(null)
     try {
@@ -296,26 +404,6 @@ export default function ReglasAsignacion() {
       await loadData()
     } catch (err) {
       window.alert(`No se pudo actualizar: ${err.message}`)
-    }
-  }
-
-  // El módulo es lo único editable de una regla: el alcance (puesto + centro) es
-  // dónde vive en el listado, y moverla de lugar es eliminarla y crear otra.
-  const openCambiarModulo = (regla) => {
-    setModalModulo({ regla, moduloId: regla.moduloId, saving: false, error: null })
-  }
-
-  const handleCambiarModulo = async () => {
-    const { regla, moduloId } = modalModulo
-    setModalModulo((m) => ({ ...m, saving: true, error: null }))
-    setAviso(null)
-    try {
-      const res = await reglasAsignacionApi.update(regla.id, { moduloId })
-      setModalModulo(null)
-      setAviso({ texto: 'Módulo de la regla actualizado', recalculo: res?.recalculo })
-      await loadData()
-    } catch (err) {
-      setModalModulo((m) => ({ ...m, saving: false, error: err.message }))
     }
   }
 
@@ -348,29 +436,26 @@ export default function ReglasAsignacion() {
       : `${puestoNombre.get(regla.puestoId) ?? 'ese puesto'} en ${centro}`
   }
 
-  // El triple (alcance, centro, módulo) es único entre las reglas vivas, así que
-  // cambiar el módulo a uno que ese mismo alcance ya tiene configurado devuelve
-  // 409. Se calcula acá para deshabilitar esas opciones en vez de dejar que el
-  // usuario elija y falle; el catch del modal queda igual como red de seguridad
-  // (otra sesión puede crear la regla en el medio).
-  const opcionesModuloPara = (regla) => {
-    const ocupados = new Set(
-      reglas
-        .filter(
-          (r) =>
-            r.id !== regla.id &&
-            r.centroCostoId === regla.centroCostoId &&
-            puestoKey(r.puestoId) === puestoKey(regla.puestoId)
-        )
-        .map((r) => r.moduloId)
-    )
-    // El módulo actual puede estar dado de baja (la regla es vieja): se agrega a
-    // mano para que el select no arranque en blanco.
-    const modulos = modulosActivos.some((m) => m.id === regla.moduloId)
-      ? modulosActivos
-      : [moduloPorId.get(regla.moduloId), ...modulosActivos].filter(Boolean)
-    return modulos.map((m) => ({ modulo: m, ocupado: ocupados.has(m.id) }))
-  }
+  // Opciones del multi-select de Módulos. En modo edición se anota cuáles ya
+  // están configuradas para ese alcance, y si la regla existente está
+  // desactivada: destildar una desactivada la ELIMINA (el multi-select gobierna
+  // existencia, no el eje activo/inactivo), y eso tiene que verse antes de
+  // tocarla. También se agregan los módulos dados de baja del catálogo que ese
+  // alcance ya tenga configurados, para no ofrecer destildarlos a ciegas.
+  const opcionesModulos = useMemo(() => {
+    const reglaPorModulo = modal?.mode === 'edit' ? modal.reglaPorModulo : null
+    const extras = reglaPorModulo
+      ? [...reglaPorModulo.keys()]
+          .filter((id) => !modulosActivos.some((m) => m.id === id))
+          .map((id) => moduloPorId.get(id))
+          .filter(Boolean)
+      : []
+    return [...extras, ...modulosActivos].map((m) => {
+      const regla = reglaPorModulo?.get(m.id)
+      const sufijo = regla && !regla.activo ? ' · configurada (desactivada)' : ''
+      return { id: m.id, label: `${moduloLabel(m)}${sufijo}` }
+    })
+  }, [modal, modulosActivos, moduloPorId])
 
   // Sin columna "Centro de costo": pasó a ser el header del grupo.
   const columnsGrupo = [
@@ -506,8 +591,11 @@ export default function ReglasAsignacion() {
                             data={g.reglas}
                             actions={(row) => (
                               <>
-                                <Button variant="ghost" size="sm" onClick={() => openCambiarModulo(row)}>
-                                  Cambiar módulo
+                                {/* Por ALCANCE, no por fila: abre el mismo modal
+                                    del alta con los módulos de este puesto (o de
+                                    todo el centro) tildados. */}
+                                <Button variant="ghost" size="sm" onClick={() => openEditAlcance(row)}>
+                                  Editar módulos
                                 </Button>
                                 <Button variant="secondary" size="sm" onClick={() => toggleActivo(row)}>
                                   {row.activo ? 'Desactivar' : 'Activar'}
@@ -534,9 +622,9 @@ export default function ReglasAsignacion() {
       )}
 
       <Modal
-        open={modal}
+        open={!!modal}
         onClose={closeModal}
-        title="Nueva regla"
+        title={modal?.mode === 'edit' ? 'Editar módulos del alcance' : 'Nueva regla'}
         footer={
           result ? (
             <Button onClick={closeModal}>Cerrar</Button>
@@ -547,9 +635,14 @@ export default function ReglasAsignacion() {
                 onClick={handleSave}
                 disabled={
                   saving ||
-                  !form.centroCostoId ||
-                  form.moduloIds.size === 0 ||
-                  (form.alcance === 'PUESTO' && form.puestoIds.size === 0)
+                  (modal?.mode === 'edit'
+                    ? // En edición, vaciar el set es válido (equivale a eliminar
+                      // todas las reglas de ese alcance): lo que no se puede es
+                      // guardar sin ningún cambio.
+                      !diffEdicion || (diffEdicion.agregados.length === 0 && diffEdicion.eliminados.length === 0)
+                    : !form.centroCostoId ||
+                      form.moduloIds.size === 0 ||
+                      (form.alcance === 'PUESTO' && form.puestoIds.size === 0))
                 }
               >
                 {saving ? 'Guardando…' : 'Guardar'}
@@ -561,9 +654,19 @@ export default function ReglasAsignacion() {
         {result ? (
           <div className="space-y-3">
             <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm rounded px-3 py-2">
-              {result.created} regla{result.created === 1 ? '' : 's'} nueva{result.created === 1 ? '' : 's'}
-              {' · '}
-              {result.existed} ya {result.existed === 1 ? 'existía' : 'existían'}
+              {result.mode === 'edit' ? (
+                <>
+                  {plural(result.creadas, 'regla agregada', 'reglas agregadas')}
+                  {' · '}
+                  {plural(result.borradas, 'eliminada', 'eliminadas')}
+                </>
+              ) : (
+                <>
+                  {result.created} regla{result.created === 1 ? '' : 's'} nueva{result.created === 1 ? '' : 's'}
+                  {' · '}
+                  {result.existed} ya {result.existed === 1 ? 'existía' : 'existían'}
+                </>
+              )}
               {result.failed > 0 && <> · {result.failed} fallaron</>}
             </div>
             {result.recalculo?.usuarios > 0 && (
@@ -592,43 +695,69 @@ export default function ReglasAsignacion() {
                 {formError}
               </div>
             )}
-            <div>
-              <label className="block text-slate-700 text-sm font-medium mb-1">Centro de costo</label>
-              <select
-                className={selectCls}
-                value={form.centroCostoId}
-                onChange={(e) => setForm((f) => ({ ...f, centroCostoId: e.target.value }))}
-              >
-                {centrosActivos.length === 0 && <option value="">— Sin centros activos —</option>}
-                {centrosActivos.map((c) => (
-                  <option key={c.id} value={c.id}>{c.nombre}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-slate-700 text-sm font-medium mb-1">Alcance</label>
-              <div className="flex items-center gap-4">
-                <label className="flex items-center gap-1.5 text-sm text-slate-700">
-                  <input
-                    type="radio"
-                    name="alcance"
-                    checked={form.alcance === 'CENTRO'}
-                    onChange={() => setForm((f) => ({ ...f, alcance: 'CENTRO', puestoIds: new Set() }))}
-                  />
-                  Todo el centro
-                </label>
-                <label className="flex items-center gap-1.5 text-sm text-slate-700">
-                  <input
-                    type="radio"
-                    name="alcance"
-                    checked={form.alcance === 'PUESTO'}
-                    onChange={() => setForm((f) => ({ ...f, alcance: 'PUESTO' }))}
-                  />
-                  Puestos específicos
-                </label>
+            {/* En edición el alcance es fijo: mover una regla de lugar es
+                eliminarla y crear otra, no editarla. Se muestra como contexto en
+                vez de como controles deshabilitados. */}
+            {modal?.mode === 'edit' ? (
+              <div className="bg-slate-50 border border-slate-200 rounded px-3 py-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-1">Alcance</p>
+                <p className="text-slate-700 text-sm">
+                  {modal.puestoId == null ? (
+                    <>
+                      <span className={`${badgeBase} bg-indigo-50 text-indigo-600`}>Todos los puestos</span>{' '}
+                      de {centroNombre.get(modal.centroCostoId) ?? '—'}
+                    </>
+                  ) : (
+                    <>
+                      <span className={`${badgeBase} bg-sky-50 text-sky-600`}>
+                        {puestoNombre.get(modal.puestoId) ?? '—'}
+                      </span>{' '}
+                      en {centroNombre.get(modal.centroCostoId) ?? '—'}
+                    </>
+                  )}
+                </p>
               </div>
-            </div>
-            {form.alcance === 'PUESTO' && (
+            ) : (
+              <div>
+                <label className="block text-slate-700 text-sm font-medium mb-1">Centro de costo</label>
+                <select
+                  className={selectCls}
+                  value={form.centroCostoId}
+                  onChange={(e) => setForm((f) => ({ ...f, centroCostoId: e.target.value }))}
+                >
+                  {centrosActivos.length === 0 && <option value="">— Sin centros activos —</option>}
+                  {centrosActivos.map((c) => (
+                    <option key={c.id} value={c.id}>{c.nombre}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+            {modal?.mode !== 'edit' && (
+              <div>
+                <label className="block text-slate-700 text-sm font-medium mb-1">Alcance</label>
+                <div className="flex items-center gap-4">
+                  <label className="flex items-center gap-1.5 text-sm text-slate-700">
+                    <input
+                      type="radio"
+                      name="alcance"
+                      checked={form.alcance === 'CENTRO'}
+                      onChange={() => setForm((f) => ({ ...f, alcance: 'CENTRO', puestoIds: new Set() }))}
+                    />
+                    Todo el centro
+                  </label>
+                  <label className="flex items-center gap-1.5 text-sm text-slate-700">
+                    <input
+                      type="radio"
+                      name="alcance"
+                      checked={form.alcance === 'PUESTO'}
+                      onChange={() => setForm((f) => ({ ...f, alcance: 'PUESTO' }))}
+                    />
+                    Puestos específicos
+                  </label>
+                </div>
+              </div>
+            )}
+            {modal?.mode !== 'edit' && form.alcance === 'PUESTO' && (
               <div>
                 <label className="block text-slate-700 text-sm font-medium mb-1">Puestos</label>
                 <MultiSelectFilter
@@ -643,20 +772,45 @@ export default function ReglasAsignacion() {
             <div>
               <label className="block text-slate-700 text-sm font-medium mb-1">Módulos</label>
               <MultiSelectFilter
-                options={modulosActivos.map((m) => ({ id: m.id, label: moduloLabel(m) }))}
+                options={opcionesModulos}
                 selectedIds={form.moduloIds}
                 onChange={(ids) => setForm((f) => ({ ...f, moduloIds: ids }))}
                 placeholder="Elegí uno o varios módulos"
                 searchPlaceholder="Buscar módulo..."
               />
             </div>
-            {form.alcance === 'CENTRO' && form.moduloIds.size > 0 && (
+            {modal?.mode === 'edit' && diffEdicion && (
+              <div className="space-y-2">
+                <p className="text-slate-500 text-xs">
+                  {diffEdicion.agregados.length === 0 && diffEdicion.eliminados.length === 0
+                    ? 'Sin cambios respecto de lo configurado.'
+                    : `Se agregan ${diffEdicion.agregados.length} · se eliminan ${diffEdicion.eliminados.length}.`}
+                </p>
+                {diffEdicion.eliminados.length > 0 && (
+                  <div className="bg-red-50 border border-red-200 text-red-700 text-xs rounded px-3 py-2 space-y-1">
+                    <p className="font-semibold">
+                      Al guardar se {diffEdicion.eliminados.length === 1 ? 'elimina' : 'eliminan'} de este alcance:
+                    </p>
+                    <ul className="list-disc list-inside">
+                      {diffEdicion.eliminados.map((id) => (
+                        <li key={id}>{moduloLabel(moduloPorId.get(id))}</li>
+                      ))}
+                    </ul>
+                    <p>
+                      Las reglas salen del listado y no se recuperan desde el backoffice; las asignaciones automáticas
+                      que justificaban se revocan en el acto.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+            {modal?.mode !== 'edit' && form.alcance === 'CENTRO' && form.moduloIds.size > 0 && (
               <p className="text-slate-400 text-xs">
                 Se van a crear hasta {form.moduloIds.size} regla{form.moduloIds.size === 1 ? '' : 's'} de centro
                 ({centroNombre.get(form.centroCostoId) ?? 'centro elegido'} → todos los puestos).
               </p>
             )}
-            {form.alcance === 'PUESTO' && form.puestoIds.size > 0 && form.moduloIds.size > 0 && (
+            {modal?.mode !== 'edit' && form.alcance === 'PUESTO' && form.puestoIds.size > 0 && form.moduloIds.size > 0 && (
               <p className="text-slate-400 text-xs">
                 Se van a crear hasta {form.puestoIds.size * form.moduloIds.size} reglas
                 ({form.puestoIds.size} puesto{form.puestoIds.size === 1 ? '' : 's'} × {form.moduloIds.size} módulo{form.moduloIds.size === 1 ? '' : 's'}).
@@ -664,61 +818,6 @@ export default function ReglasAsignacion() {
             )}
           </div>
         )}
-      </Modal>
-
-      {/* Igual que en el resto del backoffice, el contenido de <Modal> se evalúa
-          aunque esté cerrado: siempre `modalModulo?.campo`, nunca `modalModulo.campo`. */}
-      <Modal
-        open={!!modalModulo}
-        onClose={() => setModalModulo(null)}
-        title="Cambiar módulo de la regla"
-        footer={
-          <>
-            <Button variant="secondary" onClick={() => setModalModulo(null)} disabled={modalModulo?.saving}>
-              Cancelar
-            </Button>
-            <Button
-              onClick={handleCambiarModulo}
-              disabled={
-                modalModulo?.saving ||
-                !modalModulo?.moduloId ||
-                modalModulo?.moduloId === modalModulo?.regla?.moduloId
-              }
-            >
-              {modalModulo?.saving ? 'Guardando…' : 'Guardar'}
-            </Button>
-          </>
-        }
-      >
-        <div className="space-y-4">
-          {modalModulo?.error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded px-3 py-2">
-              {modalModulo.error}
-            </div>
-          )}
-          {modalModulo && (
-            <p className="text-slate-500 text-xs bg-slate-50 border border-slate-200 rounded px-3 py-2">
-              Se cambia solo a qué módulo obliga la regla. El alcance ({describirAlcance(modalModulo.regla)}) no se
-              edita: para moverla de lugar hay que eliminarla y crear otra.
-            </p>
-          )}
-          <div>
-            <label className="block text-slate-700 text-sm font-medium mb-1">Módulo</label>
-            <select
-              className={selectCls}
-              value={modalModulo?.moduloId ?? ''}
-              onChange={(e) => setModalModulo((m) => ({ ...m, moduloId: e.target.value, error: null }))}
-            >
-              {modalModulo &&
-                opcionesModuloPara(modalModulo.regla).map(({ modulo, ocupado }) => (
-                  <option key={modulo.id} value={modulo.id} disabled={ocupado}>
-                    {moduloLabel(modulo)}
-                    {ocupado ? ' · ya configurado' : ''}
-                  </option>
-                ))}
-            </select>
-          </div>
-        </div>
       </Modal>
 
       <Modal
