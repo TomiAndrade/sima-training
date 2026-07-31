@@ -5,6 +5,7 @@ import Modal from '../../components/Modal'
 import MultiSelectFilter from '../../components/MultiSelectFilter'
 import { modulosApi } from '../../core/api/modulos'
 import { preguntasApi } from '../../core/api/preguntas'
+import { basesConocimientoApi } from '../../core/api/basesConocimiento'
 import { useBancoModulo, backendTypeBadge, estadoVersionBadge } from '../components/bancoModulo'
 import { BancoAcciones, NuevaPreguntaModal, EditarModulosModal } from '../components/BancoPreguntas'
 import ImportPreguntasModal from '../../core/components/ImportPreguntasModal'
@@ -12,6 +13,10 @@ import ImportPreguntasModal from '../../core/components/ImportPreguntasModal'
 // Opción sintética del multi-select de módulos: no es un id real de Modulo,
 // se traduce a ?sinAsignar=true en vez de sumarse a moduloId[].
 const SIN_ASIGNAR_ID = '__sin_asignar__'
+// Opción sintética del filtro de base: no es un id real, se traduce a
+// ?sinBase=true. Es el backlog de preguntas cargadas antes de que existieran
+// las bases de conocimiento.
+const SIN_CLASIFICAR_ID = '__sin_clasificar__'
 
 function estadoBadge(activa) {
   return (
@@ -115,7 +120,7 @@ function QuestionsTableModulo({ moduleId }) {
 // Camino global: 0 o 2+ módulos seleccionados, o Papelera activa. Contra
 // GET /preguntas con activa/moduloId[]. Acción única: papelera/recuperar
 // (global, con cascada en el backend).
-function QuestionsTableGlobal({ selectedModuleIds, sinAsignar, showActivas, showPapelera, search }) {
+function QuestionsTableGlobal({ selectedModuleIds, sinAsignar, showActivas, showPapelera, search, baseId, nivelId, sinBase }) {
   const [preguntas, setPreguntas] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
@@ -131,7 +136,15 @@ function QuestionsTableGlobal({ selectedModuleIds, sinAsignar, showActivas, show
     setLoading(true)
     setError(null)
     preguntasApi
-      .list({ q: search.trim() || undefined, activa: activaParam, moduloId: [...selectedModuleIds], sinAsignar })
+      .list({
+        q: search.trim() || undefined,
+        activa: activaParam,
+        moduloId: [...selectedModuleIds],
+        sinAsignar,
+        baseId,
+        nivelId,
+        sinBase,
+      })
       .then(setPreguntas)
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false))
@@ -141,7 +154,7 @@ function QuestionsTableGlobal({ selectedModuleIds, sinAsignar, showActivas, show
     const t = setTimeout(load, 300)
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedModuleIds, sinAsignar, showActivas, showPapelera, search])
+  }, [selectedModuleIds, sinAsignar, showActivas, showPapelera, search, baseId, nivelId, sinBase])
 
   // Recuperar es instantáneo (no cascadea a otros módulos). Enviar a
   // papelera sí cascadea, así que pide confirmación — salvo que la pregunta
@@ -192,6 +205,25 @@ function QuestionsTableGlobal({ selectedModuleIds, sinAsignar, showActivas, show
       ),
     },
     { key: 'tipo', label: 'Tipo', render: (_, row) => backendTypeBadge(row.tipo) },
+    {
+      key: 'clasificacion',
+      label: 'Base · Nivel',
+      render: (_, row) =>
+        row.base ? (
+          <div className="flex items-center gap-1 flex-wrap">
+            <span className="px-1.5 py-0.5 rounded text-[10px] bg-indigo-50 text-indigo-600 font-medium">
+              {row.base.nombre}
+            </span>
+            {row.nivel && (
+              <span className="px-1.5 py-0.5 rounded text-[10px] bg-slate-100 text-slate-500">
+                {row.nivel.nombre}
+              </span>
+            )}
+          </div>
+        ) : (
+          <span className="text-amber-600 text-xs">Sin clasificar</span>
+        ),
+    },
     {
       key: 'modulos',
       label: 'Módulos',
@@ -284,6 +316,13 @@ function QuestionsTableGlobal({ selectedModuleIds, sinAsignar, showActivas, show
 
 export default function Questions() {
   const [modules, setModules] = useState([])
+  const [bases, setBases] = useState([])
+  // Filtro de clasificación. Es un select simple y no un MultiSelectFilter
+  // porque la API toma un `baseId` único, y sobre todo porque un nivel sólo
+  // existe dentro de una base: con varias bases elegidas el filtro de nivel no
+  // significaría nada. El valor SIN_CLASIFICAR_ID es sintético → ?sinBase=true.
+  const [baseFiltro, setBaseFiltro] = useState('')
+  const [nivelFiltro, setNivelFiltro] = useState('')
   const [selectedModuleIds, setSelectedModuleIds] = useState(new Set())
   const [showActivas, setShowActivas] = useState(true)
   const [showPapelera, setShowPapelera] = useState(false)
@@ -295,7 +334,16 @@ export default function Questions() {
 
   useEffect(() => {
     modulosApi.list().then(setModules).catch((err) => setLoadError(err.message))
+    // Catálogo completo (no ?activa=true): hace falta para poder seguir
+    // filtrando por una base que se dio de baja pero cuyas preguntas siguen ahí.
+    basesConocimientoApi.list().then(setBases).catch(() => {})
   }, [])
+
+  const baseFiltroObj = useMemo(
+    () => bases.find((b) => b.id === baseFiltro) ?? null,
+    [bases, baseFiltro],
+  )
+  const sinBase = baseFiltro === SIN_CLASIFICAR_ID
 
   const moduleOptions = useMemo(
     () => [{ id: SIN_ASIGNAR_ID, label: '— Sin asignar —' }, ...modules.map((m) => ({ id: m.id, label: m.nombre }))],
@@ -322,7 +370,10 @@ export default function Questions() {
   // Camino Story-2 solo con exactamente 1 módulo REAL (no "Sin asignar"),
   // papelera no forzada y sin búsqueda de texto (el buscador es universal →
   // siempre usa el camino global).
-  const usaCaminoModulo = realModuleIds.size === 1 && !sinAsignar && showActivas && !showPapelera && !search.trim()
+  // El filtro de clasificación también fuerza el camino global: la vista
+  // por-módulo lista los pivots de esa versión y no sabe filtrar por base/nivel
+  // (mismo criterio que el buscador de texto).
+  const usaCaminoModulo = realModuleIds.size === 1 && !sinAsignar && showActivas && !showPapelera && !search.trim() && !baseFiltro
   const soloModuleId = usaCaminoModulo ? [...realModuleIds][0] : null
 
   return (
@@ -350,6 +401,29 @@ export default function Questions() {
           placeholder="Buscar por enunciado..."
         />
         <MultiSelectFilter options={moduleOptions} selectedIds={selectedModuleIds} onChange={setSelectedModuleIds} placeholder="Todos los módulos" />
+        <select
+          className="bg-white border border-slate-300 rounded px-3 py-2 text-slate-900 text-sm focus:outline-none focus:border-red-600"
+          value={baseFiltro}
+          // Cambiar de base descarta el nivel: los niveles pertenecen a una base.
+          onChange={(e) => { setBaseFiltro(e.target.value); setNivelFiltro('') }}
+        >
+          <option value="">Todas las bases</option>
+          <option value={SIN_CLASIFICAR_ID}>— Sin clasificar —</option>
+          {bases.map((b) => (
+            <option key={b.id} value={b.id}>{b.nombre}{!b.activa ? ' (inactiva)' : ''}</option>
+          ))}
+        </select>
+        <select
+          className="bg-white border border-slate-300 rounded px-3 py-2 text-slate-900 text-sm focus:outline-none focus:border-red-600 disabled:bg-slate-50 disabled:text-slate-400"
+          value={nivelFiltro}
+          onChange={(e) => setNivelFiltro(e.target.value)}
+          disabled={!baseFiltroObj || (baseFiltroObj.niveles?.length ?? 0) === 0}
+        >
+          <option value="">Todos los niveles</option>
+          {(baseFiltroObj?.niveles ?? []).map((n) => (
+            <option key={n.id} value={n.id}>{n.nombre}</option>
+          ))}
+        </select>
         <ChipToggle active={showActivas} onClick={toggleActivas}>Activas</ChipToggle>
         <ChipToggle active={showPapelera} onClick={togglePapelera}>Papelera</ChipToggle>
       </div>
@@ -364,6 +438,9 @@ export default function Questions() {
           showActivas={showActivas}
           showPapelera={showPapelera}
           search={search}
+          baseId={sinBase ? undefined : baseFiltro || undefined}
+          nivelId={nivelFiltro || undefined}
+          sinBase={sinBase || undefined}
         />
       )}
 

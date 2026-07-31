@@ -4,6 +4,7 @@ import Modal from '../../components/Modal'
 import MultiSelectFilter from '../../components/MultiSelectFilter'
 import { imagenUrl, IMAGEN_MAX_BYTES, IMAGEN_MIME_TYPES, preguntasApi } from '../../core/api/preguntas'
 import { modulosApi } from '../../core/api/modulos'
+import { basesConocimientoApi } from '../../core/api/basesConocimiento'
 import { backendTypeBadge } from './bancoModulo'
 
 // Componentes compartidos para gestionar el banco de preguntas de un módulo
@@ -339,7 +340,7 @@ export function AsignarPreguntaModal({ onClose, backendId, assignedIds, baseOrde
   )
 }
 
-const EMPTY_BACKEND_FORM = { texto: '', tipo: 'VERDADERO_FALSO', opciones: ['', '', '', ''], respuestaCorrecta: '', puntajeMax: '' }
+const EMPTY_BACKEND_FORM = { texto: '', tipo: 'VERDADERO_FALSO', opciones: ['', '', '', ''], respuestaCorrecta: '', puntajeMax: '', baseConocimientoId: '', nivelId: '' }
 
 const OPCION_LETRAS = ['a', 'b', 'c', 'd']
 
@@ -356,6 +357,9 @@ const OPCION_LETRAS = ['a', 'b', 'c', 'd']
 export function NuevaPreguntaModal({ onClose, backendId, onAssigned, onAssign }) {
   const [form, setForm] = useState(EMPTY_BACKEND_FORM)
   const [modules, setModules] = useState([])
+  // Solo las bases activas: acá se elige una base NUEVA, y ofrecer una dada de
+  // baja sería ofrecer clasificar en algo que ya no se usa.
+  const [bases, setBases] = useState([])
   // Si el modal se abre desde la vista por-módulo (backendId), ese módulo arranca
   // preseleccionado y editable (se pueden sumar otros). Sin backendId, vacío.
   const [selectedModuleIds, setSelectedModuleIds] = useState(() => new Set(backendId ? [backendId] : []))
@@ -378,7 +382,13 @@ export function NuevaPreguntaModal({ onClose, backendId, onAssigned, onAssign })
 
   useEffect(() => {
     modulosApi.list().then(setModules).catch(() => {})
+    basesConocimientoApi.list({ activa: true }).then(setBases).catch(() => {})
   }, [])
+
+  const baseElegida = useMemo(
+    () => bases.find((b) => b.id === form.baseConocimientoId) ?? null,
+    [bases, form.baseConocimientoId],
+  )
 
   const imagenPreview = useMemo(
     () => (imagenFile ? URL.createObjectURL(imagenFile) : null),
@@ -450,6 +460,13 @@ export function NuevaPreguntaModal({ onClose, backendId, onAssigned, onAssign })
       setError('El enunciado es obligatorio')
       return
     }
+    // Obligatoria en el formulario aunque la columna sea nullable: lo que la
+    // columna permite es el backlog previo a las bases, no cargar preguntas
+    // nuevas sin clasificar.
+    if (!form.baseConocimientoId) {
+      setError('Elegí la base de conocimiento')
+      return
+    }
     // Los archivos cargados, sin los slots vacíos. Es el orden en el que van a
     // quedar las opciones.
     const files = opcionFiles.filter(Boolean)
@@ -496,6 +513,9 @@ export function NuevaPreguntaModal({ onClose, backendId, onAssigned, onAssign })
         tipo: form.tipo,
         respuestaCorrecta,
         puntajeMax: form.puntajeMax ? Number(form.puntajeMax) : undefined,
+        baseConocimientoId: form.baseConocimientoId,
+        // El nivel es opcional: una base puede no tener escala cargada todavía.
+        nivelId: form.nivelId || undefined,
         ...(opciones ? { opciones } : {}),
         imagen,
       })
@@ -560,6 +580,55 @@ export function NuevaPreguntaModal({ onClose, backendId, onAssigned, onAssign })
             <option value="OPCIONES_IMAGEN">Opciones con imagen</option>
           </select>
         </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-slate-600 text-xs font-semibold uppercase tracking-widest mb-1.5">Base de conocimiento</label>
+            <select
+              className={inputCls}
+              value={form.baseConocimientoId}
+              // Cambiar de base invalida el nivel elegido: los niveles son de
+              // una base y el backend rechaza el cruce.
+              onChange={(e) => setForm((f) => ({ ...f, baseConocimientoId: e.target.value, nivelId: '' }))}
+            >
+              <option value="">Seleccioná el tema...</option>
+              {bases.map((b) => <option key={b.id} value={b.id}>{b.nombre}</option>)}
+            </select>
+            {bases.length === 0 && (
+              <p className="text-amber-600 text-xs mt-1.5">
+                No hay bases activas. Creá una en la tab “Bases” antes de cargar preguntas.
+              </p>
+            )}
+          </div>
+          <div>
+            <label className="block text-slate-600 text-xs font-semibold uppercase tracking-widest mb-1.5">
+              Nivel <span className="normal-case font-normal text-slate-400">(opcional)</span>
+            </label>
+            <select
+              className={inputCls}
+              value={form.nivelId}
+              onChange={(e) => setForm((f) => ({ ...f, nivelId: e.target.value }))}
+              disabled={!baseElegida || (baseElegida.niveles?.length ?? 0) === 0}
+            >
+              <option value="">
+                {!baseElegida
+                  ? 'Elegí primero la base...'
+                  : (baseElegida.niveles?.length ?? 0) === 0
+                    ? 'Esta base no tiene escala cargada'
+                    : 'Sin nivel'}
+              </option>
+              {(baseElegida?.niveles ?? []).map((n) => (
+                <option key={n.id} value={n.id}>{n.nombre}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {baseElegida?.fuente && (
+          <p className="text-slate-400 text-xs -mt-1">
+            Fuente que se va a guardar en la pregunta: <span className="text-slate-500">{baseElegida.fuente}</span>
+          </p>
+        )}
 
         <div>
           <label className="block text-slate-600 text-xs font-semibold uppercase tracking-widest mb-1.5">Enunciado</label>

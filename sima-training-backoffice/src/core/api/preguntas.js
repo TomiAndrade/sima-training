@@ -24,6 +24,11 @@ function buildQuery(params) {
     params.moduloId.forEach((id) => qs.append('moduloId', id))
   }
   if (params.sinAsignar) qs.set('sinAsignar', 'true')
+  // Clasificación. A diferencia de moduloId/sinAsignar (que combinan con OR),
+  // estos se aplican con AND junto al resto de los filtros.
+  if (params.baseId) qs.set('baseId', params.baseId)
+  if (params.nivelId) qs.set('nivelId', params.nivelId)
+  if (params.sinBase) qs.set('sinBase', 'true')
   const s = qs.toString()
   return s ? `?${s}` : ''
 }

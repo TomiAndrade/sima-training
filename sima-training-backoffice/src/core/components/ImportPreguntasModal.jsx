@@ -3,6 +3,7 @@ import Modal from '../../components/Modal'
 import Button from '../../components/Button'
 import { importApi } from '../api/import'
 import { modulosApi } from '../api/modulos'
+import { basesConocimientoApi } from '../api/basesConocimiento'
 import { backendTypeBadge } from '../../sima-check/components/bancoModulo'
 import EstadoSimilitudBadge from './estadoSimilitudBadge'
 
@@ -11,6 +12,8 @@ const INITIAL = {
   step: 'select',
   file: null,
   moduloId: '',
+  baseConocimientoId: '',
+  nivelId: '',
   preview: null,
   result: null,
   loading: false,
@@ -21,11 +24,15 @@ const INITIAL = {
 export default function ImportPreguntasModal({ open, onClose, onImported }) {
   const [state, setState] = useState(INITIAL)
   const [modules, setModules] = useState([])
+  const [bases, setBases] = useState([])
 
   const set = (patch) => setState((s) => ({ ...s, ...patch }))
 
   useEffect(() => {
-    if (open) modulosApi.list().then(setModules).catch(() => setModules([]))
+    if (open) {
+      modulosApi.list().then(setModules).catch(() => setModules([]))
+      basesConocimientoApi.list({ activa: true }).then(setBases).catch(() => setBases([]))
+    }
   }, [open])
 
   const handleClose = () => {
@@ -65,9 +72,17 @@ export default function ImportPreguntasModal({ open, onClose, onImported }) {
   }
 
   const handleConfirm = async () => {
+    // La clasificación se estampa fila por fila: el confirm recibe
+    // CreatePreguntaDto[], así que no hizo falta tocar el backend — la base y
+    // el nivel viajan dentro de cada pregunta, no como campo suelto del body.
+    // La fuente la autocompleta el backend desde la base.
     const preguntas = state.preview.filas
       .filter((f) => f.estado !== 'error' && state.selected.has(f.index))
-      .map((f) => f.data)
+      .map((f) => ({
+        ...f.data,
+        ...(state.baseConocimientoId ? { baseConocimientoId: state.baseConocimientoId } : {}),
+        ...(state.nivelId ? { nivelId: state.nivelId } : {}),
+      }))
     if (preguntas.length === 0) return
     set({ loading: true, error: null })
     try {
@@ -78,7 +93,8 @@ export default function ImportPreguntasModal({ open, onClose, onImported }) {
     }
   }
 
-  const { step, file, moduloId, preview, result, loading, error, selected } = state
+  const { step, file, moduloId, baseConocimientoId, nivelId, preview, result, loading, error, selected } = state
+  const baseElegida = bases.find((b) => b.id === baseConocimientoId) ?? null
 
   const seleccionables = preview?.filas.filter((f) => f.estado !== 'error') ?? []
   const nSel = seleccionables.filter((f) => selected.has(f.index)).length
@@ -136,6 +152,37 @@ export default function ImportPreguntasModal({ open, onClose, onImported }) {
                 {modules.map((m) => <option key={m.id} value={m.id}>{m.nombre}</option>)}
               </select>
             </div>
+            {/* La clasificación se aplica a TODAS las filas del archivo: el Excel
+                no trae columnas de base/nivel, así que se elige una vez acá. */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-slate-700 text-sm font-medium mb-1">Base de conocimiento <span className="font-normal text-slate-400">(opcional)</span></label>
+                <select
+                  className="w-full bg-white border border-slate-300 rounded px-3 py-2 text-slate-900 text-sm focus:outline-none focus:border-red-600"
+                  value={baseConocimientoId}
+                  onChange={(e) => set({ baseConocimientoId: e.target.value, nivelId: '' })}
+                >
+                  <option value="">— Sin clasificar —</option>
+                  {bases.map((b) => <option key={b.id} value={b.id}>{b.nombre}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-slate-700 text-sm font-medium mb-1">Nivel <span className="font-normal text-slate-400">(opcional)</span></label>
+                <select
+                  className="w-full bg-white border border-slate-300 rounded px-3 py-2 text-slate-900 text-sm focus:outline-none focus:border-red-600 disabled:bg-slate-50 disabled:text-slate-400"
+                  value={nivelId}
+                  onChange={(e) => set({ nivelId: e.target.value })}
+                  disabled={!baseElegida || (baseElegida.niveles?.length ?? 0) === 0}
+                >
+                  <option value="">{!baseElegida ? 'Elegí primero la base...' : 'Sin nivel'}</option>
+                  {(baseElegida?.niveles ?? []).map((n) => <option key={n.id} value={n.id}>{n.nombre}</option>)}
+                </select>
+              </div>
+            </div>
+            <p className="text-xs text-slate-400 -mt-1">
+              Se aplica a todas las filas del archivo. Si lo dejás sin clasificar, las preguntas quedan
+              en el backlog y se pueden filtrar después con “— Sin clasificar —”.
+            </p>
             <p className="text-xs text-slate-400">
               Formato esperado: columnas <strong>enunciado · tipo · opcion_a…d · respuesta_correcta · puntaje · imagen</strong> (encabezados en la primera fila). Tipos: V/F, múltiple, imagen, texto libre.
             </p>
