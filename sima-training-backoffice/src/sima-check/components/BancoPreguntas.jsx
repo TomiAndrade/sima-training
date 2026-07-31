@@ -3,7 +3,6 @@ import Button from '../../components/Button'
 import Modal from '../../components/Modal'
 import MultiSelectFilter from '../../components/MultiSelectFilter'
 import { imagenUrl, IMAGEN_MAX_BYTES, IMAGEN_MIME_TYPES, preguntasApi } from '../../core/api/preguntas'
-import { etiquetasApi } from '../../core/api/etiquetas'
 import { modulosApi } from '../../core/api/modulos'
 import { backendTypeBadge } from './bancoModulo'
 
@@ -14,8 +13,6 @@ import { backendTypeBadge } from './bancoModulo'
 // El hook `useBancoModulo` y `backendTypeBadge` viven en ./bancoModulo.
 
 const inputCls = 'w-full bg-white border border-slate-300 rounded px-3 py-2 text-slate-900 text-sm focus:outline-none focus:border-red-600'
-
-const CATEGORIAS_ETIQUETA = ['TEMA', 'AREA', 'NORMA', 'ROL']
 
 // Picker de módulos inline (siempre abierto): buscador + lista de checkboxes.
 // Los tildados salen de `selectedIds`; togglear marca/desmarca. Mismo estilo que
@@ -199,35 +196,28 @@ export function PreguntasAsignadasPanel({ asignadas, error, onToggle, onRemove, 
   )
 }
 
-// Picker embebido del banco: buscador + filtros (etiqueta/categoría) + lista
-// con checkboxes contra GET /preguntas. Lo usan tanto `AsignarPreguntaModal`
+// Picker embebido del banco: buscador + lista con checkboxes contra
+// GET /preguntas. Lo usan tanto `AsignarPreguntaModal`
 // (sumar preguntas a un módulo ya creado, con `excludeIds` de las ya
 // asignadas) como el modal "Nuevo módulo" de TrainingModules.jsx (arrancar
 // el borrador ya con preguntas elegidas, sin exclusiones porque el módulo
 // todavía no existe).
 export function PreguntaBancoPicker({ selectedIds, onToggle, excludeIds }) {
   const [q, setQ] = useState('')
-  const [etiquetaId, setEtiquetaId] = useState('')
-  const [categoria, setCategoria] = useState('')
-  const [etiquetas, setEtiquetas] = useState([])
   const [banco, setBanco] = useState([])
   const [loading, setLoading] = useState(false)
-
-  useEffect(() => {
-    etiquetasApi.list().then(setEtiquetas).catch(() => {})
-  }, [])
 
   useEffect(() => {
     const t = setTimeout(() => {
       setLoading(true)
       preguntasApi
-        .list({ q: q.trim() || undefined, etiqueta: etiquetaId || undefined, categoria: categoria || undefined })
+        .list({ q: q.trim() || undefined })
         .then(setBanco)
         .catch(() => setBanco([]))
         .finally(() => setLoading(false))
     }, 300)
     return () => clearTimeout(t)
-  }, [q, etiquetaId, categoria])
+  }, [q])
 
   return (
     <div className="space-y-3">
@@ -237,16 +227,6 @@ export function PreguntaBancoPicker({ selectedIds, onToggle, excludeIds }) {
         onChange={(e) => setQ(e.target.value)}
         placeholder="Buscar por texto..."
       />
-      <div className="grid grid-cols-2 gap-2">
-        <select className={inputCls} value={etiquetaId} onChange={(e) => setEtiquetaId(e.target.value)}>
-          <option value="">Todas las etiquetas</option>
-          {etiquetas.map((et) => <option key={et.id} value={et.id}>{et.nombre}</option>)}
-        </select>
-        <select className={inputCls} value={categoria} onChange={(e) => setCategoria(e.target.value)}>
-          <option value="">Todas las categorías</option>
-          {CATEGORIAS_ETIQUETA.map((c) => <option key={c} value={c}>{c}</option>)}
-        </select>
-      </div>
 
       <div className="border border-slate-200 rounded max-h-72 overflow-y-auto divide-y divide-slate-100">
         {loading && <div className="px-3 py-6 text-center text-slate-400 text-xs font-mono">Buscando...</div>}
@@ -277,15 +257,6 @@ export function PreguntaBancoPicker({ selectedIds, onToggle, excludeIds }) {
                   )}
                 </div>
                 <div className="text-slate-700 text-sm mt-1 line-clamp-2">{p.texto}</div>
-                {p.etiquetas?.length > 0 && (
-                  <div className="flex flex-wrap gap-1 mt-1">
-                    {p.etiquetas.map((pe) => (
-                      <span key={pe.etiquetaId} className="px-1.5 py-0.5 rounded text-[10px] bg-slate-100 text-slate-500">
-                        {pe.etiqueta.nombre}
-                      </span>
-                    ))}
-                  </div>
-                )}
               </div>
             </label>
           )

@@ -88,18 +88,16 @@ Ver [`.env.example`](.env.example). Las principales:
 | `POST` | `/import/usuarios/confirm` | JWT | Persiste la nómina. **JSON, no multipart**: el Excel no se re-sube — recibe `organizacionId` + `usuarios[]` ya resueltos por el frontend con `puestoId`/`centroCostoId` reales (obligatorios a nivel de DTO, así nunca entra un usuario sin par). Rol fijo `ALUMNO`; cada fila pasa por `UsuariosService.create` en su propio try/catch, heredando la matriz tipo-de-organización ↔ rol, el revive por DNI y el recálculo de asignaciones |
 | `POST` | `/import/preguntas/preview` | JWT | Preview de un `.xlsx` de preguntas: clasifica cada fila como nueva/duplicada/parecida contra el banco (ver detección de similitud más abajo) |
 | `POST` | `/import/preguntas/confirm` | JWT | Crea las preguntas ya elegidas por el usuario en el preview (body JSON, no re-sube el archivo); `moduloId?` opcional para asignarlas en el mismo gesto |
-| `POST` | `/etiquetas` | JWT | Alta (rechaza nombre duplicado con 409) |
-| `GET` | `/etiquetas` | — | Lista todas |
 | `POST` | `/puestos` | JWT | Alta (rechaza nombre duplicado con 409) |
 | `GET` | `/puestos` | — | Lista el catálogo. `?activo=true\|false` filtra; **sin el parámetro devuelve todo** (activos y dados de baja), que es lo que necesitan los consumidores que muestran el nombre de un puesto ya elegido y después desactivado |
 | `PATCH` | `/puestos/:id` | JWT | Edición (nombre y/o `activo`, baja lógica) |
 | `POST` | `/centros-costo` | JWT | Alta (rechaza nombre duplicado con 409) |
 | `GET` | `/centros-costo` | — | Lista el catálogo. `?activo=true\|false` filtra; **sin el parámetro devuelve todo** (mismo criterio que `/puestos`) |
 | `PATCH` | `/centros-costo/:id` | JWT | Edición (nombre y/o `activo`, baja lógica) |
-| `POST` | `/preguntas` | JWT | Alta, con `etiquetaIds?` opcionales. No corre detección de duplicados/similares (eso solo pasa en el preview del import de Excel) |
+| `POST` | `/preguntas` | JWT | Alta. No corre detección de duplicados/similares (eso solo pasa en el preview del import de Excel) |
 | `POST` | `/preguntas/imagen` | JWT | Sube la imagen de un enunciado u opción (multipart `file`, máx 2 MB, formato detectado por magic bytes). Devuelve `{ imagen: "preguntas/<uuid>.png" }` para mandar en el `imagen` del alta |
 | `DELETE` | `/preguntas/imagen/:clave` | JWT | Borra una imagen huérfana (clave url-encoded). 409 si alguna pregunta la sigue referenciando (enunciado u opción) |
-| `GET` | `/preguntas` | — | Lista, filtros `?q=` (texto), `?etiqueta=`, `?categoria=`, `?activa=` (papelera global si `false`), `?moduloId=` (repetible, OR entre sí), `?sinAsignar=true` (OR con `moduloId`). Cada pregunta trae `modulos: [{moduloId, moduloNombre, activaEnModulo}]` con sus asignaciones vigentes |
+| `GET` | `/preguntas` | — | Lista, filtros `?q=` (texto), `?activa=` (papelera global si `false`), `?moduloId=` (repetible, OR entre sí), `?sinAsignar=true` (OR con `moduloId`). Cada pregunta trae `modulos: [{moduloId, moduloNombre, activaEnModulo}]` con sus asignaciones vigentes |
 | `GET` | `/preguntas/:id` | — | Detalle |
 | `PATCH` | `/preguntas/:id` | JWT | Papelera global: `{ activa: false }` desactiva la pregunta y cascadea `activa=false` a todas sus asignaciones por módulo (solo en versiones BORRADOR/ACTIVO, nunca ARCHIVADO); `{ activa: true }` la recupera pero **no** restaura los pivots (el admin reactiva módulo por módulo) |
 | `GET` | `/modulos` | — | Lista todos los módulos con `vigente: {estado, anio, mayor, menor}` y `borradorId` si hay un borrador en curso |
@@ -158,7 +156,6 @@ src/
 ├── import/          Importación de nómina y de preguntas desde Excel (exceljs)
 │                    + similitud.ts (detección de duplicados/parecidas, en memoria)
 │                    La nómina delega el alta en UsuariosService (misma validación)
-├── etiquetas/       CRUD de Etiqueta (categorización de preguntas)
 ├── preguntas/       Alta/listado de Pregunta (banco único, reutilizable entre módulos)
 │                    + imagen de enunciado/opciones (sube/borra, StorageModule)
 ├── modulos/         Modulo + ModuloVersion (versionado inmutable, numeración pública
@@ -174,7 +171,7 @@ src/
 └── main.ts          ValidationPipe global + CORS + static assets de /uploads
 prisma/
 ├── schema.prisma    Usuario, Vinculacion, VinculacionPuestoCentro, Organizacion,
-│                    Puesto, CentroCosto, Pregunta, Etiqueta, Modulo, ModuloVersion,
+│                    Puesto, CentroCosto, Pregunta, Modulo, ModuloVersion,
 │                    ReglaAsignacion, Asignacion + pivots
 ├── seed.ts          Organización interna (Ingeniería SIMA) + módulos base.
 │                    Limpia en orden de dependencia (las FK son ON DELETE RESTRICT)

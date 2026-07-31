@@ -79,7 +79,7 @@ describe('PreguntasService', () => {
     service = module.get(PreguntasService);
   });
 
-  it('crea una pregunta truefalse sin etiquetas', async () => {
+  it('crea una pregunta truefalse', async () => {
     prisma.pregunta.create.mockResolvedValue({ id: '1' });
     await service.create({
       texto: '¿El casco es obligatorio?',

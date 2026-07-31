@@ -25,7 +25,7 @@ npm run dev            # → http://localhost:5173
 src/
 ├── core/                # Entidades compartidas por toda la plataforma
 │   ├── api/              client.js · usuarios.js · organizaciones.js · puestos.js ·
-│   │                     centrosCosto.js · preguntas.js · modulos.js · etiquetas.js ·
+│   │                     centrosCosto.js · preguntas.js · modulos.js ·
 │   │                     import.js · reglasAsignacion.js · asignaciones.js  (capa HTTP)
 │   ├── data/              clients.js · users.js · usuarios-mock.js  (mock, en migración)
 │   ├── components/        ImportUsuariosModal.jsx · ImportPreguntasModal.jsx ·

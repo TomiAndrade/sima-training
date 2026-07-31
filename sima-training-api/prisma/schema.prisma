@@ -92,13 +92,6 @@ enum TipoPregunta {
   TEXTO_LIBRE
 }
 
-enum CategoriaEtiqueta {
-  TEMA
-  AREA
-  NORMA
-  ROL
-}
-
 enum EstadoVersionModulo {
   BORRADOR
   ACTIVO
@@ -128,7 +121,6 @@ model Pregunta {
   puntajeMax        Int?         @map("puntaje_max")
   activa            Boolean      @default(true)
 
-  etiquetas PreguntaEtiqueta[]
   versiones ModuloVersionPregunta[]
 
   // Trazabilidad
@@ -137,29 +129,6 @@ model Pregunta {
   createdBy String?  @map("created_by")
 
   @@map("preguntas")
-}
-
-model Etiqueta {
-  id        String            @id @default(uuid())
-  nombre    String            @unique @db.VarChar(80)
-  categoria CategoriaEtiqueta
-  color     String?           @db.VarChar(7)
-
-  preguntas PreguntaEtiqueta[]
-
-  @@map("etiquetas")
-}
-
-// Pivot Pregunta <-> Etiqueta (N a N).
-model PreguntaEtiqueta {
-  preguntaId String @map("pregunta_id")
-  etiquetaId String @map("etiqueta_id")
-
-  pregunta Pregunta @relation(fields: [preguntaId], references: [id])
-  etiqueta Etiqueta @relation(fields: [etiquetaId], references: [id])
-
-  @@id([preguntaId, etiquetaId])
-  @@map("pregunta_etiquetas")
 }
 
 // Módulo: contenedor estable de versiones. El contenido real (preguntas)

@@ -3,7 +3,6 @@ import { ConfigModule } from '@nestjs/config';
 import { AsignacionesModule } from './asignaciones/asignaciones.module';
 import { AuthModule } from './auth/auth.module';
 import { CentrosCostoModule } from './centros-costo/centros-costo.module';
-import { EtiquetasModule } from './etiquetas/etiquetas.module';
 import { HealthController } from './health/health.controller';
 import { ImportModule } from './import/import.module';
 import { ModulosModule } from './modulos/modulos.module';
@@ -23,7 +22,6 @@ import { UsuariosModule } from './usuarios/usuarios.module';
     OrganizacionesModule,
     UsuariosModule,
     ImportModule,
-    EtiquetasModule,
     PreguntasModule,
     ModulosModule,
     PuestosModule,

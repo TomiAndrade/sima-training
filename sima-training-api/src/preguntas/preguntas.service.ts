@@ -68,20 +68,12 @@ export class PreguntasService {
   // (pg_trgm o embeddings) antes de crear. Fuera de alcance de este sprint.
   async create(dto: CreatePreguntaDto) {
     this.validarOpciones(dto);
-    const { etiquetaIds, opciones, ...rest } = dto;
+    const { opciones, ...rest } = dto;
     return this.prisma.pregunta.create({
       data: {
         ...rest,
         ...(opciones ? { opciones: opciones as Prisma.InputJsonValue } : {}),
-        ...(etiquetaIds?.length
-          ? {
-              etiquetas: {
-                create: etiquetaIds.map((etiquetaId) => ({ etiquetaId })),
-              },
-            }
-          : {}),
       },
-      include: { etiquetas: { include: { etiqueta: true } } },
     });
   }
 
@@ -156,7 +148,7 @@ export class PreguntasService {
 
     // moduloId y sinAsignar se combinan con OR entre sí (preguntas de tal
     // módulo O sin asignar), y ese resultado se combina con AND con el resto
-    // de los filtros (texto, activa, etiqueta).
+    // de los filtros (texto, activa).
     const filtrosModulo: Prisma.PreguntaWhereInput[] = [];
     if (query.moduloId?.length) {
       const idsSeleccionados = todasLasVersionesVigentes
@@ -181,18 +173,6 @@ export class PreguntasService {
     const where: Prisma.PreguntaWhereInput = {
       ...(query.q ? { texto: { contains: query.q, mode: 'insensitive' } } : {}),
       ...(query.activa !== undefined ? { activa: query.activa } : {}),
-      ...(query.etiqueta || query.categoria
-        ? {
-            etiquetas: {
-              some: {
-                ...(query.etiqueta ? { etiquetaId: query.etiqueta } : {}),
-                ...(query.categoria
-                  ? { etiqueta: { categoria: query.categoria } }
-                  : {}),
-              },
-            },
-          }
-        : {}),
       ...(filtrosModulo.length === 1
         ? filtrosModulo[0]
         : filtrosModulo.length > 1
@@ -202,7 +182,6 @@ export class PreguntasService {
 
     const preguntas = await this.prisma.pregunta.findMany({
       where,
-      include: { etiquetas: { include: { etiqueta: true } } },
       orderBy: { createdAt: 'desc' },
     });
 
@@ -212,7 +191,6 @@ export class PreguntasService {
   async findOne(id: string) {
     const pregunta = await this.prisma.pregunta.findUnique({
       where: { id },
-      include: { etiquetas: { include: { etiqueta: true } } },
     });
     if (!pregunta) {
       throw new NotFoundException(`Pregunta ${id} no encontrada`);
@@ -234,7 +212,6 @@ export class PreguntasService {
         const pregunta = await tx.pregunta.update({
           where: { id },
           data: { activa: false },
-          include: { etiquetas: { include: { etiqueta: true } } },
         });
         await tx.moduloVersionPregunta.updateMany({
           where: {
@@ -250,7 +227,6 @@ export class PreguntasService {
     return this.prisma.pregunta.update({
       where: { id },
       data: { activa: true },
-      include: { etiquetas: { include: { etiqueta: true } } },
     });
   }
 

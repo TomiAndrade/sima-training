@@ -7,7 +7,6 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
-  IsUUID,
 } from 'class-validator';
 
 export class CreatePreguntaDto {
@@ -45,10 +44,4 @@ export class CreatePreguntaDto {
   @IsOptional()
   @IsBoolean()
   activa?: boolean;
-
-  // Etiquetas a asociar en la creación (ids existentes).
-  @IsOptional()
-  @IsArray()
-  @IsUUID('4', { each: true })
-  etiquetaIds?: string[];
 }

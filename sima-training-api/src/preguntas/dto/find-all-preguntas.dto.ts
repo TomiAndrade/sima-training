@@ -1,25 +1,10 @@
-import { CategoriaEtiqueta } from '@prisma/client';
 import { Transform } from 'class-transformer';
-import {
-  IsBoolean,
-  IsEnum,
-  IsOptional,
-  IsString,
-  IsUUID,
-} from 'class-validator';
+import { IsBoolean, IsOptional, IsString, IsUUID } from 'class-validator';
 
 export class FindAllPreguntasDto {
   @IsOptional()
   @IsString()
   q?: string;
-
-  @IsOptional()
-  @IsUUID('4')
-  etiqueta?: string;
-
-  @IsOptional()
-  @IsEnum(CategoriaEtiqueta)
-  categoria?: CategoriaEtiqueta;
 
   // ?activa=true / ?activa=false — papelera (false) vs activas (true) a nivel
   // banco. Sin el @Transform, class-validator recibe el string crudo.
