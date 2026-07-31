@@ -131,6 +131,75 @@ model Pregunta {
   @@map("preguntas")
 }
 
+// BaseConocimiento: la taxonomía temática del banco de preguntas ("Gestión de
+// residuos", "Trabajo en altura"). Reemplaza a la vieja Etiqueta: en vez de un
+// N a N de tags libres y opcionales, es UNA sola base por pregunta, con una
+// escala de niveles propia.
+//
+// NO SE VERSIONA, a propósito: es una taxonomía, no contenido. "Gestión de
+// residuos" como materia es la misma en 2020 y en 2026 — lo que cambia es qué
+// se considera correcto dentro de ella. Cuando sale un manual nuevo se mandan a
+// papelera las preguntas obsoletas, se cargan las nuevas en la MISMA base y se
+// publica una ModuloVersion nueva; los dos mecanismos de versionado que ya
+// existen alcanzan. Crear una base nueva por manual ("Gestión de Residuos
+// 2026") está descartado: parte las estadísticas justo en el eje que se quiere
+// medir. El año/revisión sale de `fuente`, nunca del nombre.
+model BaseConocimiento {
+  id     String  @id @default(uuid())
+  nombre String  @unique @db.VarChar(120)
+  codigo String? @unique @db.VarChar(20)
+  // Qué entra y qué no en esta base. No es decorativo: es lo que permite
+  // decidir sin dudar a cuál de dos bases parecidas va una pregunta nueva.
+  descripcion String?
+  // De qué manual/revisión sale el temario HOY ("Manual de Gestión de Residuos
+  // Rev. 4 — 03/2026"). Se copia a Pregunta.fuente al crear una pregunta y ahí
+  // queda congelada: la base dice de dónde sale el temario hoy, la pregunta de
+  // dónde salió ella.
+  fuente String?
+  color  String? @db.VarChar(7)
+  // Orden de display del catálogo (alfabético rara vez es el útil).
+  orden  Int?
+  activa Boolean @default(true)
+
+  niveles NivelBase[]
+
+  // Trazabilidad
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  createdBy String?  @map("created_by")
+
+  @@map("bases_conocimiento")
+}
+
+// NivelBase: la escala de dificultad de una base. Es ORDINAL (una escala, no
+// una bolsa de subtemas) y es una TABLA y no un enum porque la escala es POR
+// BASE: una base puede necesitar 3 niveles y otra 5.
+model NivelBase {
+  id                 String @id @default(uuid())
+  baseConocimientoId String @map("base_conocimiento_id")
+  nombre             String @db.VarChar(60)
+  // Lo que hace que sea una escala y no una bolsa. Contiguo desde 0.
+  // Reordenar NO se hace con updates fila por fila: el @@unique de abajo no es
+  // diferible y se viola a mitad de camino. Ver reordenarNiveles() en el
+  // service — reindexa toda la escala en dos pasadas.
+  orden              Int
+
+  base BaseConocimiento @relation(fields: [baseConocimientoId], references: [id], onDelete: Restrict)
+
+  // Trazabilidad
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([baseConocimientoId, nombre])
+  @@unique([baseConocimientoId, orden])
+  // No es una unicidad de negocio (`id` ya es PK): existe para habilitar la FK
+  // COMPUESTA de Pregunta — (nivel_id, base_conocimiento_id) → (id,
+  // base_conocimiento_id) —, con la que la base de datos garantiza que el nivel
+  // de una pregunta pertenece a su base, sin chequeo en el service.
+  @@unique([id, baseConocimientoId])
+  @@map("niveles_base")
+}
+
 // Módulo: contenedor estable de versiones. El contenido real (preguntas)
 // vive en ModuloVersion, nunca acá directamente.
 model Modulo {

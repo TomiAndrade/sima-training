@@ -94,6 +94,14 @@ Ver [`.env.example`](.env.example). Las principales:
 | `POST` | `/centros-costo` | JWT | Alta (rechaza nombre duplicado con 409) |
 | `GET` | `/centros-costo` | — | Lista el catálogo. `?activo=true\|false` filtra; **sin el parámetro devuelve todo** (mismo criterio que `/puestos`) |
 | `PATCH` | `/centros-costo/:id` | JWT | Edición (nombre y/o `activo`, baja lógica) |
+| `GET` | `/bases-conocimiento` | — | Lista el catálogo con sus `niveles` anidados (ordenados por `orden`). `?activa=true\|false` filtra; **sin el parámetro devuelve todo** (mismo criterio que `/puestos`) |
+| `POST` | `/bases-conocimiento` | JWT | Alta (`nombre`, y opcionales `codigo`/`descripcion`/`fuente`/`color`/`orden`). 409 si el nombre o el código ya existen |
+| `GET` | `/bases-conocimiento/:id` | — | Detalle con sus niveles |
+| `PATCH` | `/bases-conocimiento/:id` | JWT | Edita metadata y/o `activa` (baja lógica) |
+| `POST` | `/bases-conocimiento/:id/niveles` | JWT | Alta de un nivel de la escala. `orden` es opcional: si no viene se appendea al final; si viene ocupado, 409. 409 también si el nombre ya existe en esa base |
+| `PATCH` | `/bases-conocimiento/:id/niveles/:nivelId` | JWT | **Sólo renombra.** `orden` no se edita acá (ver la fila siguiente) |
+| `PUT` | `/bases-conocimiento/:id/niveles/orden` | JWT | Reordena la escala: body `{ nivelIds: [...] }` con el set **completo** en el orden deseado (400 si falta, sobra o repite alguno). Reindexa en dos pasadas porque el índice `(base_conocimiento_id, orden)` no es diferible — ver Decisiones de diseño |
+| `DELETE` | `/bases-conocimiento/:id/niveles/:nivelId` | JWT | Elimina un nivel de la escala |
 | `POST` | `/preguntas` | JWT | Alta. No corre detección de duplicados/similares (eso solo pasa en el preview del import de Excel) |
 | `POST` | `/preguntas/imagen` | JWT | Sube la imagen de un enunciado u opción (multipart `file`, máx 2 MB, formato detectado por magic bytes). Devuelve `{ imagen: "preguntas/<uuid>.png" }` para mandar en el `imagen` del alta |
 | `DELETE` | `/preguntas/imagen/:clave` | JWT | Borra una imagen huérfana (clave url-encoded). 409 si alguna pregunta la sigue referenciando (enunciado u opción) |
@@ -156,6 +164,9 @@ src/
 ├── import/          Importación de nómina y de preguntas desde Excel (exceljs)
 │                    + similitud.ts (detección de duplicados/parecidas, en memoria)
 │                    La nómina delega el alta en UsuariosService (misma validación)
+├── bases-conocimiento/  BaseConocimiento (taxonomía temática del banco: "Gestión de
+│                    residuos") + NivelBase (su escala ordinal de dificultad, propia
+│                    de cada base). Reemplaza a la vieja Etiqueta
 ├── preguntas/       Alta/listado de Pregunta (banco único, reutilizable entre módulos)
 │                    + imagen de enunciado/opciones (sube/borra, StorageModule)
 ├── modulos/         Modulo + ModuloVersion (versionado inmutable, numeración pública
@@ -171,7 +182,8 @@ src/
 └── main.ts          ValidationPipe global + CORS + static assets de /uploads
 prisma/
 ├── schema.prisma    Usuario, Vinculacion, VinculacionPuestoCentro, Organizacion,
-│                    Puesto, CentroCosto, Pregunta, Modulo, ModuloVersion,
+│                    Puesto, CentroCosto, Pregunta, BaseConocimiento, NivelBase,
+│                    Modulo, ModuloVersion,
 │                    ReglaAsignacion, Asignacion + pivots
 ├── seed.ts          Organización interna (Ingeniería SIMA) + módulos base.
 │                    Limpia en orden de dependencia (las FK son ON DELETE RESTRICT)

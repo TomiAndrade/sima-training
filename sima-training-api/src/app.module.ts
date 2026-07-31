@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { AsignacionesModule } from './asignaciones/asignaciones.module';
 import { AuthModule } from './auth/auth.module';
+import { BasesConocimientoModule } from './bases-conocimiento/bases-conocimiento.module';
 import { CentrosCostoModule } from './centros-costo/centros-costo.module';
 import { HealthController } from './health/health.controller';
 import { ImportModule } from './import/import.module';
@@ -22,6 +23,7 @@ import { UsuariosModule } from './usuarios/usuarios.module';
     OrganizacionesModule,
     UsuariosModule,
     ImportModule,
+    BasesConocimientoModule,
     PreguntasModule,
     ModulosModule,
     PuestosModule,
