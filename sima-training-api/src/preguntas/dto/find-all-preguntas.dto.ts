@@ -34,4 +34,25 @@ export class FindAllPreguntasDto {
   })
   @IsBoolean()
   sinAsignar?: boolean;
+
+  // Clasificación. A diferencia de moduloId/sinAsignar, estos se combinan con
+  // AND con el resto de los filtros.
+  @IsOptional()
+  @IsUUID('4')
+  baseId?: string;
+
+  @IsOptional()
+  @IsUUID('4')
+  nivelId?: string;
+
+  // ?sinBase=true — el backlog de preguntas cargadas antes de que existieran
+  // las bases de conocimiento, que es lo que hay que ir clasificando.
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (value === 'true') return true;
+    if (value === 'false') return false;
+    return value;
+  })
+  @IsBoolean()
+  sinBase?: boolean;
 }

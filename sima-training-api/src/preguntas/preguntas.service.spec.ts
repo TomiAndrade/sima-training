@@ -4,6 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
+import { Prisma } from '@prisma/client';
 import { ModulosService } from '../modulos/modulos.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
@@ -31,6 +32,9 @@ describe('PreguntasService', () => {
       findMany: jest.Mock;
       groupBy: jest.Mock;
     };
+    baseConocimiento: {
+      findUnique: jest.Mock;
+    };
     $transaction: jest.Mock;
   };
   let modulos: {
@@ -55,6 +59,9 @@ describe('PreguntasService', () => {
         updateMany: jest.fn(),
         findMany: jest.fn(),
         groupBy: jest.fn(),
+      },
+      baseConocimiento: {
+        findUnique: jest.fn(),
       },
       $transaction: jest.fn((cb) => cb(prisma)),
     };
@@ -289,6 +296,126 @@ describe('PreguntasService', () => {
         BadRequestException,
       );
       expect(storage.borrar).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('clasificación', () => {
+    const BASE_ID = '11111111-1111-4111-8111-111111111111';
+
+    // La fuente se congela al crear. Si se resolviera en cada lectura, editar
+    // la fuente de la base al salir un manual nuevo haría que las preguntas
+    // viejas —las que ese manual dejó obsoletas— pasen a citar el manual nuevo.
+    it('copia la fuente de la base cuando el alta no trae una', async () => {
+      prisma.baseConocimiento.findUnique.mockResolvedValue({
+        fuente: 'Manual de Residuos Rev. 4',
+      });
+      prisma.pregunta.create.mockResolvedValue({ id: 'p1' });
+
+      await service.create({
+        texto: '¿En qué tacho van los biodegradables?',
+        tipo: 'VERDADERO_FALSO',
+        baseConocimientoId: BASE_ID,
+      });
+
+      expect(prisma.pregunta.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            fuente: 'Manual de Residuos Rev. 4',
+          }),
+        }),
+      );
+    });
+
+    it('respeta la fuente explícita del alta por sobre la de la base', async () => {
+      prisma.baseConocimiento.findUnique.mockResolvedValue({
+        fuente: 'la de la base',
+      });
+      prisma.pregunta.create.mockResolvedValue({ id: 'p1' });
+
+      await service.create({
+        texto: 'x',
+        tipo: 'VERDADERO_FALSO',
+        baseConocimientoId: BASE_ID,
+        fuente: 'la explícita',
+      });
+
+      expect(prisma.pregunta.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ fuente: 'la explícita' }),
+        }),
+      );
+    });
+
+    it('no consulta la base si el alta no trae baseConocimientoId', async () => {
+      prisma.pregunta.create.mockResolvedValue({ id: 'p1' });
+
+      await service.create({ texto: 'x', tipo: 'VERDADERO_FALSO' });
+
+      expect(prisma.baseConocimiento.findUnique).not.toHaveBeenCalled();
+    });
+
+    // La base de datos es la que garantiza la coherencia; el service sólo tiene
+    // que traducir el rechazo a 400 en vez de dejar salir un 500.
+    it('traduce el rechazo de la FK compuesta (P2003) a 400', async () => {
+      const err = new Prisma.PrismaClientKnownRequestError('fk', {
+        code: 'P2003',
+        clientVersion: 'x',
+      });
+      prisma.pregunta.create.mockRejectedValue(err);
+
+      await expect(
+        service.create({
+          texto: 'x',
+          tipo: 'VERDADERO_FALSO',
+          baseConocimientoId: BASE_ID,
+          nivelId: '22222222-2222-4222-8222-222222222222',
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('traduce el rechazo del CHECK (nivel sin base) a 400', async () => {
+      const err = new Prisma.PrismaClientUnknownRequestError(
+        'violates check constraint "preguntas_nivel_requiere_base"',
+        { clientVersion: 'x' },
+      );
+      prisma.pregunta.create.mockRejectedValue(err);
+
+      await expect(
+        service.create({
+          texto: 'x',
+          tipo: 'VERDADERO_FALSO',
+          nivelId: '22222222-2222-4222-8222-222222222222',
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('?sinBase=true filtra las preguntas sin clasificar', async () => {
+      prisma.pregunta.findMany.mockResolvedValue([]);
+      prisma.moduloVersionPregunta.findMany.mockResolvedValue([]);
+
+      await service.findAll({ sinBase: true });
+
+      expect(prisma.pregunta.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ baseConocimientoId: null }),
+        }),
+      );
+    });
+
+    it('?baseId= y ?nivelId= se combinan con AND', async () => {
+      prisma.pregunta.findMany.mockResolvedValue([]);
+      prisma.moduloVersionPregunta.findMany.mockResolvedValue([]);
+
+      await service.findAll({ baseId: BASE_ID, nivelId: 'n1' });
+
+      expect(prisma.pregunta.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            baseConocimientoId: BASE_ID,
+            nivelId: 'n1',
+          }),
+        }),
+      );
     });
   });
 });

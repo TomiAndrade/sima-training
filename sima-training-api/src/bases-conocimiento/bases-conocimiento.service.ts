@@ -12,6 +12,17 @@ import { ReordenarNivelesDto } from './dto/reordenar-niveles.dto';
 import { UpdateBaseConocimientoDto } from './dto/update-base-conocimiento.dto';
 import { UpdateNivelDto } from './dto/update-nivel.dto';
 
+// Forma única para listado y detalle: la escala ordenada + cuántas preguntas
+// cuelgan de la base y de cada nivel. El backoffice usa esos conteos para saber
+// qué se rompe antes de tocar la escala.
+const BASE_INCLUDE = {
+  niveles: {
+    orderBy: { orden: 'asc' as const },
+    include: { _count: { select: { preguntas: true } } },
+  },
+  _count: { select: { preguntas: true } },
+};
+
 @Injectable()
 export class BasesConocimientoService {
   constructor(private readonly prisma: PrismaService) {}
@@ -21,7 +32,7 @@ export class BasesConocimientoService {
     await this.assertCodigoDisponible(dto.codigo);
     return this.prisma.baseConocimiento.create({
       data: { ...dto, createdBy: 'backoffice' },
-      include: { niveles: { orderBy: { orden: 'asc' } } },
+      include: BASE_INCLUDE,
     });
   }
 
@@ -31,7 +42,7 @@ export class BasesConocimientoService {
   findAll(query: FindBasesConocimientoDto = {}) {
     return this.prisma.baseConocimiento.findMany({
       where: query.activa !== undefined ? { activa: query.activa } : {},
-      include: { niveles: { orderBy: { orden: 'asc' } } },
+      include: BASE_INCLUDE,
       // `orden` es nullable (no toda base define uno), así que las que no lo
       // tienen van al final y desempatan por nombre.
       orderBy: [{ orden: { sort: 'asc', nulls: 'last' } }, { nombre: 'asc' }],
@@ -41,7 +52,7 @@ export class BasesConocimientoService {
   async findOne(id: string) {
     const base = await this.prisma.baseConocimiento.findUnique({
       where: { id },
-      include: { niveles: { orderBy: { orden: 'asc' } } },
+      include: BASE_INCLUDE,
     });
     if (!base) {
       throw new NotFoundException(`Base de conocimiento ${id} no encontrada`);
@@ -60,7 +71,7 @@ export class BasesConocimientoService {
     return this.prisma.baseConocimiento.update({
       where: { id },
       data: { ...dto },
-      include: { niveles: { orderBy: { orden: 'asc' } } },
+      include: BASE_INCLUDE,
     });
   }
 
@@ -146,8 +157,18 @@ export class BasesConocimientoService {
     });
   }
 
+  // Un nivel con preguntas no se borra: la FK es ON DELETE RESTRICT, así que
+  // Postgres lo rechazaría igual — pero con un error de constraint en vez de un
+  // mensaje que se entienda. Para "dejar de usar" una base entera está su
+  // `activa`; para vaciar un nivel hay que reclasificar sus preguntas primero.
   async eliminarNivel(baseId: string, nivelId: string) {
     await this.assertNivelExiste(baseId, nivelId);
+    const preguntas = await this.prisma.pregunta.count({ where: { nivelId } });
+    if (preguntas > 0) {
+      throw new ConflictException(
+        `El nivel tiene ${preguntas} pregunta(s) asignada(s); reclasificalas antes de eliminarlo`,
+      );
+    }
     return this.prisma.nivelBase.delete({ where: { id: nivelId } });
   }
 

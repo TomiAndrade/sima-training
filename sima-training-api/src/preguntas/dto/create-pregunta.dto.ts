@@ -7,6 +7,7 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
+  IsUUID,
 } from 'class-validator';
 
 export class CreatePreguntaDto {
@@ -44,4 +45,23 @@ export class CreatePreguntaDto {
   @IsOptional()
   @IsBoolean()
   activa?: boolean;
+
+  // Clasificación. Opcionales a nivel DTO aunque el formulario del backoffice
+  // las exija: el import de Excel y las preguntas legacy pueden no traerlas, y
+  // la columna es nullable justamente para poder migrar el banco de a poco.
+  // Que el nivel pertenezca a la base lo garantiza una FK compuesta en la base
+  // de datos, no una validación acá.
+  @IsOptional()
+  @IsUUID('4')
+  baseConocimientoId?: string;
+
+  @IsOptional()
+  @IsUUID('4')
+  nivelId?: string;
+
+  // Si no viene, se copia de la base al crear y queda congelada (ver
+  // resolverFuente en PreguntasService).
+  @IsOptional()
+  @IsString()
+  fuente?: string;
 }

@@ -121,6 +121,28 @@ model Pregunta {
   puntajeMax        Int?         @map("puntaje_max")
   activa            Boolean      @default(true)
 
+  // Clasificación: el TEMA (base) y la DIFICULTAD (nivel dentro de esa base).
+  // Nullable en la base de datos aunque el formulario de alta las exija: el
+  // banco ya tenía preguntas cargadas cuando esto se agregó y no hay forma de
+  // derivar la base del texto. El filtro ?sinBase=true es lo que permite ir
+  // limpiando ese backlog.
+  baseConocimientoId String? @map("base_conocimiento_id")
+  nivelId            String? @map("nivel_id")
+  // De qué manual salió ESTA pregunta. Se autocompleta con la `fuente` vigente
+  // de la base al crearla y después no se toca: la base dice de dónde sale el
+  // temario hoy, la pregunta de dónde salió ella. Sin esto, actualizar la
+  // fuente de la base al salir un manual nuevo haría que las preguntas viejas
+  // ya desactivadas muestren el manual que las dejó obsoletas.
+  fuente             String?
+
+  base BaseConocimiento? @relation(fields: [baseConocimientoId], references: [id], onDelete: Restrict)
+  // FK COMPUESTA: con esto la base de datos garantiza que el nivel pertenece a
+  // la base de la pregunta, sin chequeo en el service. Corre bajo MATCH SIMPLE,
+  // así que con nivel_id NULL no se evalúa — eso es deseado ("base cargada,
+  // nivel pendiente"). El caso inverso (nivel sin base) lo tapa un CHECK
+  // escrito a mano en la migración, que Prisma no conoce.
+  nivel NivelBase? @relation(fields: [nivelId, baseConocimientoId], references: [id, baseConocimientoId], onDelete: Restrict)
+
   versiones ModuloVersionPregunta[]
 
   // Trazabilidad
@@ -161,7 +183,8 @@ model BaseConocimiento {
   orden  Int?
   activa Boolean @default(true)
 
-  niveles NivelBase[]
+  niveles   NivelBase[]
+  preguntas Pregunta[]
 
   // Trazabilidad
   createdAt DateTime @default(now()) @map("created_at")
@@ -184,7 +207,8 @@ model NivelBase {
   // service — reindexa toda la escala en dos pasadas.
   orden              Int
 
-  base BaseConocimiento @relation(fields: [baseConocimientoId], references: [id], onDelete: Restrict)
+  base      BaseConocimiento @relation(fields: [baseConocimientoId], references: [id], onDelete: Restrict)
+  preguntas Pregunta[]
 
   // Trazabilidad
   createdAt DateTime @default(now()) @map("created_at")

@@ -25,6 +25,9 @@ describe('BasesConocimientoService', () => {
       delete: jest.Mock;
       aggregate: jest.Mock;
     };
+    pregunta: {
+      count: jest.Mock;
+    };
     $executeRaw: jest.Mock;
     $transaction: jest.Mock;
   };
@@ -48,6 +51,7 @@ describe('BasesConocimientoService', () => {
         delete: jest.fn(),
         aggregate: jest.fn(),
       },
+      pregunta: { count: jest.fn().mockResolvedValue(0) },
       $executeRaw: jest.fn(),
       $transaction: jest.fn((cb) => cb(prisma)),
     };
@@ -143,6 +147,36 @@ describe('BasesConocimientoService', () => {
       await expect(
         service.crearNivel(BASE_ID, { nombre: 'Básico' }),
       ).rejects.toBeInstanceOf(ConflictException);
+    });
+
+    // La FK es ON DELETE RESTRICT, así que Postgres lo rechazaría igual — pero
+    // con un error de constraint en vez de un mensaje que se entienda.
+    it('rechaza eliminar un nivel con preguntas asignadas', async () => {
+      prisma.nivelBase.findUnique.mockResolvedValue({
+        id: 'n1',
+        baseConocimientoId: BASE_ID,
+      });
+      prisma.pregunta.count.mockResolvedValue(7);
+
+      await expect(service.eliminarNivel(BASE_ID, 'n1')).rejects.toBeInstanceOf(
+        ConflictException,
+      );
+      expect(prisma.nivelBase.delete).not.toHaveBeenCalled();
+    });
+
+    it('elimina un nivel vacío', async () => {
+      prisma.nivelBase.findUnique.mockResolvedValue({
+        id: 'n1',
+        baseConocimientoId: BASE_ID,
+      });
+      prisma.pregunta.count.mockResolvedValue(0);
+      prisma.nivelBase.delete.mockResolvedValue({ id: 'n1' });
+
+      await service.eliminarNivel(BASE_ID, 'n1');
+
+      expect(prisma.nivelBase.delete).toHaveBeenCalledWith({
+        where: { id: 'n1' },
+      });
     });
 
     it('rechaza un nivel de otra base al actualizar', async () => {

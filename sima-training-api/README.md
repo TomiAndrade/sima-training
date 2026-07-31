@@ -94,18 +94,18 @@ Ver [`.env.example`](.env.example). Las principales:
 | `POST` | `/centros-costo` | JWT | Alta (rechaza nombre duplicado con 409) |
 | `GET` | `/centros-costo` | — | Lista el catálogo. `?activo=true\|false` filtra; **sin el parámetro devuelve todo** (mismo criterio que `/puestos`) |
 | `PATCH` | `/centros-costo/:id` | JWT | Edición (nombre y/o `activo`, baja lógica) |
-| `GET` | `/bases-conocimiento` | — | Lista el catálogo con sus `niveles` anidados (ordenados por `orden`). `?activa=true\|false` filtra; **sin el parámetro devuelve todo** (mismo criterio que `/puestos`) |
+| `GET` | `/bases-conocimiento` | — | Lista el catálogo con sus `niveles` anidados (ordenados por `orden`) y `_count.preguntas` por base y por nivel. `?activa=true\|false` filtra; **sin el parámetro devuelve todo** (mismo criterio que `/puestos`) |
 | `POST` | `/bases-conocimiento` | JWT | Alta (`nombre`, y opcionales `codigo`/`descripcion`/`fuente`/`color`/`orden`). 409 si el nombre o el código ya existen |
 | `GET` | `/bases-conocimiento/:id` | — | Detalle con sus niveles |
 | `PATCH` | `/bases-conocimiento/:id` | JWT | Edita metadata y/o `activa` (baja lógica) |
 | `POST` | `/bases-conocimiento/:id/niveles` | JWT | Alta de un nivel de la escala. `orden` es opcional: si no viene se appendea al final; si viene ocupado, 409. 409 también si el nombre ya existe en esa base |
 | `PATCH` | `/bases-conocimiento/:id/niveles/:nivelId` | JWT | **Sólo renombra.** `orden` no se edita acá (ver la fila siguiente) |
 | `PUT` | `/bases-conocimiento/:id/niveles/orden` | JWT | Reordena la escala: body `{ nivelIds: [...] }` con el set **completo** en el orden deseado (400 si falta, sobra o repite alguno). Reindexa en dos pasadas porque el índice `(base_conocimiento_id, orden)` no es diferible — ver Decisiones de diseño |
-| `DELETE` | `/bases-conocimiento/:id/niveles/:nivelId` | JWT | Elimina un nivel de la escala |
-| `POST` | `/preguntas` | JWT | Alta. No corre detección de duplicados/similares (eso solo pasa en el preview del import de Excel) |
+| `DELETE` | `/bases-conocimiento/:id/niveles/:nivelId` | JWT | Elimina un nivel de la escala. 409 si tiene preguntas asignadas (hay que reclasificarlas primero) |
+| `POST` | `/preguntas` | JWT | Alta, con clasificación opcional `baseConocimientoId`/`nivelId`/`fuente`. Si no viene `fuente`, se copia de la base y **queda congelada**. 400 si el nivel no pertenece a la base, o si viene `nivelId` sin `baseConocimientoId`. No corre detección de duplicados/similares (eso solo pasa en el preview del import de Excel) |
 | `POST` | `/preguntas/imagen` | JWT | Sube la imagen de un enunciado u opción (multipart `file`, máx 2 MB, formato detectado por magic bytes). Devuelve `{ imagen: "preguntas/<uuid>.png" }` para mandar en el `imagen` del alta |
 | `DELETE` | `/preguntas/imagen/:clave` | JWT | Borra una imagen huérfana (clave url-encoded). 409 si alguna pregunta la sigue referenciando (enunciado u opción) |
-| `GET` | `/preguntas` | — | Lista, filtros `?q=` (texto), `?activa=` (papelera global si `false`), `?moduloId=` (repetible, OR entre sí), `?sinAsignar=true` (OR con `moduloId`). Cada pregunta trae `modulos: [{moduloId, moduloNombre, activaEnModulo}]` con sus asignaciones vigentes |
+| `GET` | `/preguntas` | — | Lista, filtros `?q=` (texto), `?activa=` (papelera global si `false`), `?baseId=`/`?nivelId=`/`?sinBase=true` (clasificación, combinan con AND; `sinBase` es el backlog sin clasificar). Cada pregunta trae `base` y `nivel` anidados, `?moduloId=` (repetible, OR entre sí), `?sinAsignar=true` (OR con `moduloId`). Cada pregunta trae `modulos: [{moduloId, moduloNombre, activaEnModulo}]` con sus asignaciones vigentes |
 | `GET` | `/preguntas/:id` | — | Detalle |
 | `PATCH` | `/preguntas/:id` | JWT | Papelera global: `{ activa: false }` desactiva la pregunta y cascadea `activa=false` a todas sus asignaciones por módulo (solo en versiones BORRADOR/ACTIVO, nunca ARCHIVADO); `{ activa: true }` la recupera pero **no** restaura los pivots (el admin reactiva módulo por módulo) |
 | `GET` | `/modulos` | — | Lista todos los módulos con `vigente: {estado, anio, mayor, menor}` y `borradorId` si hay un borrador en curso |
