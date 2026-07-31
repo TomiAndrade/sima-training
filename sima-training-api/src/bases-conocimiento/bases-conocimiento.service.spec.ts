@@ -179,6 +179,25 @@ describe('BasesConocimientoService', () => {
       });
     });
 
+    // Decisión explícita, no un olvido: `orden` es ordinal, así que borrar el
+    // nivel del medio puede dejar un hueco (0, 2) y no rompe nada — el orden
+    // relativo es el mismo. Renumerar en cada borrado costaría una transacción
+    // con SQL crudo para un beneficio cosmético. reordenarNiveles() es lo único
+    // que renumera. Este test fija la decisión para que no se "arregle" sola.
+    it('NO reindexa la escala al eliminar: puede quedar un hueco', async () => {
+      prisma.nivelBase.findUnique.mockResolvedValue({
+        id: 'n1',
+        baseConocimientoId: BASE_ID,
+      });
+      prisma.pregunta.count.mockResolvedValue(0);
+      prisma.nivelBase.delete.mockResolvedValue({ id: 'n1' });
+
+      await service.eliminarNivel(BASE_ID, 'n1');
+
+      expect(prisma.$executeRaw).not.toHaveBeenCalled();
+      expect(prisma.nivelBase.update).not.toHaveBeenCalled();
+    });
+
     it('rechaza un nivel de otra base al actualizar', async () => {
       prisma.nivelBase.findUnique.mockResolvedValue({
         id: 'n1',
@@ -246,7 +265,11 @@ describe('BasesConocimientoService', () => {
       ]);
     });
 
-    it('normaliza una escala con huecos a órdenes contiguos desde 0', async () => {
+    // Ojo con el alcance: esto fija que el PUT SIEMPRE emite 0..N-1, que es lo
+    // que de paso normaliza los huecos que haya dejado un eliminarNivel. Los
+    // huecos reales no se ejercitan acá (el mock devuelve niveles sin `orden`);
+    // eso está verificado contra Postgres: 0,2,3,4 → 0,1,2,3.
+    it('siempre emite órdenes contiguos desde 0, sea cual sea el estado previo', async () => {
       conNiveles([N1, N2, N3]);
 
       await service.reordenarNiveles(BASE_ID, { nivelIds: [N1, N2, N3] });

@@ -201,7 +201,15 @@ model NivelBase {
   id                 String @id @default(uuid())
   baseConocimientoId String @map("base_conocimiento_id")
   nombre             String @db.VarChar(60)
-  // Lo que hace que sea una escala y no una bolsa. Contiguo desde 0.
+  // Lo que hace que sea una escala y no una bolsa. Es ORDINAL: lo único que
+  // significa es cuál va antes que cuál, NO que la numeración sea contigua.
+  // Borrar el nivel del medio deja un hueco (0, 2) y está bien: eliminarNivel()
+  // no reindexa a propósito — el orden relativo no cambia y no vale meterle una
+  // transacción con SQL crudo a cada borrado. Consecuencia a tener presente:
+  // siguienteOrden() usa max(orden)+1, así que borrar y agregar repetido hace
+  // subir los números sin que vuelvan a bajar. reordenarNiveles() es lo único
+  // que renumera, y de paso normaliza los huecos que haya.
+  //
   // Reordenar NO se hace con updates fila por fila: el @@unique de abajo no es
   // diferible y se viola a mitad de camino. Ver reordenarNiveles() en el
   // service — reindexa toda la escala en dos pasadas.
