@@ -1,9 +1,12 @@
-const SIMA_CHECK_PAGES = new Set(['sima-check-overview', 'training-modules', 'questions', 'assignment-rules', 'training-assignments'])
+const SIMA_CHECK_PAGES = new Set(['sima-check-overview', 'training-modules', 'questions', 'bases-conocimiento', 'assignment-rules', 'training-assignments'])
 
+// "Bases" va pegada a "Preguntas" porque es su taxonomía: se entra ahí para
+// definir los temas y escalas con los que después se clasifican las preguntas.
 const SIMA_CHECK_TABS = [
   { id: 'sima-check-overview',  label: 'Resumen' },
   { id: 'training-modules',     label: 'Módulos' },
   { id: 'questions',            label: 'Preguntas' },
+  { id: 'bases-conocimiento',   label: 'Bases' },
   { id: 'assignment-rules',     label: 'Reglas' },
   { id: 'training-assignments', label: 'Asignaciones' },
 ]

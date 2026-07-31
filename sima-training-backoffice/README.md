@@ -26,7 +26,8 @@ src/
 ├── core/                # Entidades compartidas por toda la plataforma
 │   ├── api/              client.js · usuarios.js · organizaciones.js · puestos.js ·
 │   │                     centrosCosto.js · preguntas.js · modulos.js ·
-│   │                     import.js · reglasAsignacion.js · asignaciones.js  (capa HTTP)
+│   │                     basesConocimiento.js · import.js · reglasAsignacion.js ·
+│   │                     asignaciones.js  (capa HTTP)
 │   ├── data/              clients.js · users.js · usuarios-mock.js  (mock, en migración)
 │   ├── components/        ImportUsuariosModal.jsx · ImportPreguntasModal.jsx ·
 │   │                     ParesPuestoCentro.jsx · estadoSimilitudBadge.jsx
@@ -38,8 +39,8 @@ src/
 │   ├── components/        BancoPreguntas.jsx  (banco/asignación de preguntas,
 │   │                     compartido entre Preguntas y Módulos) · bancoModulo.jsx
 │   └── pages/             Overview.jsx (mock) · TrainingModules.jsx · Questions.jsx ·
-│                          ReglasAsignacion.jsx · TrainingAssignments.jsx
-│                          (los cuatro últimos, 100% backend)
+│                          BasesConocimiento.jsx · ReglasAsignacion.jsx ·
+│                          TrainingAssignments.jsx  (los cinco últimos, 100% backend)
 ├── pages/               # Shell: BackofficeLayout.jsx · Dashboard.jsx
 ├── components/          # Button · Card · Modal · Table · StatCard · ProgressBar · MultiSelectFilter
 └── hooks/               # useNavigation.js
@@ -51,8 +52,10 @@ src/
 |---|---|
 | (root) | Panel Principal (Dashboard) |
 | Administración | Clientes · Usuarios · Puestos · Centros de Costo |
-| SIMA CHECK | Resumen · Módulos · Preguntas · Reglas · Asignaciones |
+| SIMA CHECK | Resumen · Módulos · Preguntas · Bases · Reglas · Asignaciones |
 | Configuración | *(placeholder — Roles y Permisos futuros)* |
+
+> **Bases** es la taxonomía del banco de preguntas: cada base es un tema ("Gestión de residuos") y adentro define su propia escala **ordinal** de dificultad. La escala es por base a propósito — una puede necesitar 3 niveles y otra 5. Va pegada a **Preguntas** porque es donde se definen los temas con los que después se clasifican.
 
 > **Reglas** y **Asignaciones** son las dos caras del motor de asignación automática. En Reglas se configura qué módulo es obligatorio para un par (puesto, centro de costo) o para un centro entero; Asignaciones es una pantalla de **consulta por persona** que muestra qué le corresponde y por qué. Las asignaciones no se cargan una por una: las deriva el motor a partir de las reglas y de los pares de cada quien.
 

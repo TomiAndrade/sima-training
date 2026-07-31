@@ -89,6 +89,9 @@ async function upload(path, file, field = 'file', extraFields = {}) {
 export const api = {
   get: (path) => request('GET', path),
   post: (path, body) => request('POST', path, { body, auth: true }),
+  // PUT se usa donde el body reemplaza un set completo (ej. el orden de los
+  // niveles de una base), a diferencia de PATCH que actualiza campos sueltos.
+  put: (path, body) => request('PUT', path, { body, auth: true }),
   patch: (path, body) => request('PATCH', path, { body, auth: true }),
   del: (path) => request('DELETE', path, { auth: true }),
   upload,
