@@ -126,7 +126,7 @@ Ver [`.env.example`](.env.example). Las principales:
 | `PATCH` | `/asignaciones/:id/revocar` | JWT | Revoca una asignación (nunca se borra). Idempotente |
 | `GET` | `/reglas-asignacion` | — | Lista reglas, filtros `?puestoId=`/`?centroCostoId=`/`?moduloId=`/`?activo=`/`?alcance=PUESTO\|CENTRO`. `?puestoId=` es **literal**: trae sólo las de ese puesto, no las de centro |
 | `POST` | `/reglas-asignacion` | JWT | Alta de una regla. Con `puestoId` → regla por par exacto; **sin `puestoId` → regla de CENTRO** (aplica a todos los puestos de ese centro). Si la misma regla ya existe dada de baja, la reactiva en vez de duplicar |
-| `PATCH` | `/reglas-asignacion/:id` | JWT | Activa/desactiva la regla (`{ activo }`). El alcance (puesto/centro) y el módulo no se editan: para cambiarlos se crea otra regla |
+| `PATCH` | `/reglas-asignacion/:id` | JWT | `{ moduloId?, activo? }`, al menos uno. `activo` es la pausa reversible; `moduloId` corrige a qué módulo obliga la regla. **El alcance (puesto/centro) no se edita**: moverla de lugar es eliminarla y crear otra. Ojo: el backoffice **sólo manda `activo`** — `moduloId` está implementado y testeado pero hoy no tiene consumidor (la pantalla Reglas edita por diff alta+baja, para que el módulo anterior quede registrado; ver `CLAUDE.md`) |
 
 Las **lecturas** (`GET`) son abiertas; las **escrituras** requieren `Authorization: Bearer <token>`.
 
