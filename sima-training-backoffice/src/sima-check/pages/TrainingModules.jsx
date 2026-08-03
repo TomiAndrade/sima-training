@@ -3,8 +3,9 @@ import Table from '../../components/Table'
 import Button from '../../components/Button'
 import Modal from '../../components/Modal'
 import { modulosApi } from '../../core/api/modulos'
-import { useBancoModulo, estadoVersionBadge, formatVersionNumero, estadoModulo } from '../components/bancoModulo'
+import { useBancoModulo, estadoVersionBadge, formatVersionNumero, estadoModulo, claveCriterio } from '../components/bancoModulo'
 import { BancoAcciones, PreguntasAsignadasPanel, PreguntaBancoPicker } from '../components/BancoPreguntas'
+import CriteriosPanel from '../components/CriteriosPanel'
 
 const EMPTY_MODULE_FORM = { nombre: '', descripcion: '', vigenciaMeses: '' }
 
@@ -94,6 +95,13 @@ export default function TrainingModules() {
   const [guardando, setGuardando] = useState(false)
   const [guardarError, setGuardarError] = useState(null)
 
+  // Guardado de criterios: modelo distinto del staging de preguntas (pega al
+  // backend al confirmar), con su propio modal para que esa diferencia se vea.
+  const [criteriosModal, setCriteriosModal] = useState(false)
+  const [guardandoCriterios, setGuardandoCriterios] = useState(false)
+  const [criteriosError, setCriteriosError] = useState(null)
+  const [criteriosResultado, setCriteriosResultado] = useState(null)
+
   // Chips de filtro por estado del módulo (activo/borrador/inactivo), combinables.
   const [showActivos, setShowActivos] = useState(true)
   const [showBorradores, setShowBorradores] = useState(true)
@@ -130,6 +138,10 @@ export default function TrainingModules() {
   // sessionKeyRef evita re-tomar la foto en cada render, solo cuando se entra
   // a un borrador distinto (otro moduleId/versionId).
   const [localAsignadas, setLocalAsignadas] = useState([])
+  // Los criterios NO son staged: tienen su propio botón "Guardar criterios" que
+  // pega al backend al toque (ver handleGuardarCriterios). `localCriterios` es
+  // sólo el estado del formulario mientras se editan las filas.
+  const [localCriterios, setLocalCriterios] = useState([])
   const sessionKeyRef = useRef(null)
   useEffect(() => {
     if (!questionsView || questionsView.readOnly || !banco.version) return
@@ -137,6 +149,12 @@ export default function TrainingModules() {
     if (sessionKeyRef.current !== key) {
       sessionKeyRef.current = key
       setLocalAsignadas(banco.asignadas)
+      setLocalCriterios(
+        banco.criterios.map((c) => ({
+          baseConocimientoId: c.baseConocimientoId,
+          nivelId: c.nivelId,
+        })),
+      )
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [questionsView?.moduleId, questionsView?.versionId, questionsView?.readOnly, banco.version])
@@ -361,10 +379,27 @@ export default function TrainingModules() {
     ])
   }
 
+  // Cuántos cambios de preguntas hay sin mandar al backend en esta sesión. Se
+  // usa para avisarlo en el modal de "Guardar criterios", que los va a guardar
+  // de paso — que existan dos modelos de guardado es tolerable, que uno actúe
+  // sin avisar no.
+  const contarPendientes = () => {
+    if (!questionsView || questionsView.readOnly) return 0
+    const antes = new Map(banco.asignadas.map((m) => [m.preguntaId, m]))
+    const ahora = new Map(localAsignadas.map((m) => [m.preguntaId, m]))
+    let n = 0
+    for (const id of antes.keys()) if (!ahora.has(id)) n += 1
+    for (const [id, m] of ahora) {
+      const previo = antes.get(id)
+      if (!previo || previo.activa !== m.activa) n += 1
+    }
+    return n
+  }
+
   // Aplica al backend la diferencia entre lo que había al entrar a esta sesión
   // (banco.asignadas, nunca se refresca mientras se edita) y lo que quedó
   // armado localmente — la mínima cantidad de llamadas para llegar al estado
-  // deseado. La usan "Guardar y volver" y "Activar".
+  // deseado. La usan "Guardar y volver", "Activar" y "Guardar criterios".
   const flushCambios = async () => {
     const moduloId = questionsView.moduleId
     const antes = new Map(banco.asignadas.map((m) => [m.preguntaId, m]))
@@ -384,6 +419,51 @@ export default function TrainingModules() {
       if (previo && previo.activa !== m.activa) {
         await modulosApi.setPreguntaActiva(moduloId, id, m.activa)
       }
+    }
+  }
+
+  // --- Guardar los criterios (modelo de guardado propio, no staged) ---
+  //
+  // El PUT materializa pivots EN EL SERVIDOR, así que después de guardarlo las
+  // dos fotos del staging quedan viejas: `banco.asignadas` (la base del diff) y
+  // `localAsignadas` (lo que se está editando). Refrescar sólo `banco` sería
+  // peor que no hacer nada — el flushCambios siguiente vería los pivots recién
+  // materializados en `antes` pero no en `ahora` y los borraría. De ahí los tres
+  // pasos, en este orden:
+  //
+  //   1. flushCambios(): manda lo pendiente de la sesión. Sin esto se perdería,
+  //      porque el paso 3 pisa `localAsignadas` con lo que diga el servidor.
+  //      El modal lo dice explícitamente cuando hay algo pendiente.
+  //   2. el PUT de criterios.
+  //   3. re-baseline: sessionKeyRef en null + refresh. El efecto de staging
+  //      tiene `banco.version` en sus deps y el refresh setea un objeto nuevo,
+  //      así que vuelve a correr, ve la key distinta y re-snapshotea las dos
+  //      fotos desde el servidor. Quedan sincronizadas sin maquinaria nueva.
+  //
+  // El paso 3 va en `finally` y NO sólo en el camino feliz: si el paso 1 llegó a
+  // aplicarse y el 2 falló (409 porque otra sesión publicó la versión, un corte
+  // de red), el servidor ya tiene los cambios de preguntas y `banco.asignadas`
+  // no — el flush siguiente intentaría des-asignar un pivot que ya no existe y
+  // moriría con un 404. Resincronizar siempre cuesta que se pierdan las filas de
+  // criterios que se estaban editando, y a cambio deja la sesión en un estado
+  // consistente con un error explicando por qué.
+  const handleGuardarCriterios = async () => {
+    setGuardandoCriterios(true)
+    setCriteriosError(null)
+    try {
+      const res = await flushCambios().then(() =>
+        modulosApi.setCriterios(questionsView.moduleId, localCriterios),
+      )
+      setCriteriosResultado(res.resolucion)
+    } catch (err) {
+      setCriteriosError(
+        `${err.message} — se recargó el contenido del borrador desde el servidor, así que revisá los criterios antes de volver a guardar.`,
+      )
+    } finally {
+      setCriteriosModal(false)
+      sessionKeyRef.current = null
+      await banco.refresh()
+      setGuardandoCriterios(false)
     }
   }
 
@@ -431,6 +511,16 @@ export default function TrainingModules() {
     const cambios = quiereCompararBase ? contarCambios(baseBanco.asignadas, localAsignadas) : null
     const recomendarVersionNueva = quiereCompararBase && cambios && deberiaRecomendarVersionNueva(cambios)
     const asignadasVista = view.readOnly ? banco.asignadas : localAsignadas
+    const criteriosVista = view.readOnly ? banco.criterios : localCriterios
+    // Comparado contra lo guardado en el servidor: habilita "Guardar criterios".
+    const criteriosGuardadosClave = banco.criterios.map(claveCriterio).sort().join('|')
+    const criteriosLocalesClave = localCriterios
+      .filter((c) => c.baseConocimientoId)
+      .map(claveCriterio)
+      .sort()
+      .join('|')
+    const criteriosDirty = criteriosGuardadosClave !== criteriosLocalesClave
+    const pendientesPreguntas = contarPendientes()
 
     const irAtras = () => setView(
       view.from === 'versions'
@@ -481,6 +571,33 @@ export default function TrainingModules() {
             {banco.version?.estado === 'ARCHIVADO'
               ? 'Estás viendo una versión archivada del historial (solo lectura).'
               : 'Estás viendo la versión publicada (solo lectura). Para modificarla, volvé y usá "Editar contenido".'}
+          </div>
+        )}
+
+        <CriteriosPanel
+          criterios={criteriosVista}
+          readOnly={view.readOnly}
+          onChange={setLocalCriterios}
+          onGuardar={() => { setCriteriosError(null); setCriteriosModal(true) }}
+          guardando={guardandoCriterios}
+          error={criteriosError}
+          dirty={criteriosDirty}
+        />
+
+        {criteriosResultado && (
+          <div className="bg-indigo-50 border border-indigo-200 text-indigo-700 text-xs rounded px-3 py-2 flex items-center justify-between gap-3">
+            <span>
+              Criterios guardados: se agregaron <strong>{criteriosResultado.agregadas}</strong>,
+              se quitaron <strong>{criteriosResultado.quitadas}</strong> y
+              se conservaron <strong>{criteriosResultado.conservadas}</strong> preguntas.
+            </span>
+            <button
+              type="button"
+              className="text-indigo-500 hover:text-indigo-800 font-semibold flex-shrink-0"
+              onClick={() => setCriteriosResultado(null)}
+            >
+              Cerrar
+            </button>
           </div>
         )}
 
@@ -548,6 +665,49 @@ export default function TrainingModules() {
                 <span className="font-mono font-semibold">{formatVersionNumero(previewActivacion(null, true))}</span>.
               </p>
             )}
+          </div>
+        </Modal>
+
+        <Modal
+          open={criteriosModal}
+          onClose={() => setCriteriosModal(false)}
+          title="Guardar criterios"
+          footer={
+            <>
+              <Button variant="secondary" onClick={() => setCriteriosModal(false)} disabled={guardandoCriterios}>
+                Cancelar
+              </Button>
+              <Button onClick={handleGuardarCriterios} disabled={guardandoCriterios}>
+                {guardandoCriterios ? 'Guardando...' : 'Guardar criterios'}
+              </Button>
+            </>
+          }
+        >
+          <div className="space-y-3">
+            {/* El error no se muestra acá: ante una falla el modal se cierra y
+                el contenido se recarga del servidor, así que el mensaje va en el
+                panel, al lado de los criterios ya resincronizados. */}
+            <p className="text-slate-600 text-sm">
+              Se van a sumar al módulo las preguntas del banco que correspondan a estos criterios, y se van a{' '}
+              <strong>quitar</strong> las que había traído un criterio que ya no está — incluidas las que hayas
+              desactivado a mano.
+            </p>
+            <p className="text-slate-500 text-sm">
+              Las preguntas que agregaste vos desde el banco no se tocan, y las que ya trajo un criterio y siguen
+              correspondiendo quedan como están (si las desactivaste, siguen desactivadas).
+            </p>
+            {/* A diferencia del resto del editor, esto SÍ pega al backend en el
+                acto. Que convivan dos modelos de guardado es tolerable; que el
+                de criterios arrastre los cambios de preguntas sin decirlo, no. */}
+            <div className="bg-amber-50 border border-amber-200 text-amber-700 text-xs rounded px-3 py-2">
+              A diferencia del resto de la pantalla, esto se guarda ahora mismo (no espera a "Guardar y volver").
+              {pendientesPreguntas > 0 && (
+                <>
+                  {' '}Tenés <strong>{pendientesPreguntas}</strong> cambio{pendientesPreguntas !== 1 ? 's' : ''} de
+                  preguntas sin guardar: se {pendientesPreguntas !== 1 ? 'van' : 'va'} a guardar junto con los criterios.
+                </>
+              )}
+            </div>
           </div>
         </Modal>
 

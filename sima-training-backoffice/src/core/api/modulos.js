@@ -15,6 +15,13 @@ export const modulosApi = {
   // mientras se edita un BORRADOR; sobre una versión publicada el backend rechaza.
   unassignPregunta: (moduloId, preguntaId) =>
     api.del(`/modulos/${moduloId}/preguntas/${preguntaId}`),
+  // Set COMPLETO de criterios (base + nivel) de la versión en edición. PUT y no
+  // PATCH porque el body reemplaza el set entero; el array vacío es válido y
+  // significa "sacar todos los criterios". Materializa el pool en el acto y
+  // devuelve { version, criterios, resolucion: { agregadas, quitadas,
+  // conservadas, porCriterio } }. Solo vale sobre un BORRADOR (el backend
+  // responde 409 si la versión ya está publicada).
+  setCriterios: (id, criterios) => api.put(`/modulos/${id}/criterios`, { criterios }),
   // Crea un BORRADOR nuevo copiando las preguntas del ACTIVO, sin preguntar
   // actualización/versión nueva todavía — esa elección se hace recién al activar.
   crearVersion: (id) => api.post(`/modulos/${id}/versiones`, {}),

@@ -30,6 +30,12 @@ export function estadoModulo(mod) {
   return 'activo'
 }
 
+// Clave de identidad de un ModuloVersionCriterio, para comparar sets de
+// criterios y detectar repetidos sin ir al backend. Espeja `claveCriterio` del
+// service: un nivel ausente y uno en null son el MISMO criterio ("cualquier
+// nivel de esta base") y tienen que colisionar entre sí.
+export const claveCriterio = (c) => `${c.baseConocimientoId}::${c.nivelId ?? '*'}`
+
 // Badge de ciclo de vida de una ModuloVersion: BORRADOR (ámbar) / ACTIVO
 // (esmeralda) / ARCHIVADO (slate).
 export function estadoVersionBadge(estado) {
@@ -72,10 +78,15 @@ export function useBancoModulo(backendId, versionId) {
   }, [backendId, versionId])
 
   const asignadas = version?.preguntas ?? []
+  // Criterios (base + nivel) con los que se armó esta versión. Vienen resueltos
+  // (con `base` y `nivel` anidados) tanto en GET /modulos/:id como en el detalle
+  // de una versión puntual.
+  const criterios = version?.criterios ?? []
   return {
     // Metadata de la versión cargada (estado/anio/mayor/menor/esNuevaLinea).
     version,
     asignadas,
+    criterios,
     assignedIds: new Set(asignadas.map((mvp) => mvp.preguntaId)),
     baseOrden: asignadas.length,
     refresh: load,

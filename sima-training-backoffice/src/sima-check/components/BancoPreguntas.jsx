@@ -145,12 +145,25 @@ export function PreguntasAsignadasPanel({ asignadas, error, onToggle, onRemove, 
             .sort((a, b) => a.orden - b.orden)
             .map((mvp) => {
               const enPapelera = mvp.pregunta.activa === false
+              // La trajo un criterio del módulo, no se eligió a mano. "Quitar"
+              // no se ofrece: el backend lo rechaza con 409 porque la próxima
+              // resolución la volvería a materializar. La vía es "Desactivar",
+              // que sí sobrevive a las resoluciones siguientes.
+              const porCriterio = mvp.origen === 'CRITERIO'
               return (
                 <div key={mvp.preguntaId} className={`px-4 py-2.5 flex items-center gap-3 ${mvp.activa === false ? 'opacity-50' : ''}`}>
                   <span className="text-slate-400 text-xs font-mono w-6">{mvp.orden}</span>
                   {backendTypeBadge(mvp.pregunta.tipo)}
                   <ImagenEnunciado imagen={mvp.pregunta.imagen} />
                   <span className="text-slate-700 text-sm line-clamp-1 flex-1">{mvp.pregunta.texto}</span>
+                  {porCriterio && (
+                    <span
+                      className="px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-indigo-50 text-indigo-600 flex-shrink-0"
+                      title="La trajo un criterio del módulo. Para sacarla de la evaluación, desactivala; para sacar el tema entero, editá los criterios."
+                    >
+                      Por criterio
+                    </span>
+                  )}
                   {enPapelera ? (
                     <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-amber-50 text-amber-600 flex-shrink-0">
                       En papelera
@@ -176,7 +189,7 @@ export function PreguntasAsignadasPanel({ asignadas, error, onToggle, onRemove, 
                           </Button>
                         )
                       )}
-                      {onRemove && (
+                      {onRemove && !porCriterio && (
                         <Button
                           variant="danger"
                           size="sm"
