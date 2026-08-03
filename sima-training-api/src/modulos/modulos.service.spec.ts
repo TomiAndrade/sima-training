@@ -22,6 +22,7 @@ describe('ModulosService', () => {
     moduloVersionPregunta: {
       createMany: jest.Mock;
       findMany: jest.Mock;
+      findUnique: jest.Mock;
       aggregate: jest.Mock;
       update: jest.Mock;
       deleteMany: jest.Mock;
@@ -50,6 +51,9 @@ describe('ModulosService', () => {
       moduloVersionPregunta: {
         createMany: jest.fn(),
         findMany: jest.fn(),
+        // Default: el pivot existe y es MANUAL (el caso que unassignPregunta
+        // siempre pudo borrar). Los specs que ejercitan CRITERIO lo pisan.
+        findUnique: jest.fn().mockResolvedValue({ origen: 'MANUAL' }),
         aggregate: jest.fn().mockResolvedValue({ _max: { orden: 0 } }),
         update: jest.fn(),
         deleteMany: jest.fn(),
@@ -402,6 +406,122 @@ describe('ModulosService', () => {
     });
   });
 
+  it('unassignPregunta rechaza quitar una pregunta que trajo un criterio', async () => {
+    prisma.moduloVersion.findFirst.mockImplementation(({ where }) =>
+      where.estado === 'BORRADOR'
+        ? { id: 'v-borrador', estado: 'BORRADOR' }
+        : null,
+    );
+    prisma.moduloVersionPregunta.findUnique.mockResolvedValue({
+      origen: 'CRITERIO',
+    });
+
+    await expect(service.unassignPregunta('m1', 'p1')).rejects.toBeInstanceOf(
+      ConflictException,
+    );
+    expect(prisma.moduloVersionPregunta.delete).not.toHaveBeenCalled();
+  });
+
+  it('el rechazo de una CRITERIO explica que "Desactivar" sobrevive a las resoluciones', async () => {
+    prisma.moduloVersion.findFirst.mockImplementation(({ where }) =>
+      where.estado === 'BORRADOR'
+        ? { id: 'v-borrador', estado: 'BORRADOR' }
+        : null,
+    );
+    prisma.moduloVersionPregunta.findUnique.mockResolvedValue({
+      origen: 'CRITERIO',
+    });
+
+    // El mensaje es la única guía que tiene el admin en ese momento: si sólo
+    // dijera "editá el criterio", la salida obvia sería borrar el criterio
+    // entero y perder todas las demás preguntas que trajo.
+    await expect(service.unassignPregunta('m1', 'p1')).rejects.toThrow(
+      /Desactivar/,
+    );
+    await expect(service.unassignPregunta('m1', 'p1')).rejects.toThrow(
+      /se mantiene aunque se vuelvan a guardar los criterios/,
+    );
+  });
+
+  it('unassignPregunta rechaza si la pregunta no está asignada', async () => {
+    prisma.moduloVersion.findFirst.mockImplementation(({ where }) =>
+      where.estado === 'BORRADOR'
+        ? { id: 'v-borrador', estado: 'BORRADOR' }
+        : null,
+    );
+    prisma.moduloVersionPregunta.findUnique.mockResolvedValue(null);
+
+    await expect(service.unassignPregunta('m1', 'p1')).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+  });
+
+  it('crearVersion copia también los criterios del ACTIVO, sin re-resolverlos', async () => {
+    prisma.modulo.findUnique.mockResolvedValue({ id: 'm1' });
+    prisma.moduloVersion.findFirst.mockImplementation(({ where }) =>
+      where.estado === 'BORRADOR' ? null : { id: 'v-activo' },
+    );
+    prisma.moduloVersion.aggregate.mockResolvedValue({
+      _max: { numeroVersion: 2 },
+    });
+    prisma.moduloVersionPregunta.findMany.mockResolvedValue([
+      {
+        preguntaId: 'p1',
+        orden: 1,
+        obligatoria: true,
+        activa: false,
+        origen: 'CRITERIO',
+      },
+    ]);
+    prisma.moduloVersionCriterio.findMany.mockResolvedValue([
+      { id: 'c1', baseConocimientoId: 'base-1', nivelId: 'nivel-1' },
+    ]);
+    prisma.moduloVersion.create.mockResolvedValue({ id: 'v-nueva' });
+
+    await service.crearVersion('m1');
+
+    const data = prisma.moduloVersion.create.mock.calls[0][0].data;
+    expect(data.criterios).toEqual({
+      create: [
+        {
+          baseConocimientoId: 'base-1',
+          nivelId: 'nivel-1',
+          createdBy: 'backoffice',
+        },
+      ],
+    });
+    // El pivot se copia con su origen Y con su `activa` — el borrador arranca
+    // como la foto exacta de lo publicado, sin volver a resolver el criterio.
+    expect(data.preguntas).toEqual({
+      create: [
+        {
+          preguntaId: 'p1',
+          orden: 1,
+          obligatoria: true,
+          activa: false,
+          origen: 'CRITERIO',
+        },
+      ],
+    });
+    expect(prisma.pregunta.findMany).not.toHaveBeenCalled();
+  });
+
+  it('activar no re-resuelve los criterios: publica el snapshot tal cual está', async () => {
+    prisma.moduloVersion.findFirst.mockImplementation(({ where }) =>
+      where.estado === 'BORRADOR' ? { id: 'v-borrador' } : null,
+    );
+    prisma.moduloVersion.aggregate.mockResolvedValue({ _max: { mayor: 0 } });
+    prisma.moduloVersion.update.mockResolvedValue({ id: 'v-borrador' });
+
+    await service.activar('m1');
+
+    // Si activar resolviera, el pool publicado podría no ser el que se estuvo
+    // viendo en el editor — que es justamente lo que el snapshot evita.
+    expect(prisma.pregunta.findMany).not.toHaveBeenCalled();
+    expect(prisma.moduloVersionPregunta.createMany).not.toHaveBeenCalled();
+    expect(prisma.moduloVersionPregunta.deleteMany).not.toHaveBeenCalled();
+  });
+
   it('cancelarBorrador rechaza si no hay borrador en curso', async () => {
     prisma.moduloVersion.findFirst.mockResolvedValue(null);
     await expect(service.cancelarBorrador('m1')).rejects.toBeInstanceOf(
@@ -417,6 +537,11 @@ describe('ModulosService', () => {
     const resultado = await service.cancelarBorrador('m1');
 
     expect(prisma.moduloVersionPregunta.deleteMany).toHaveBeenCalledWith({
+      where: { moduloVersionId: 'v-borrador' },
+    });
+    // Los criterios cuelgan de la versión con una FK RESTRICT: si no se borran
+    // antes, el delete de la versión falla.
+    expect(prisma.moduloVersionCriterio.deleteMany).toHaveBeenCalledWith({
       where: { moduloVersionId: 'v-borrador' },
     });
     expect(prisma.moduloVersion.delete).toHaveBeenCalledWith({ where: { id: 'v-borrador' } });

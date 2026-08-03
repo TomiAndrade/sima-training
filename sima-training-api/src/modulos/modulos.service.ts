@@ -224,6 +224,9 @@ export class ModulosService {
     const pivots = await this.prisma.moduloVersionPregunta.findMany({
       where: { moduloVersionId: base.id },
     });
+    const criterios = await this.prisma.moduloVersionCriterio.findMany({
+      where: { moduloVersionId: base.id },
+    });
 
     return this.prisma.moduloVersion.create({
       data: {
@@ -237,11 +240,26 @@ export class ModulosService {
             orden: p.orden,
             obligatoria: p.obligatoria,
             activa: p.activa,
+            origen: p.origen,
+          })),
+        },
+        // Los criterios se copian JUNTO con los pivots ya materializados y NO se
+        // vuelven a resolver: el borrador nace como la foto exacta de lo
+        // publicado. Que las preguntas nuevas de una base no entren solas es el
+        // costo aceptado del snapshot (ver docs/pendientes.md) — entran recién
+        // cuando el admin vuelve a guardar los criterios desde el borrador, que
+        // es un acto explícito y previsualizado.
+        criterios: {
+          create: criterios.map((c) => ({
+            baseConocimientoId: c.baseConocimientoId,
+            nivelId: c.nivelId,
+            createdBy: 'backoffice',
           })),
         },
       },
       include: {
         preguntas: { include: { pregunta: true }, orderBy: { orden: 'asc' } },
+        criterios: { include: CRITERIO_INCLUDE },
       },
     });
   }
@@ -414,26 +432,41 @@ export class ModulosService {
       );
     }
 
-    try {
-      await this.prisma.moduloVersionPregunta.delete({
-        where: {
-          moduloVersionId_preguntaId: {
-            moduloVersionId: version.id,
-            preguntaId,
-          },
+    const pivot = await this.prisma.moduloVersionPregunta.findUnique({
+      where: {
+        moduloVersionId_preguntaId: {
+          moduloVersionId: version.id,
+          preguntaId,
         },
-      });
-    } catch (err) {
-      if (
-        err instanceof Prisma.PrismaClientKnownRequestError &&
-        err.code === 'P2025'
-      ) {
-        throw new NotFoundException(
-          `La pregunta ${preguntaId} no está asignada a este módulo`,
-        );
-      }
-      throw err;
+      },
+    });
+    if (!pivot) {
+      throw new NotFoundException(
+        `La pregunta ${preguntaId} no está asignada a este módulo`,
+      );
     }
+
+    // Una pregunta que trajo un criterio no se saca de a una: la próxima
+    // resolución la vuelve a materializar y el borrado no habría servido de
+    // nada. El mensaje dice explícitamente que la vía es "Desactivar" y —lo
+    // que importa— que esa baja SOBREVIVE a las resoluciones siguientes
+    // (resolverCriterios no toca los pivots que siguen matcheando). Sin esa
+    // segunda mitad, alguien que quiere sacar UNA pregunta va a terminar
+    // borrando el criterio entero, que se lleva puestas todas las demás.
+    if (pivot.origen === 'CRITERIO') {
+      throw new ConflictException(
+        'Esta pregunta la trajo un criterio del módulo, así que quitarla no sirve: la próxima vez que se guarden los criterios vuelve. Usá "Desactivar" — la pregunta queda fuera de la evaluación y esa baja se mantiene aunque se vuelvan a guardar los criterios. Si lo que sobra es el tema entero, sacá el criterio.',
+      );
+    }
+
+    await this.prisma.moduloVersionPregunta.delete({
+      where: {
+        moduloVersionId_preguntaId: {
+          moduloVersionId: version.id,
+          preguntaId,
+        },
+      },
+    });
   }
 
   // Reemplaza el set COMPLETO de criterios de la versión que se está editando y
@@ -657,6 +690,11 @@ export class ModulosService {
 
     return this.prisma.$transaction(async (tx) => {
       await tx.moduloVersionPregunta.deleteMany({
+        where: { moduloVersionId: borrador.id },
+      });
+      // Los criterios también cuelgan de la versión con una FK RESTRICT, así que
+      // van antes que ella por el mismo motivo que los pivots.
+      await tx.moduloVersionCriterio.deleteMany({
         where: { moduloVersionId: borrador.id },
       });
       await tx.moduloVersion.delete({ where: { id: borrador.id } });
