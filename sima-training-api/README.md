@@ -38,6 +38,25 @@ npx prisma db seed
 npm run start:dev
 ```
 
+### Escenario de demo (`SEED_DEMO`)
+
+El seed base deja la estructura mínima: Ingeniería SIMA y los 4 módulos en BORRADOR vacío. Para tener una base **navegable de punta a punta** (organización cliente → subcontratista, alumnos con pares puesto/centro, banco clasificado por base y nivel, un módulo publicado con su número `AÑO.MAYOR.MENOR` y asignaciones automáticas derivadas de reglas):
+
+```powershell
+$env:SEED_DEMO='true'; npx prisma db seed   # PowerShell
+```
+
+```bash
+SEED_DEMO=true npx prisma db seed           # bash
+```
+
+Al terminar imprime los IDs de todo lo sembrado (organizaciones, base y niveles, módulo publicado, usuarios) para poder armar las llamadas de verificación sin abrir Prisma Studio.
+
+Dos cosas a tener en cuenta:
+
+- **Es destructivo y wholesale**, igual que el seed base: además de usuarios, organizaciones y módulos, la rama demo borra **todas** las preguntas, niveles y bases de conocimiento antes de sembrar. Es lo que la hace re-ejecutable.
+- **Reusa los services** (`UsuariosService`, `ModulosService`, `ReglasAsignacionService`…) levantando un application context de Nest, en vez de escribir inserts crudos, para no saltearse la matriz rol↔organización, el appendeo de `orden`, el cálculo del número de versión ni el motor de recálculo. Lo único que no corre por esa vía es la `ValidationPipe` global, que es de la capa HTTP.
+
 La API queda en **http://localhost:3000**. Verificá con:
 
 ```bash
@@ -65,7 +84,7 @@ Ver [`.env.example`](.env.example). Las principales:
 | `npm run lint` | ESLint |
 | `npm test` | Tests unitarios (Jest) |
 | `npx prisma migrate dev` | Crea/aplica migraciones en dev |
-| `npx prisma db seed` | Carga los fixtures |
+| `npx prisma db seed` | Carga los datos base (agregar `SEED_DEMO=true` para el escenario de demo) |
 | `npx prisma studio` | Explorador visual de la base |
 
 ## Endpoints
@@ -185,7 +204,8 @@ prisma/
 │                    Puesto, CentroCosto, Pregunta, BaseConocimiento, NivelBase,
 │                    Modulo, ModuloVersion,
 │                    ReglaAsignacion, Asignacion + pivots
-├── seed.ts          Organización interna (Ingeniería SIMA) + módulos base.
+├── seed.ts          Organización interna (Ingeniería SIMA) + módulos base, y el
+│                    escenario de demo detrás de SEED_DEMO=true.
 │                    Limpia en orden de dependencia (las FK son ON DELETE RESTRICT)
 └── migrations/      Migraciones versionadas
 ```
@@ -249,5 +269,6 @@ Diseño completo en [`../docs/modelo-vinculacion-propuesto.md`](../docs/modelo-v
 - **El listado no oculta a quien no tiene pares.** Las condiciones sobre `vinculacion` se agregan al `where` solo si el filtro correspondiente viene; sin filtros, aparecen también las personas con cero pares (cardinalidad válida: el pivote arranca vacío) y su `parPrincipal` viaja en `null`.
 - **Un solo `include` para lista y detalle** (`USUARIO_INCLUDE`), y por lo tanto una sola forma de respuesta. Se devuelve `pares` completo además de `parPrincipal` para no tener dos contratos según el endpoint.
 - **El PATCH de `pares` reemplaza el set completo, no mergea**: borra los que había y crea los de la lista, en una transacción y borrando antes de crear (por el índice único parcial de `principal`). Omitir `pares` los deja intactos.
-- **El seed borra en orden de dependencia**: `Asignacion` → `VinculacionPuestoCentro` → `Vinculacion` → `Usuario`/`Organizacion`. Todas las FK son `ON DELETE RESTRICT`: el orden original (`usuario.deleteMany()` primero) solo funcionaba con la base sin vinculaciones. `Asignacion` fue un segundo bug del mismo tipo — se agregó al modelo después y tiene FK **directa** a `Usuario`, sin pasar por `Vinculacion`. Antes de reusar o extender este orden con una tabla nueva, grepear el schema entero por FKs a `Usuario` en vez de asumir que la cadena documentada está completa.
+- **El seed borra en orden de dependencia**: `Asignacion` → `ReglaAsignacion` → `VinculacionPuestoCentro` → `Vinculacion` → `Usuario` → `Organizacion` (hijas de la jerarquía primero) → pivots y versiones de módulo → `Modulo`; y en la rama demo, además, `Pregunta` → `NivelBase` → `BaseConocimiento`. Casi todas las FK son `ON DELETE RESTRICT`, así que hay que ir siempre de las hijas a las padres, y **esta cadena ya se rompió tres veces por estar incompleta**: el orden original (`usuario.deleteMany()` primero) solo funcionaba con la base sin vinculaciones; `Asignacion` se agregó después y tiene FK **directa** a `Usuario` sin pasar por `Vinculacion`; y `ReglaAsignacion` faltaba del todo, con FK a `Modulo`/`Puesto`/`CentroCosto` — con reglas cargadas, el `modulo.deleteMany()` fallaba con `reglas_asignacion_modulo_id_fkey`. Antes de reusar o extender este orden con una tabla nueva, grepear el schema entero por FKs hacia el target en vez de asumir que la cadena documentada está completa.
+  - Las únicas dos FK que **no** son RESTRICT son `Asignacion.moduloVersionId` y la self-FK `Organizacion.organizacionPadreId`, las dos `SET NULL`. Ojo con la segunda: el `onDelete` **no figura en `schema.prisma`**, hay que leerlo en el SQL (`20260624033224_init/migration.sql:45`). El seed igual borra las organizaciones hijas primero, para no depender de cómo Postgres resuelve la acción RI sobre una fila que el mismo statement está borrando.
 - **Los frontends ya consumen la forma nueva.** `Usuarios.jsx` lee y escribe `vinculacion` anidada e incluye el ABM de pares; `clasificacion` no aparece en ningún frontend. La app tablet nunca tuvo `rol`/`clasificacion` en su mock, así que no requería migración.
