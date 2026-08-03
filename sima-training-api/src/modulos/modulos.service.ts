@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
@@ -7,7 +8,22 @@ import { ModuloVersion, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AsignarPreguntaItemDto } from './dto/asignar-preguntas.dto';
 import { CreateModuloDto } from './dto/create-modulo.dto';
+import { SetCriteriosDto } from './dto/set-criterios.dto';
 import { UpdateModuloDto } from './dto/update-modulo.dto';
+
+// La clasificación viaja resuelta en todo criterio que se devuelve, para que el
+// backoffice pinte "Seguridad Operativa · Básico" sin ir a buscar los nombres al
+// catálogo. Mismo criterio que PREGUNTA_CLASIFICACION en PreguntasService.
+const CRITERIO_INCLUDE = {
+  base: { select: { id: true, nombre: true, codigo: true, color: true } },
+  nivel: { select: { id: true, nombre: true, orden: true } },
+} satisfies Prisma.ModuloVersionCriterioInclude;
+
+// Sentinel para detectar criterios repetidos DENTRO del payload. No se puede usar
+// `nivelId` crudo en la clave porque undefined y null son el mismo criterio
+// ("cualquier nivel") y tienen que colisionar entre sí.
+const claveCriterio = (baseConocimientoId: string, nivelId?: string | null) =>
+  `${baseConocimientoId}::${nivelId ?? '*'}`;
 
 @Injectable()
 export class ModulosService {
@@ -113,8 +129,9 @@ export class ModulosService {
           orderBy: { orden: 'asc' },
         })
       : [];
+    const criterios = version ? await this.criteriosDe(version.id) : [];
 
-    return { ...modulo, version, preguntas };
+    return { ...modulo, version, preguntas, criterios };
   }
 
   // Historial de versiones del módulo, con la cantidad de preguntas de cada una
@@ -146,7 +163,8 @@ export class ModulosService {
       include: { pregunta: true },
       orderBy: { orden: 'asc' },
     });
-    return { ...version, preguntas };
+    const criterios = await this.criteriosDe(version.id);
+    return { ...version, preguntas, criterios };
   }
 
   // Edición de metadata del módulo (nombre/descripcion).
@@ -416,6 +434,206 @@ export class ModulosService {
       }
       throw err;
     }
+  }
+
+  // Reemplaza el set COMPLETO de criterios de la versión que se está editando y
+  // materializa el pool resultante en el acto (ver resolverCriterios).
+  //
+  // Mismo guard que unassignPregunta, y por el mismo motivo: resolver criterios
+  // crea y BORRA pivots, así que sobre un ACTIVO/ARCHIVADO rompería la
+  // inmutabilidad del historial. Un módulo publicado se cambia creando un
+  // borrador (POST /:id/versiones) y editando ahí.
+  async setCriterios(moduloId: string, dto: SetCriteriosDto) {
+    const version = await this.versionParaEditar(moduloId);
+    if (!version) {
+      throw new NotFoundException(`El módulo ${moduloId} no tiene versiones`);
+    }
+    if (version.estado !== 'BORRADOR') {
+      throw new ConflictException(
+        'Solo se pueden editar los criterios de un borrador; las versiones publicadas son inmutables. Creá una versión nueva para cambiar qué evalúa el módulo.',
+      );
+    }
+
+    // Los índices de la tabla ya lo prohíben, pero el P2002 no distingue "lo
+    // mandaste dos veces" de "chocó con otra cosa". Se chequea antes para
+    // devolver un 400 que se entienda.
+    const vistos = new Set<string>();
+    for (const c of dto.criterios) {
+      const clave = claveCriterio(c.baseConocimientoId, c.nivelId);
+      if (vistos.has(clave)) {
+        throw new BadRequestException(
+          'Hay criterios repetidos: la misma base con el mismo nivel aparece más de una vez',
+        );
+      }
+      vistos.add(clave);
+    }
+
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        await tx.moduloVersionCriterio.deleteMany({
+          where: { moduloVersionId: version.id },
+        });
+        if (dto.criterios.length > 0) {
+          await tx.moduloVersionCriterio.createMany({
+            data: dto.criterios.map((c) => ({
+              moduloVersionId: version.id,
+              baseConocimientoId: c.baseConocimientoId,
+              nivelId: c.nivelId ?? null,
+              createdBy: 'backoffice',
+            })),
+          });
+        }
+
+        const resolucion = await this.resolverCriterios(tx, version.id);
+        const criterios = await tx.moduloVersionCriterio.findMany({
+          where: { moduloVersionId: version.id },
+          include: CRITERIO_INCLUDE,
+        });
+        return { version, criterios, resolucion };
+      });
+    } catch (err) {
+      throw this.traducirErrorDeCriterio(err);
+    }
+  }
+
+  // Materializa el pool de preguntas que declaran los criterios de la versión.
+  // Es un UPSERT, no un replace, y ahí está toda la sutileza:
+  //
+  //   - pregunta que matchea y YA tiene pivot CRITERIO → no se toca. Es lo que
+  //     preserva un `activa: false` puesto a mano y lo que hace que correr esto
+  //     dos veces seguidas no cambie nada.
+  //   - pregunta que matchea y no tiene ningún pivot → se agrega como CRITERIO.
+  //   - pivot CRITERIO que ya no matchea ningún criterio → se BORRA, esté activo
+  //     o desactivado. El pivot es estado derivado: sacado el criterio se queda
+  //     sin ninguna razón de estar, y desactivado sería una fila
+  //     invisible-pero-presente que alguien puede reactivar sin nada que la
+  //     respalde. Si la pregunta igual importa, se vuelve a agregar desde el
+  //     banco y queda MANUAL, que es la verdad.
+  //   - pivot MANUAL → NUNCA se toca, ni para agregarlo ni para borrarlo. Misma
+  //     regla que recalcular() con las Asignacion MANUAL.
+  //
+  // El pool sólo toma preguntas con `activa: true`: una en papelera global no
+  // sirve en ningún módulo. Es literalmente el mismo filtro que
+  // GET /preguntas?baseId=&nivelId=&activa=true, a propósito — el backoffice
+  // previsualiza con ese endpoint y así no hace falta uno de dry-run.
+  private async resolverCriterios(
+    tx: Prisma.TransactionClient,
+    versionId: string,
+  ) {
+    const criterios = await tx.moduloVersionCriterio.findMany({
+      where: { moduloVersionId: versionId },
+    });
+
+    // Unión de los pools: una pregunta pedida por dos criterios entra una sola
+    // vez (el pivot tiene PK compuesta, no podría duplicarse igual).
+    const requeridas = new Set<string>();
+    const porCriterio: {
+      criterioId: string;
+      baseConocimientoId: string;
+      nivelId: string | null;
+      preguntas: number;
+    }[] = [];
+    for (const c of criterios) {
+      const preguntas = await tx.pregunta.findMany({
+        where: {
+          activa: true,
+          baseConocimientoId: c.baseConocimientoId,
+          // Sin nivel el criterio es "cualquier nivel de esta base", así que la
+          // condición no se agrega en vez de compararse contra null (eso
+          // matchearía sólo las preguntas SIN nivel).
+          ...(c.nivelId ? { nivelId: c.nivelId } : {}),
+        },
+        select: { id: true },
+      });
+      preguntas.forEach((p) => requeridas.add(p.id));
+      porCriterio.push({
+        criterioId: c.id,
+        baseConocimientoId: c.baseConocimientoId,
+        nivelId: c.nivelId,
+        preguntas: preguntas.length,
+      });
+    }
+
+    const pivots = await tx.moduloVersionPregunta.findMany({
+      where: { moduloVersionId: versionId },
+    });
+    const deCriterio = pivots.filter((p) => p.origen === 'CRITERIO');
+    const yaDeCriterio = new Set(deCriterio.map((p) => p.preguntaId));
+    const manuales = new Set(
+      pivots.filter((p) => p.origen === 'MANUAL').map((p) => p.preguntaId),
+    );
+
+    const quitar = deCriterio.filter((p) => !requeridas.has(p.preguntaId));
+    // Una pregunta que ya está a mano y ahora además matchea un criterio se
+    // deja como está: sigue siendo MANUAL. No se puede tener las dos filas (la
+    // PK es (versión, pregunta)) y pisarle el origen sería justamente "tocar una
+    // MANUAL".
+    const agregar = [...requeridas].filter(
+      (id) => !yaDeCriterio.has(id) && !manuales.has(id),
+    );
+
+    if (quitar.length > 0) {
+      await tx.moduloVersionPregunta.deleteMany({
+        where: {
+          moduloVersionId: versionId,
+          preguntaId: { in: quitar.map((p) => p.preguntaId) },
+        },
+      });
+    }
+
+    if (agregar.length > 0) {
+      const agg = await tx.moduloVersionPregunta.aggregate({
+        where: { moduloVersionId: versionId },
+        _max: { orden: true },
+      });
+      let siguienteOrden = agg._max.orden ?? 0;
+      await tx.moduloVersionPregunta.createMany({
+        data: agregar.map((preguntaId) => ({
+          moduloVersionId: versionId,
+          preguntaId,
+          orden: (siguienteOrden += 1),
+          origen: 'CRITERIO' as const,
+        })),
+      });
+    }
+
+    return {
+      agregadas: agregar.length,
+      quitadas: quitar.length,
+      // Las que ya estaban por criterio y siguen matcheando: se conservan tal
+      // cual (incluido su flag `activa`).
+      conservadas: deCriterio.length - quitar.length,
+      porCriterio,
+    };
+  }
+
+  // Los rechazos de la base de datos son input inválido del cliente, no una
+  // falla del servidor: salen como 400 y no como 500. Mismo criterio que
+  // PreguntasService.traducirErrorDeClasificacion — acá no hace falta cubrir el
+  // CHECK, porque base_conocimiento_id es NOT NULL y el caso "nivel sin base" no
+  // se puede dar.
+  private traducirErrorDeCriterio(err: unknown) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError) {
+      if (err.code === 'P2003') {
+        return new BadRequestException(
+          'La base de conocimiento o el nivel no existen, o el nivel no pertenece a esa base',
+        );
+      }
+      if (err.code === 'P2002') {
+        return new BadRequestException(
+          'Hay criterios repetidos: la misma base con el mismo nivel aparece más de una vez',
+        );
+      }
+    }
+    return err;
+  }
+
+  private criteriosDe(versionId: string) {
+    return this.prisma.moduloVersionCriterio.findMany({
+      where: { moduloVersionId: versionId },
+      include: CRITERIO_INCLUDE,
+      orderBy: { createdAt: 'asc' },
+    });
   }
 
   // Descarta el BORRADOR en curso sin publicarlo. Si el módulo ya tiene un

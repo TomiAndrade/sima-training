@@ -8,12 +8,14 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Put,
   UseGuards,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { ActivarModuloDto } from './dto/activar-modulo.dto';
 import { AsignarPreguntaItemDto } from './dto/asignar-preguntas.dto';
 import { CreateModuloDto } from './dto/create-modulo.dto';
+import { SetCriteriosDto } from './dto/set-criterios.dto';
 import { TogglePreguntaDto } from './dto/toggle-pregunta.dto';
 import { UpdateModuloDto } from './dto/update-modulo.dto';
 import { ModulosService } from './modulos.service';
@@ -83,6 +85,19 @@ export class ModulosController {
   @UseGuards(JwtAuthGuard)
   cancelarBorrador(@Param('id', ParseUUIDPipe) id: string) {
     return this.modulos.cancelarBorrador(id);
+  }
+
+  // Set COMPLETO de criterios de la versión en edición (PUT, no PATCH: el
+  // cliente manda el estado deseado y el servidor resuelve el diff, igual que
+  // PUT /bases-conocimiento/:id/niveles/orden). Materializa el pool en el acto;
+  // el service rechaza si la versión no es un BORRADOR.
+  @Put(':id/criterios')
+  @UseGuards(JwtAuthGuard)
+  setCriterios(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: SetCriteriosDto,
+  ) {
+    return this.modulos.setCriterios(id, dto);
   }
 
   @Post(':id/preguntas')

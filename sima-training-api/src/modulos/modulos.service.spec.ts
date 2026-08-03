@@ -1,4 +1,8 @@
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { PrismaService } from '../prisma/prisma.service';
 import { ModulosService } from './modulos.service';
@@ -23,7 +27,12 @@ describe('ModulosService', () => {
       deleteMany: jest.Mock;
       delete: jest.Mock;
     };
-    pregunta: { count: jest.Mock; findUnique: jest.Mock };
+    moduloVersionCriterio: {
+      findMany: jest.Mock;
+      createMany: jest.Mock;
+      deleteMany: jest.Mock;
+    };
+    pregunta: { count: jest.Mock; findUnique: jest.Mock; findMany: jest.Mock };
     $transaction: jest.Mock;
   };
 
@@ -46,7 +55,16 @@ describe('ModulosService', () => {
         deleteMany: jest.fn(),
         delete: jest.fn(),
       },
-      pregunta: { count: jest.fn(), findUnique: jest.fn() },
+      moduloVersionCriterio: {
+        findMany: jest.fn().mockResolvedValue([]),
+        createMany: jest.fn(),
+        deleteMany: jest.fn(),
+      },
+      pregunta: {
+        count: jest.fn(),
+        findUnique: jest.fn(),
+        findMany: jest.fn().mockResolvedValue([]),
+      },
       $transaction: jest.fn((cb) => cb(prisma)),
     };
 
@@ -404,6 +422,267 @@ describe('ModulosService', () => {
     expect(prisma.moduloVersion.delete).toHaveBeenCalledWith({ where: { id: 'v-borrador' } });
     expect(prisma.modulo.delete).not.toHaveBeenCalled();
     expect(resultado).toEqual({ moduloEliminado: false });
+  });
+
+  describe('setCriterios', () => {
+    const BASE = 'base-seguridad';
+    const NIVEL = 'nivel-basico';
+
+    // Deja el módulo con un BORRADOR en curso (el caso editable).
+    const enBorrador = () =>
+      prisma.moduloVersion.findFirst.mockImplementation(({ where }) =>
+        where.estado === 'BORRADOR'
+          ? { id: 'v-borrador', estado: 'BORRADOR' }
+          : null,
+      );
+
+    // Lo que resolverCriterios lee: los criterios guardados, el pool que
+    // matchean y los pivots que ya tiene la versión.
+    const conEstado = ({
+      criterios = [],
+      pool = [],
+      pivots = [],
+    }: {
+      criterios?: {
+        id: string;
+        baseConocimientoId: string;
+        nivelId: string | null;
+      }[];
+      pool?: string[];
+      pivots?: { preguntaId: string; origen: string; activa: boolean }[];
+    }) => {
+      prisma.moduloVersionCriterio.findMany.mockResolvedValue(criterios);
+      prisma.pregunta.findMany.mockResolvedValue(pool.map((id) => ({ id })));
+      prisma.moduloVersionPregunta.findMany.mockResolvedValue(pivots);
+    };
+
+    it('rechaza si la versión que se está editando no es un BORRADOR', async () => {
+      prisma.moduloVersion.findFirst.mockImplementation(({ where }) =>
+        where.estado === 'BORRADOR'
+          ? null
+          : { id: 'v-activo', estado: 'ACTIVO' },
+      );
+
+      await expect(
+        service.setCriterios('m1', {
+          criterios: [{ baseConocimientoId: BASE }],
+        }),
+      ).rejects.toBeInstanceOf(ConflictException);
+      expect(prisma.moduloVersionCriterio.createMany).not.toHaveBeenCalled();
+    });
+
+    it('rechaza criterios repetidos en el payload, tratando nivel ausente y null como el mismo', async () => {
+      enBorrador();
+
+      await expect(
+        service.setCriterios('m1', {
+          criterios: [
+            { baseConocimientoId: BASE },
+            { baseConocimientoId: BASE, nivelId: undefined },
+          ],
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(prisma.moduloVersionCriterio.deleteMany).not.toHaveBeenCalled();
+    });
+
+    it('materializa las preguntas del pool que todavía no están asignadas', async () => {
+      enBorrador();
+      conEstado({
+        criterios: [{ id: 'c1', baseConocimientoId: BASE, nivelId: NIVEL }],
+        pool: ['p1', 'p2'],
+        pivots: [],
+      });
+      prisma.moduloVersionPregunta.aggregate.mockResolvedValue({
+        _max: { orden: 4 },
+      });
+
+      const res = await service.setCriterios('m1', {
+        criterios: [{ baseConocimientoId: BASE, nivelId: NIVEL }],
+      });
+
+      expect(prisma.moduloVersionPregunta.createMany).toHaveBeenCalledWith({
+        data: [
+          {
+            moduloVersionId: 'v-borrador',
+            preguntaId: 'p1',
+            orden: 5,
+            origen: 'CRITERIO',
+          },
+          {
+            moduloVersionId: 'v-borrador',
+            preguntaId: 'p2',
+            orden: 6,
+            origen: 'CRITERIO',
+          },
+        ],
+      });
+      expect(res.resolucion).toEqual(
+        expect.objectContaining({ agregadas: 2, quitadas: 0, conservadas: 0 }),
+      );
+    });
+
+    it('conserva el pivot CRITERIO desactivado a mano si la pregunta sigue matcheando', async () => {
+      enBorrador();
+      conEstado({
+        criterios: [{ id: 'c1', baseConocimientoId: BASE, nivelId: NIVEL }],
+        pool: ['p1'],
+        pivots: [{ preguntaId: 'p1', origen: 'CRITERIO', activa: false }],
+      });
+
+      const res = await service.setCriterios('m1', {
+        criterios: [{ baseConocimientoId: BASE, nivelId: NIVEL }],
+      });
+
+      expect(prisma.moduloVersionPregunta.createMany).not.toHaveBeenCalled();
+      expect(prisma.moduloVersionPregunta.deleteMany).not.toHaveBeenCalled();
+      expect(res.resolucion).toEqual(
+        expect.objectContaining({ agregadas: 0, quitadas: 0, conservadas: 1 }),
+      );
+    });
+
+    it('borra el pivot CRITERIO que quedó huérfano, aunque esté desactivado a mano', async () => {
+      enBorrador();
+      conEstado({
+        criterios: [],
+        pool: [],
+        pivots: [{ preguntaId: 'p1', origen: 'CRITERIO', activa: false }],
+      });
+
+      const res = await service.setCriterios('m1', { criterios: [] });
+
+      expect(prisma.moduloVersionPregunta.deleteMany).toHaveBeenCalledWith({
+        where: { moduloVersionId: 'v-borrador', preguntaId: { in: ['p1'] } },
+      });
+      expect(res.resolucion).toEqual(
+        expect.objectContaining({ quitadas: 1, conservadas: 0 }),
+      );
+    });
+
+    it('nunca toca los pivots MANUAL: no los borra al sacar el criterio', async () => {
+      enBorrador();
+      conEstado({
+        criterios: [],
+        pool: [],
+        pivots: [
+          { preguntaId: 'p-manual', origen: 'MANUAL', activa: true },
+          { preguntaId: 'p-criterio', origen: 'CRITERIO', activa: true },
+        ],
+      });
+
+      await service.setCriterios('m1', { criterios: [] });
+
+      expect(prisma.moduloVersionPregunta.deleteMany).toHaveBeenCalledWith({
+        where: {
+          moduloVersionId: 'v-borrador',
+          preguntaId: { in: ['p-criterio'] },
+        },
+      });
+    });
+
+    it('no duplica ni pisa el origen de una MANUAL que además matchea el criterio', async () => {
+      enBorrador();
+      conEstado({
+        criterios: [{ id: 'c1', baseConocimientoId: BASE, nivelId: NIVEL }],
+        pool: ['p-manual'],
+        pivots: [{ preguntaId: 'p-manual', origen: 'MANUAL', activa: true }],
+      });
+
+      const res = await service.setCriterios('m1', {
+        criterios: [{ baseConocimientoId: BASE, nivelId: NIVEL }],
+      });
+
+      expect(prisma.moduloVersionPregunta.createMany).not.toHaveBeenCalled();
+      expect(prisma.moduloVersionPregunta.deleteMany).not.toHaveBeenCalled();
+      expect(res.resolucion).toEqual(
+        expect.objectContaining({ agregadas: 0, quitadas: 0 }),
+      );
+    });
+
+    it('es idempotente: repetir el mismo set no agrega ni quita nada', async () => {
+      enBorrador();
+      conEstado({
+        criterios: [{ id: 'c1', baseConocimientoId: BASE, nivelId: NIVEL }],
+        pool: ['p1', 'p2'],
+        pivots: [
+          { preguntaId: 'p1', origen: 'CRITERIO', activa: true },
+          { preguntaId: 'p2', origen: 'CRITERIO', activa: true },
+        ],
+      });
+
+      const res = await service.setCriterios('m1', {
+        criterios: [{ baseConocimientoId: BASE, nivelId: NIVEL }],
+      });
+
+      expect(prisma.moduloVersionPregunta.createMany).not.toHaveBeenCalled();
+      expect(prisma.moduloVersionPregunta.deleteMany).not.toHaveBeenCalled();
+      expect(res.resolucion).toEqual(
+        expect.objectContaining({ agregadas: 0, quitadas: 0, conservadas: 2 }),
+      );
+    });
+
+    it('un criterio sin nivel NO filtra por nivelId (es "cualquier nivel de la base")', async () => {
+      enBorrador();
+      conEstado({
+        criterios: [{ id: 'c1', baseConocimientoId: BASE, nivelId: null }],
+        pool: [],
+        pivots: [],
+      });
+
+      await service.setCriterios('m1', {
+        criterios: [{ baseConocimientoId: BASE }],
+      });
+
+      expect(prisma.pregunta.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { activa: true, baseConocimientoId: BASE },
+        }),
+      );
+      // Con `nivelId: null` en el where, matchearía sólo las preguntas SIN nivel.
+      const where = prisma.pregunta.findMany.mock.calls[0][0].where;
+      expect(where).not.toHaveProperty('nivelId');
+    });
+
+    it('el pool ignora las preguntas en papelera global', async () => {
+      enBorrador();
+      conEstado({
+        criterios: [{ id: 'c1', baseConocimientoId: BASE, nivelId: NIVEL }],
+        pool: [],
+        pivots: [],
+      });
+
+      await service.setCriterios('m1', {
+        criterios: [{ baseConocimientoId: BASE, nivelId: NIVEL }],
+      });
+
+      expect(prisma.pregunta.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ activa: true }),
+        }),
+      );
+    });
+
+    it('reemplaza el set completo: borra los criterios previos antes de crear los nuevos', async () => {
+      enBorrador();
+      conEstado({ criterios: [], pool: [], pivots: [] });
+
+      await service.setCriterios('m1', {
+        criterios: [{ baseConocimientoId: BASE, nivelId: NIVEL }],
+      });
+
+      expect(prisma.moduloVersionCriterio.deleteMany).toHaveBeenCalledWith({
+        where: { moduloVersionId: 'v-borrador' },
+      });
+      expect(prisma.moduloVersionCriterio.createMany).toHaveBeenCalledWith({
+        data: [
+          {
+            moduloVersionId: 'v-borrador',
+            baseConocimientoId: BASE,
+            nivelId: NIVEL,
+            createdBy: 'backoffice',
+          },
+        ],
+      });
+    });
   });
 
   it('cancelarBorrador elimina el módulo entero si el borrador era su única versión', async () => {
