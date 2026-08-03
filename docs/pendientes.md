@@ -33,7 +33,7 @@ Registro vivo de lo que falta. Lista de trabajo, no documento formal — actuali
 - **Activar el deploy a la nube.** `Dockerfile` + `render.yaml` están listos (`sima-training-api/render.yaml`) y el CI (`.github/workflows/ci-sima-training.yml`) ya corre lint+build+test, pero falta crear la cuenta en Render/Railway y conectar el repo — nadie lo hizo todavía. El CI no tiene paso de deploy hasta que eso pase. Al deployar hay que montar un disco persistente en `UPLOADS_DIR` (imágenes de preguntas) o migrar `LocalDiskStorage` a S3 en ese mismo momento. ⚠️ **Antes de deployar hay que arreglar el arranque de producción**: `start:prod` y el `CMD` del `Dockerfile` apuntan a `node dist/main`, que no existe — ver el primer ítem de Deuda técnica.
 - **Constraints que Prisma no conoce, y que viven solo en el SQL de las migraciones.** Son **dos familias**: índices únicos **parciales** (Prisma no expresa `WHERE` en `@@unique`) y **CHECK** escritos a mano. Prisma no los recrea en un `db push` ni al regenerar la tabla — tenerlo presente en cualquier migración futura que toque esas tablas, y sumar a esta lista lo que aparezca.
 
-  **Índices únicos parciales — hoy son cuatro** (verificado contra el SQL de `prisma/migrations/`, no contra lo que dice este doc):
+  **Índices únicos parciales — hoy son cinco** (verificado contra el SQL de `prisma/migrations/`, no contra lo que dice este doc):
 
   | Índice | Predicado | Creado en |
   |---|---|---|
@@ -41,6 +41,7 @@ Registro vivo de lo que falta. Lista de trabajo, no documento formal — actuali
   | `asignaciones_usuario_modulo_vigente` | `revocada_at IS NULL` | `20260724115816:50` |
   | `reglas_asignacion_par_modulo_vivas` | `deleted_at IS NULL` | `20260729171533:18` |
   | `reglas_asignacion_centro_modulo_sin_puesto` | `puesto_id IS NULL AND deleted_at IS NULL` | `20260729171533:28` |
+  | `modulo_version_criterio_base_sin_nivel` | `nivel_id IS NULL` | `20260803142216:78` |
 
   **CHECK — hoy es uno:** `preguntas_nivel_requiere_base` (`CHECK (nivel_id IS NULL OR base_conocimiento_id IS NOT NULL)`, migración `20260731143856`). Tapa el agujero de **MATCH SIMPLE**: la FK compuesta `(nivel_id, base_conocimiento_id)` de `preguntas` no se evalúa si alguna columna es NULL, lo cual es deseado para "base cargada, nivel pendiente" pero dejaría pasar el inverso.
 

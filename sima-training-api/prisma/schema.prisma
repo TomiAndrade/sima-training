@@ -106,6 +106,16 @@ enum OrigenAsignacion {
   MANUAL
 }
 
+// Origen de un ModuloVersionPregunta: lo materializó resolverCriterios() a partir
+// de un ModuloVersionCriterio, o lo eligió un admin a mano desde el banco. Es un
+// enum PROPIO y no OrigenAsignacion: comparte la idea (derivado vs. manual) y la
+// regla (resolver criterios nunca toca las MANUAL), pero no los valores — acá el
+// derivado es CRITERIO, no AUTOMATICA.
+enum OrigenPregunta {
+  CRITERIO
+  MANUAL
+}
+
 // Pregunta: única, puede pertenecer a varios módulos (vía ModuloVersionPregunta).
 // Nunca se duplica el texto de una pregunta.
 model Pregunta {
@@ -185,6 +195,7 @@ model BaseConocimiento {
 
   niveles   NivelBase[]
   preguntas Pregunta[]
+  criterios ModuloVersionCriterio[]
 
   // Trazabilidad
   createdAt DateTime @default(now()) @map("created_at")
@@ -217,6 +228,7 @@ model NivelBase {
 
   base      BaseConocimiento @relation(fields: [baseConocimientoId], references: [id], onDelete: Restrict)
   preguntas Pregunta[]
+  criterios ModuloVersionCriterio[]
 
   // Trazabilidad
   createdAt DateTime @default(now()) @map("created_at")
@@ -279,6 +291,7 @@ model ModuloVersion {
 
   modulo       Modulo                  @relation(fields: [moduloId], references: [id])
   preguntas    ModuloVersionPregunta[]
+  criterios    ModuloVersionCriterio[]
   asignaciones Asignacion[]
 
   // Trazabilidad
@@ -401,12 +414,71 @@ model ModuloVersionPregunta {
   // Baja lógica por módulo: una pregunta no se edita, se desactiva. Solo afecta
   // a este módulo (el banco Pregunta.activa sigue siendo el flag global).
   activa          Boolean @default(true)
+  // Por qué está esta pregunta en el módulo: la trajo un ModuloVersionCriterio
+  // (CRITERIO) o la eligió un admin a mano desde el banco (MANUAL).
+  // resolverCriterios() sólo crea/borra las CRITERIO — las MANUAL son las que
+  // permiten seguir agregando preguntas encima de lo que trajo el criterio.
+  // Default MANUAL, que es la verdad de todos los pivots previos a la Entrega B:
+  // se cargaron uno por uno desde el banco.
+  origen          OrigenPregunta @default(MANUAL)
 
   moduloVersion ModuloVersion @relation(fields: [moduloVersionId], references: [id])
   pregunta      Pregunta      @relation(fields: [preguntaId], references: [id])
 
   @@id([moduloVersionId, preguntaId])
   @@map("modulo_version_preguntas")
+}
+
+// ModuloVersionCriterio: QUÉ evalúa una versión de módulo, declarado como
+// (base de conocimiento, nivel opcional) en vez de una lista de preguntas
+// sueltas. "SIMA Básico = Seguridad Operativa-Básico + Residuos-Básico".
+//
+// Una versión puede declarar VARIOS niveles de la misma base (son criterios
+// distintos), y `nivelId` NULL significa "cualquier nivel de esta base".
+//
+// NO guarda cuántas preguntas sortear: el pool se materializa ENTERO en
+// ModuloVersionPregunta (origen=CRITERIO) y el sorteo por examen todavía no
+// existe (la tablet toma 3 fijas y no lee el backend). Ver docs/pendientes.md.
+//
+// SNAPSHOT, no receta viva: los pivots se materializan al guardar los criterios
+// sobre un BORRADOR y activar() los congela sin volver a resolver. Si el criterio
+// se resolviera al rendir, una versión ARCHIVADO sería un puntero a un pozo que
+// se mueve por debajo y no se podría reconstruir qué se pudo tomar en una fecha
+// — que es todo el motivo del versionado del Sprint 3.
+model ModuloVersionCriterio {
+  id                 String  @id @default(uuid())
+  moduloVersionId    String  @map("modulo_version_id")
+  // NOT NULL: un criterio sin tema no significa nada. Por eso acá NO hace falta
+  // el CHECK `nivel_requiere_base` que sí lleva Pregunta — el agujero de MATCH
+  // SIMPLE que ese CHECK tapa (nivel cargado con base NULL) no se puede dar.
+  baseConocimientoId String  @map("base_conocimiento_id")
+  // NULL = cualquier nivel de esa base.
+  nivelId            String? @map("nivel_id")
+
+  moduloVersion ModuloVersion    @relation(fields: [moduloVersionId], references: [id], onDelete: Restrict)
+  base          BaseConocimiento @relation(fields: [baseConocimientoId], references: [id], onDelete: Restrict)
+  // FK COMPUESTA, igual que en Pregunta: la base de datos garantiza que el nivel
+  // del criterio pertenece a su base, sin chequeo en el service (un findFirst
+  // previo no sobrevive a dos escrituras concurrentes). Se apoya en el
+  // @@unique([id, baseConocimientoId]) de NivelBase, que existe para esto.
+  nivel         NivelBase?       @relation(fields: [nivelId, baseConocimientoId], references: [id, baseConocimientoId], onDelete: Restrict)
+
+  // Trazabilidad
+  createdAt DateTime @default(now()) @map("created_at")
+  createdBy String?  @map("created_by")
+
+  // OJO: este @@unique cubre SÓLO los criterios con nivel. Con nivel_id NULL,
+  // Postgres considera cada fila distinta de las demás, así que no impide
+  // declarar dos veces "cualquier nivel de esta base". Esa otra mitad la cubre
+  // un índice único PARCIAL (WHERE nivel_id IS NULL) que vive sólo en el SQL de
+  // la migración — Prisma no expresa WHERE en @@unique. Es el QUINTO índice
+  // parcial invisible del proyecto (ver docs/pendientes.md).
+  //
+  // A diferencia de ReglaAsignacion —que dropeó su @@unique entero porque el eje
+  // deleted_at atraviesa los dos alcances— acá el @@unique plano cubre completa
+  // la mitad nivel_id NOT NULL y no hay soft-delete: se conserva.
+  @@unique([moduloVersionId, baseConocimientoId, nivelId])
+  @@map("modulo_version_criterios")
 }
 
 // ReglaAsignacion: qué módulo obliga a rendir. Apunta a Modulo (el contenedor
