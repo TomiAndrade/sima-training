@@ -56,7 +56,8 @@ src/
 | (root) | Panel Principal (Dashboard) |
 | Administración | Clientes · Usuarios · Puestos · Centros de Costo |
 | SIMA CHECK | Resumen · Módulos · Preguntas · Bases · Reglas · Asignaciones |
-| Configuración | *(placeholder — Roles y Permisos futuros)* |
+
+> La sección **Configuración** se sacó del array `NAV_SECTIONS` (`BackofficeLayout.jsx`): era un `header` con `items: []`, y el render dibuja el rótulo aunque no haya ítems, así que en pantalla quedaba una etiqueta huérfana. Se vuelve a agregar cuando exista una pantalla real de Roles y Permisos.
 
 > **Bases** es la taxonomía del banco de preguntas: cada base es un tema ("Gestión de residuos") y adentro define su propia escala **ordinal** de dificultad. La escala es por base a propósito — una puede necesitar 3 niveles y otra 5. Va pegada a **Preguntas** porque es donde se definen los temas con los que después se clasifican.
 
