@@ -129,7 +129,7 @@ Monolito NestJS organizado por dominio. Detalle en [`sima-training-api/README.md
 
 **Decisión clave — `Usuario` es UNA sola entidad** para cualquier persona (cuenta de sistema y/o persona evaluada). Esto unifica los conceptos `User` y `Employee` que el prototipo modelaba por separado. `rol = ALUMNO` es la persona evaluada (equivalente al `Employee`/"Empleado" del modelo de roles); ADMINISTRADOR/COORDINADOR son las cuentas de sistema del backoffice, y AUDITOR es el rol de las organizaciones CLIENTE. **El rol ya no vive en `Usuario`: vive en `Vinculacion`** (ver abajo).
 
-**Modelo de vinculación (`docs/modelo-vinculacion-propuesto.md`):** `Usuario` quedó como **identidad pura** (nombre, apellido, DNI, email, `datos`). Todo lo que es pertenencia se movió a `Vinculacion` — **una por usuario**, con **organización y rol** —, y el par **puesto + centro de costo** vive en `VinculacionPuestoCentro`, una fila por par completo (los tres campos de la PK son NOT NULL: nunca un puesto sin centro ni al revés).
+**Modelo de vinculación (`docs/modelo-vinculacion.md`):** `Usuario` quedó como **identidad pura** (nombre, apellido, DNI, email, `datos`). Todo lo que es pertenencia se movió a `Vinculacion` — **una por usuario**, con **organización y rol** —, y el par **puesto + centro de costo** vive en `VinculacionPuestoCentro`, una fila por par completo (los tres campos de la PK son NOT NULL: nunca un puesto sin centro ni al revés).
 
 - Una persona puede tener **varios pares**, y el mismo puesto en dos centros son **dos pares distintos** ("Soldador en YPF" ≠ "Soldador en PAE"): la capacitación obligatoria depende del par, no de dos listas sueltas.
 - **Regla de negocio: el alumno hace los módulos de TODOS sus pares**, no solo del principal.
@@ -428,7 +428,7 @@ sima-check-app/src/
 
 ### Backend (Sprint 5 — Modelo de vinculación)
 
-Diseño completo y razonado en [`docs/modelo-vinculacion-propuesto.md`](docs/modelo-vinculacion-propuesto.md). Lo que quedó implementado:
+Diseño completo y razonado en [`docs/modelo-vinculacion.md`](docs/modelo-vinculacion.md). Lo que quedó implementado:
 
 - **`Usuario` es identidad pura; la pertenencia vive en `Vinculacion`.** `rol`, `organizacionId` y `clasificacion` se fueron de `Usuario`. `Vinculacion` tiene `usuarioId @unique` — la regla "una sola organización por persona" **es el índice**, no disciplina del service. El ABM sigue siendo uno solo (`/usuarios`): la vinculación se crea y edita **anidada** en el mismo request, no tiene endpoints propios.
 - **Puesto y centro de costo van apareados en `VinculacionPuestoCentro`, no como ejes independientes.** La capacitación obligatoria depende del par (*"Soldador en YPF" ≠ "Soldador en PAE"*); con dos listas sueltas alguien con puestos {Soldador, Amolador} y centros {YPF, PAE} se leía como habilitado para cualquier combinación. Por eso el filtro `?puestoId=&centroCostoId=` del listado es **exacto**: devuelve a quien ejerce ese puesto *dentro de* ese centro, no a quien tiene los dos por separado.

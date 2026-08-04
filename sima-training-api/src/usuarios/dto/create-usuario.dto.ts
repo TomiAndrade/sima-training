@@ -15,7 +15,7 @@ import {
 
 // Un par (puesto, centro de costo) de VinculacionPuestoCentro. Los dos campos
 // son obligatorios: un par siempre viene completo, nunca un puesto sin centro
-// ni al revés (docs/modelo-vinculacion-propuesto.md §1.1).
+// ni al revés (docs/modelo-vinculacion.md §1.1).
 export class ParPuestoCentroDto {
   @IsUUID()
   puestoId!: string;

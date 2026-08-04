@@ -17,7 +17,7 @@ enum TipoOrganizacion {
 }
 
 // Rol de la vinculación persona↔organización. Vivió transitoriamente en
-// Usuario hasta que se implementó Vinculacion (ver docs/modelo-vinculacion-propuesto.md).
+// Usuario hasta que se implementó Vinculacion (ver docs/modelo-vinculacion.md).
 enum RolUsuario {
   ADMINISTRADOR
   COORDINADOR
@@ -51,7 +51,7 @@ model Organizacion {
 
 // Usuario: identidad pura de cualquier persona (cuenta de sistema y/o persona
 // evaluada). Rol, organización y clasificación se movieron a Vinculacion
-// (ver docs/modelo-vinculacion-propuesto.md); acá solo queda lo que identifica
+// (ver docs/modelo-vinculacion.md); acá solo queda lo que identifica
 // a la persona en sí.
 model Usuario {
   id       Int     @id @default(autoincrement())
@@ -344,7 +344,7 @@ model CentroCosto {
 // Reemplaza a Usuario.rol/organizacionId y al concepto de "clasificación"
 // (que se elimina: la pertenencia SIMA/CLIENTE/SUBCONTRATISTA se deriva de
 // Organizacion.tipo + organizacionPadreId, no se persiste acá).
-// Ver docs/modelo-vinculacion-propuesto.md.
+// Ver docs/modelo-vinculacion.md.
 model Vinculacion {
   id Int @id @default(autoincrement())
 
@@ -376,7 +376,7 @@ model Vinculacion {
 // que modelaban puesto y centro como ejes independientes: la capacitación obligatoria
 // depende del par ("Soldador en YPF" ≠ "Soldador en PAE"), no de dos listas sueltas.
 // Por eso el mismo puesto en varios centros SÍ es una fila por centro.
-// Ver docs/modelo-vinculacion-propuesto.md §1.1.
+// Ver docs/modelo-vinculacion.md §1.1.
 model VinculacionPuestoCentro {
   vinculacionId Int    @map("vinculacion_id")
   puestoId      String @map("puesto_id")

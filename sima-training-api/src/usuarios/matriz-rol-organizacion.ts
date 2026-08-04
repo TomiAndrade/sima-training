@@ -1,6 +1,6 @@
 import { RolUsuario, TipoOrganizacion } from '@prisma/client';
 
-// Matriz tipo-de-organización ↔ rol permitido (docs/modelo-vinculacion-propuesto.md §1).
+// Matriz tipo-de-organización ↔ rol permitido (docs/modelo-vinculacion.md §1).
 //
 // La regla cruza dos tablas — el rol vive en `Vinculacion`, el tipo en
 // `Organizacion` —, así que no hay CHECK constraint posible sin un trigger:
