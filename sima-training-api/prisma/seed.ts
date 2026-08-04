@@ -1,4 +1,5 @@
 import {
+  OrigenPregunta,
   PrismaClient,
   RolUsuario,
   TipoOrganizacion,
@@ -65,8 +66,15 @@ async function limpiar() {
   });
   await prisma.organizacion.deleteMany();
 
-  // modulo_version_preguntas → modulo_versiones → modulos.
+  // modulo_version_preguntas + modulo_version_criterios → modulo_versiones →
+  // modulos. Los criterios son la tercera rama que cuelga de ModuloVersion y
+  // TAMBIÉN son RESTRICT: sin este deleteMany, la segunda corrida del seed
+  // demo (que ahora siembra un criterio) moría con
+  // modulo_version_criterios_modulo_version_id_fkey. De paso desbloquea el
+  // baseConocimiento.deleteMany() de limpiarDemo(), que corre después y tiene
+  // el mismo problema por la FK criterio → base.
   await prisma.moduloVersionPregunta.deleteMany();
+  await prisma.moduloVersionCriterio.deleteMany();
   await prisma.moduloVersion.deleteMany();
   await prisma.modulo.deleteMany();
 }
@@ -236,7 +244,9 @@ async function sembrarDemo() {
       nivelId,
     });
 
-    const basicas = await crearPreguntas(preguntas, [
+    // Las básicas no se guardan en una variable: al módulo NO entran por id
+    // sino por el criterio del paso 5, que las materializa por clasificación.
+    await crearPreguntas(preguntas, [
       {
         texto: 'Es obligatorio usar casco en todas las áreas de trabajo.',
         tipo: TipoPregunta.VERDADERO_FALSO,
@@ -371,16 +381,41 @@ async function sembrarDemo() {
     // ModuloVersion v1 en BORRADOR, esto NO falla en silencio: asignarPreguntas
     // tira NotFoundException. Pero el que lo toque tiene que saber que además
     // de MODULOS hay que actualizar la constante de acá arriba.
+    //
+    // El contenido se arma por los DOS caminos que conviven (Sprint 7), para que
+    // el módulo publicado ejercite los dos `origen` de pivot en vez de quedar
+    // 100% MANUAL como estaba antes:
+    //
+    //   a) un CRITERIO (Seguridad Operativa / Básico) que materializa su pool →
+    //      las 5 preguntas del nivel Básico entran con origen CRITERIO, por
+    //      clasificación y no por id;
+    //   b) dos preguntas agregadas a mano encima → quedan origen MANUAL (es el
+    //      default del pivot; asignarPreguntas no manda `origen`).
+    //
+    // Las manuales son del nivel INTERMEDIO a propósito: si matchearan el
+    // criterio, resolverCriterios las saltearía (una MANUAL nunca se reetiqueta
+    // CRITERIO) y el escenario mostraría un pool corto sin que se note. Con
+    // niveles distintos los dos conjuntos son disjuntos y las dos secciones del
+    // editor quedan llenas.
+    //
+    // ⚠️ ORDEN: setCriterios y asignarPreguntas exigen los dos que la versión esté
+    // en BORRADOR, así que van antes de activar(). Sobre un ACTIVO, setCriterios
+    // tira ConflictException (resolver criterios borra pivots y rompería la
+    // inmutabilidad del historial).
+    await modulos.setCriterios(MODULO_SIMA_BASICO, {
+      criterios: [{ baseConocimientoId: base.id, nivelId: nivelBasico.id }],
+    });
+    const manuales = intermedias.slice(0, 2);
     await modulos.asignarPreguntas(
       MODULO_SIMA_BASICO,
-      // Sin `orden`: se appendean en el orden del array (siguienteOrden = max + 1).
-      [...basicas, ...intermedias].map((pregunta) => ({
-        preguntaId: pregunta.id,
-      })),
+      // Sin `orden`: se appendean después de las que trajo el criterio
+      // (siguienteOrden = max + 1).
+      manuales.map((pregunta) => ({ preguntaId: pregunta.id })),
     );
     // Sin `esNuevaLinea`: es la primera publicación del módulo, no hay un ACTIVO
     // del cual derivar el número, así que calcularNumero cae en siguienteMayor
-    // y queda AÑO.01.00.
+    // y queda AÑO.01.00. Publica el snapshot tal cual: activar() NO vuelve a
+    // resolver los criterios.
     const versionPublicada = await modulos.activar(MODULO_SIMA_BASICO);
 
     // 6) Alumnos del subcontratista. UsuariosService.create valida la matriz
@@ -469,6 +504,7 @@ async function sembrarDemo() {
       subcontratista,
       base,
       niveles: [nivelBasico, nivelIntermedio, nivelAvanzado],
+      criterio: { base: base.nombre, nivel: nivelBasico.nombre },
       versionPublicada,
       usuariosDemo: [carlos, andrea, hernan],
     });
@@ -520,6 +556,7 @@ async function imprimirResumenDemo(datos: {
   subcontratista: { id: number; nombre: string };
   base: { id: string; nombre: string; codigo: string | null };
   niveles: { id: string; nombre: string; orden: number }[];
+  criterio: { base: string; nivel: string };
   versionPublicada: {
     id: string;
     anio: number | null;
@@ -533,6 +570,7 @@ async function imprimirResumenDemo(datos: {
     subcontratista,
     base,
     niveles,
+    criterio,
     versionPublicada,
     usuariosDemo,
   } = datos;
@@ -547,6 +585,16 @@ async function imprimirResumenDemo(datos: {
   const vigentes = await prisma.asignacion.count({
     where: { revocadaAt: null },
   });
+
+  // Se cuentan los pivots REALES de la versión publicada, no lo que el seed
+  // creyó sembrar: es la evidencia de que el snapshot quedó con los dos
+  // orígenes conviviendo (y de que activar() lo publicó sin re-resolver).
+  const contarPivots = (origen: OrigenPregunta) =>
+    prisma.moduloVersionPregunta.count({
+      where: { moduloVersionId: versionPublicada.id, origen },
+    });
+  const preguntasPorCriterio = await contarPivots(OrigenPregunta.CRITERIO);
+  const preguntasManuales = await contarPivots(OrigenPregunta.MANUAL);
 
   const lineas = [
     '',
@@ -565,6 +613,8 @@ async function imprimirResumenDemo(datos: {
     'Módulo publicado — SIMA Básico:',
     `  modulo   ${MODULO_SIMA_BASICO}`,
     `  version  ${versionPublicada.id}  (${numero})`,
+    `  criterio ${criterio.base} / ${criterio.nivel}`,
+    `  contenido: ${preguntasPorCriterio} por criterio + ${preguntasManuales} manuales`,
     '',
     'Usuarios:',
     ...usuariosDemo.map(
