@@ -4,13 +4,15 @@
 >
 > **Sesión 1 aplicada** (2026-08-04): se resolvieron los ítems 1.1, 1.2, 1.3 y 1.5 — las tres afirmaciones falsas del README del backend, las secciones de decisiones de los Sprints 6 y 7 con su tabla de endpoints, los árboles de archivos desactualizados y el rename de `modelo-vinculacion-propuesto.md`.
 >
-> **Sesión 2 aplicada** (2026-08-04): se resolvió toda la sección 2 (código muerto) — archivos sin consumidor, símbolos exportados sin caller, devDependencies sin uso, scripts npm rotos, la sección vacía del sidebar y los artefactos huérfanos de `samples/`/`scripts/`. Cada ítem se re-verificó con grep propio antes de tocarlo (algunos archivos se habían movido desde el análisis original). Lo que sigue abierto es todo lo de acá abajo.
+> **Sesión 2 aplicada** (2026-08-04): se resolvió toda la sección 2 (código muerto) — archivos sin consumidor, símbolos exportados sin caller, devDependencies sin uso, scripts npm rotos, la sección vacía del sidebar y los artefactos huérfanos de `samples/`/`scripts/`. Cada ítem se re-verificó con grep propio antes de tocarlo (algunos archivos se habían movido desde el análisis original).
+>
+> **Sesión 3 aplicada** (2026-08-04): tooling y CI (4.1, 4.2, 4.5). El lint del backend dejó de correr con `--fix` (sacaba 0 siempre, no podía fallar el CI) — se formateó primero el árbol completo en un commit `style:` aparte y recién después se sacó el flag; se agregó `lint:fix` y `format:check` como pares explícitos. Se sumó el job de CI para `sima-check-app`, que no se linteaba ni buildeaba nunca. Se resolvió el único warning de lint de los dos frontends (`BancoPreguntas.jsx`). Y, a pedido del usuario, los dos frontends pasaron a lintear con `--max-warnings 0` para que un warning nuevo no vuelva a colarse en silencio. Lo que sigue abierto es todo lo de acá abajo.
 >
 > Distinto de [`pendientes.md`](pendientes.md): ese registra **features que faltan**; esto registra **lo que ya está y sobra, está mal documentado o se puede simplificar**. Cuando un ítem se resuelve, se borra de acá (queda en el historial de git).
 
 ## Veredicto general
 
-El proyecto está **sano**. Los 199 tests pasan, el lint de los dos frontends está limpio (1 warning), no hay `console.log` olvidados, hay **un solo `TODO`** en todo el código y está registrado en `pendientes.md`. El schema de Prisma y los services están comentados a un nivel poco común — las decisiones no triviales (índices parciales, FK compuestas, MATCH SIMPLE, staging vs. guardado directo) están explicadas donde viven.
+El proyecto está **sano**. Los 199 tests pasan, el lint de los dos frontends está limpio (0 warnings), no hay `console.log` olvidados, hay **un solo `TODO`** en todo el código y está registrado en `pendientes.md`. El schema de Prisma y los services están comentados a un nivel poco común — las decisiones no triviales (índices parciales, FK compuestas, MATCH SIMPLE, staging vs. guardado directo) están explicadas donde viven.
 
 Lo que encontré se agrupó en tres frentes, en orden de impacto:
 
@@ -102,16 +104,6 @@ En `sima-check/components/` y `core/components/` conviven `BancoPreguntas.jsx` /
 
 Poco que rascar: no hay N+1 real, las queries usan `include`/`select` acotados y los `useMemo` están donde corresponde. Lo que encontré:
 
-### 4.1 El CI no toca `sima-check-app`
-
-`.github/workflows/ci-sima-training.yml` tiene jobs para `api` y `backoffice`. **La app tablet no se lintea ni se buildea nunca.** Es un job de 15 líneas copiado del de backoffice.
-
-### 4.2 El lint del backend no puede fallar el CI
-
-El job corre `npm run lint`, que es `eslint "{src,test}/**/*.ts" --fix`. Con `--fix`, todo lo autocorregible se arregla en silencio y el comando sale con 0. Sólo fallaría por reglas no autocorregibles.
-
-Es **el mismo `--fix` que ya está anotado en `pendientes.md`** como molestia local (reformatea archivos ajenos al diff). La solución cubre los dos problemas: dejar `lint` sin `--fix` (que es lo que corre el CI y lo que uno quiere para verificar) y agregar un `lint:fix` aparte para cuando se lo pide a propósito.
-
 ### 4.3 `GET /usuarios?limit=500` sin paginación en UI
 
 `core/api/usuarios.js:6` pide 500 usuarios de una y descarta el resto de la respuesta paginada. Está comentado a propósito ("la pantalla todavía no tiene paginación en UI"), y con la nómina actual no molesta. Vale tenerlo anotado para cuando entre un Excel real de nómina: a partir de 500 la pantalla empieza a **mentir en silencio** (no muestra a nadie más y no avisa). Mitigación barata mientras tanto: si `total > data.length`, mostrar un aviso.
@@ -120,23 +112,17 @@ Es **el mismo `--fix` que ya está anotado en `pendientes.md`** como molestia lo
 
 `modulos.service.ts:569-588` recorre los criterios y lanza un `pregunta.findMany` por cada uno. Se podría hacer con un solo `findMany` con `OR`, pero **como está es mejor**: necesita el conteo *por criterio* para devolver `porCriterio`, y con un `OR` habría que reagrupar en memoria. Los criterios por versión son unidades, no miles. **No tocar** — lo anoto para que no se "optimice" sin ver el trade-off.
 
-### 4.5 Warning de lint pendiente
-
-`BancoPreguntas.jsx:948` — `react-hooks/exhaustive-deps` sobre `asignaciones`: la expresión lógica hace que las deps del `useMemo` de la línea 968 cambien en cada render. Es el único warning de los dos frontends. Se arregla envolviendo `asignaciones` en su propio `useMemo`.
-
 ---
 
 ## 5. Por dónde empezar
 
-La **sesión 1** (documentación factual: 1.1, 1.2, 1.3, 1.5) y la **sesión 2** (código muerto: 2.1-2.6) ya están aplicadas. Lo que queda, ordenado por relación impacto/costo:
+Las **sesiones 1** (documentación factual: 1.1, 1.2, 1.3, 1.5), **2** (código muerto: 2.1-2.6) y **3** (tooling y CI: 4.1, 4.2, 4.5, más el warning de `npm run format`) ya están aplicadas. Lo que queda, ordenado por relación impacto/costo:
 
 | Sesión | # | Qué | Por qué | Tamaño |
 |---|---|---|---|---|
-| **3** | 1 | `lint` sin `--fix` + job de CI para la tablet (4.1, 4.2) | Dos problemas conocidos con un arreglo cada uno. **El del `--fix` es el más importante que queda**: hoy el lint del backend no puede fallar el CI | 30 min |
-| **3** | 2 | El warning de `BancoPreguntas.jsx:948` (4.5) | Es el único de los dos frontends | 10 min |
-| **4** | 3 | Unificar `Puestos.jsx`/`CentrosCosto.jsx` (3.3) | −150 líneas, un solo lugar donde arreglar bugs | 1 h |
-| **4** | 4 | Partir `BancoPreguntas.jsx` (3.2, paso 1) | El corte más barato de los tres archivos grandes | 1-2 h |
-| — | 5 | Decidir qué hacer con `CLAUDE.md` (1.4) y la duplicación entre READMEs (3.4) | Es una decisión, no una tarea — conviene charlarla antes de mover 59 KB, y la sesión 1 la volvió más urgente (ver 1.4) | — |
-| — | 6 | Partir `TrainingModules.jsx` y `ReglasAsignacion.jsx` (3.2, pasos 2-3) | Vale la pena, pero recién cuando haya que tocarlos por otra cosa | 3-4 h |
+| **4** | 1 | Unificar `Puestos.jsx`/`CentrosCosto.jsx` (3.3) | −150 líneas, un solo lugar donde arreglar bugs | 1 h |
+| **4** | 2 | Partir `BancoPreguntas.jsx` (3.2, paso 1) | El corte más barato de los tres archivos grandes | 1-2 h |
+| — | 3 | Decidir qué hacer con `CLAUDE.md` (1.4) y la duplicación entre READMEs (3.4) | Es una decisión, no una tarea — conviene charlarla antes de mover 59 KB, y la sesión 1 la volvió más urgente (ver 1.4) | — |
+| — | 4 | Partir `TrainingModules.jsx` y `ReglasAsignacion.jsx` (3.2, pasos 2-3) | Vale la pena, pero recién cuando haya que tocarlos por otra cosa | 3-4 h |
 
-La sesión 3 es mecánica. En la 4 conviene ir de a un commit por ítem, con el lint y el build corriendo entre medio, y la verificación visual de las pantallas tocadas queda del lado del usuario (convención del proyecto).
+En la sesión 4 conviene ir de a un commit por ítem, con el lint y el build corriendo entre medio, y la verificación visual de las pantallas tocadas queda del lado del usuario (convención del proyecto).
