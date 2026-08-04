@@ -707,17 +707,22 @@ export default function TrainingModules() {
               correspondiendo quedan como están (si las desactivaste, siguen desactivadas).
             </p>
             {/* A diferencia del resto del editor, esto SÍ pega al backend en el
-                acto. Que convivan dos modelos de guardado es tolerable; que el
-                de criterios arrastre los cambios de preguntas sin decirlo, no. */}
-            <div className="bg-amber-50 border border-amber-200 text-amber-700 text-xs rounded px-3 py-2">
-              A diferencia del resto de la pantalla, esto se guarda ahora mismo (no espera a "Guardar y volver").
-              {pendientesPreguntas > 0 && (
-                <>
-                  {' '}Tenés <strong>{pendientesPreguntas}</strong> cambio{pendientesPreguntas !== 1 ? 's' : ''} de
-                  preguntas sin guardar: se {pendientesPreguntas !== 1 ? 'van' : 'va'} a guardar junto con los criterios.
-                </>
-              )}
-            </div>
+                acto — pero el aviso se gradúa según la consecuencia real. Sin
+                cambios pendientes no se arrastra nada y es un detalle: va en
+                gris. Con cambios pendientes sí sorprende, porque guardar
+                criterios se lleva puestos los de preguntas (flushCambios corre
+                primero): ahí va en ámbar. Lo que no es tolerable es que actúe
+                sin decirlo. */}
+            {pendientesPreguntas > 0 ? (
+              <div className="bg-amber-50 border border-amber-200 text-amber-700 text-xs rounded px-3 py-2">
+                Tenés <strong>{pendientesPreguntas}</strong> cambio{pendientesPreguntas !== 1 ? 's' : ''} de preguntas
+                sin guardar: se {pendientesPreguntas !== 1 ? 'van' : 'va'} a guardar junto con los criterios, ahora mismo.
+              </div>
+            ) : (
+              <p className="text-slate-400 text-xs">
+                Esto se guarda ahora mismo (no espera a "Guardar y volver").
+              </p>
+            )}
           </div>
         </Modal>
 
