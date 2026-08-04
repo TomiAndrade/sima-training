@@ -15,7 +15,6 @@ export const basesConocimientoApi = {
   // Cada base viene con sus `niveles` ordenados y con `_count.preguntas`
   // (por base y por nivel).
   list: (params = {}) => api.get(`/bases-conocimiento${buildQuery(params)}`),
-  get: (id) => api.get(`/bases-conocimiento/${id}`),
   create: (data) => api.post('/bases-conocimiento', data),
   update: (id, data) => api.patch(`/bases-conocimiento/${id}`, data),
 

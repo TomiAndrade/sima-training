@@ -62,14 +62,11 @@ async function request(method, path, { body, auth = false } = {}) {
 
 // Subida de archivos (multipart). No setea Content-Type: el browser agrega el
 // boundary. Adjunta el Bearer y reintenta el login una vez ante 401.
-async function upload(path, file, field = 'file', extraFields = {}) {
+async function upload(path, file) {
   const doFetch = async () => {
     if (!token) await login()
     const formData = new FormData()
-    formData.append(field, file)
-    for (const [key, val] of Object.entries(extraFields)) {
-      formData.append(key, val)
-    }
+    formData.append('file', file)
     return fetch(`${BASE_URL}${path}`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}` },
