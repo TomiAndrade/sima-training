@@ -1,4 +1,8 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateCentroCostoDto } from './dto/create-centro-costo.dto';
 import { FindCentrosCostoDto } from './dto/find-centros-costo.dto';

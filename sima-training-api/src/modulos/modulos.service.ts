@@ -728,7 +728,11 @@ export class ModulosService {
 
     // Actualización (misma versión) → sube MENOR en la línea del ACTIVO.
     if (esNuevaLinea === false) {
-      return { anio: activo.anio, mayor: activo.mayor, menor: activo.menor + 1 };
+      return {
+        anio: activo.anio,
+        mayor: activo.mayor,
+        menor: activo.menor + 1,
+      };
     }
 
     // Versión nueva → sube MAYOR (secuencia por año), MENOR a 0.

@@ -1,10 +1,5 @@
 import { Type } from 'class-transformer';
-import {
-  IsArray,
-  IsOptional,
-  IsUUID,
-  ValidateNested,
-} from 'class-validator';
+import { IsArray, IsOptional, IsUUID, ValidateNested } from 'class-validator';
 import { CreatePreguntaDto } from '../../preguntas/dto/create-pregunta.dto';
 
 // Body de POST /import/preguntas/confirm. Las preguntas ya vienen seleccionadas

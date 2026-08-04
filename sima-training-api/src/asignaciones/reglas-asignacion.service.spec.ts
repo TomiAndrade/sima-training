@@ -255,9 +255,9 @@ describe('ReglasAsignacionService', () => {
   it('rechaza la edición si el módulo nuevo no existe (400)', async () => {
     prisma.modulo.findUnique.mockResolvedValue(null);
 
-    await expect(service.update('r1', { moduloId: 'm-fantasma' })).rejects.toBeInstanceOf(
-      BadRequestException,
-    );
+    await expect(
+      service.update('r1', { moduloId: 'm-fantasma' }),
+    ).rejects.toBeInstanceOf(BadRequestException);
     expect(prisma.reglaAsignacion.update).not.toHaveBeenCalled();
   });
 
@@ -268,9 +268,9 @@ describe('ReglasAsignacionService', () => {
       activo: false,
     });
 
-    await expect(service.update('r1', { moduloId: 'm2' })).rejects.toBeInstanceOf(
-      ConflictException,
-    );
+    await expect(
+      service.update('r1', { moduloId: 'm2' }),
+    ).rejects.toBeInstanceOf(ConflictException);
     // El destino se busca por el MISMO alcance de la regla, excluyéndola a ella
     // y sin contar las eliminadas (el índice tampoco las considera).
     expect(prisma.reglaAsignacion.findFirst).toHaveBeenCalledWith({
@@ -388,9 +388,9 @@ describe('ReglasAsignacionService', () => {
       deletedAt: new Date(),
     });
 
-    await expect(
-      service.update('r1', { activo: true }),
-    ).rejects.toBeInstanceOf(NotFoundException);
+    await expect(service.update('r1', { activo: true })).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
     expect(prisma.reglaAsignacion.update).not.toHaveBeenCalled();
   });
 

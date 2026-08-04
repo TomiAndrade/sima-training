@@ -55,10 +55,7 @@ export class ModulosController {
 
   @Patch(':id')
   @UseGuards(JwtAuthGuard)
-  update(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() dto: UpdateModuloDto,
-  ) {
+  update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateModuloDto) {
     return this.modulos.update(id, dto);
   }
 

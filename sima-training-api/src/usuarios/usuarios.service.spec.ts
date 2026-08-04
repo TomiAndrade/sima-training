@@ -313,7 +313,11 @@ describe('UsuariosService', () => {
     expect(prisma.$transaction).toHaveBeenCalled();
     // El id sale del usuario recién creado (mock → id 1), y corre sobre el mismo
     // cliente transaccional (el mock de $transaction pasa `prisma` como tx).
-    expect(asignaciones.recalcularEnTx).toHaveBeenCalledWith(prisma, 1, 'backoffice');
+    expect(asignaciones.recalcularEnTx).toHaveBeenCalledWith(
+      prisma,
+      1,
+      'backoffice',
+    );
   });
 
   it('revivir un usuario dado de baja recalcula SIEMPRE, aunque no traiga pares', async () => {
@@ -334,7 +338,11 @@ describe('UsuariosService', () => {
 
     // Un revivido puede arrastrar AUTOMATICA de antes de la baja: recalcular
     // igual, para revocar las que ya no correspondan.
-    expect(asignaciones.recalcularEnTx).toHaveBeenCalledWith(prisma, 5, 'backoffice');
+    expect(asignaciones.recalcularEnTx).toHaveBeenCalledWith(
+      prisma,
+      5,
+      'backoffice',
+    );
   });
 
   it('update con pares dispara el recálculo', async () => {
@@ -349,7 +357,11 @@ describe('UsuariosService', () => {
       },
     });
 
-    expect(asignaciones.recalcularEnTx).toHaveBeenCalledWith(prisma, 1, 'backoffice');
+    expect(asignaciones.recalcularEnTx).toHaveBeenCalledWith(
+      prisma,
+      1,
+      'backoffice',
+    );
   });
 
   it('update de solo el nombre NO recalcula', async () => {
@@ -376,7 +388,11 @@ describe('UsuariosService', () => {
 
     await service.update(1, { vinculacion: { pares: [] } });
 
-    expect(asignaciones.recalcularEnTx).toHaveBeenCalledWith(prisma, 1, 'backoffice');
+    expect(asignaciones.recalcularEnTx).toHaveBeenCalledWith(
+      prisma,
+      1,
+      'backoffice',
+    );
   });
 
   // --- Listado ---

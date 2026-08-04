@@ -1,4 +1,12 @@
-import { IsBoolean, IsInt, IsOptional, IsString, IsNotEmpty, Min, MaxLength } from 'class-validator';
+import {
+  IsBoolean,
+  IsInt,
+  IsOptional,
+  IsString,
+  IsNotEmpty,
+  Min,
+  MaxLength,
+} from 'class-validator';
 
 // Edición de metadata del módulo (contenedor). El contenido/preguntas se maneja por versión.
 export class UpdateModuloDto {
