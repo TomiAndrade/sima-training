@@ -45,7 +45,7 @@ src/
 │                          BasesConocimiento.jsx · ReglasAsignacion.jsx ·
 │                          TrainingAssignments.jsx  (los cinco últimos, 100% backend)
 ├── pages/               # Shell: BackofficeLayout.jsx · Dashboard.jsx
-├── components/          # Button · Card · Modal · Table · StatCard · ProgressBar · MultiSelectFilter
+├── components/          # Button · Modal · Table · StatCard · MultiSelectFilter
 └── hooks/               # useNavigation.js
 ```
 

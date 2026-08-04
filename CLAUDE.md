@@ -340,13 +340,12 @@ sima-training-backoffice/src/
 │                      BasesConocimiento.jsx ·
 │                      ReglasAsignacion.jsx · TrainingAssignments.jsx
 ├── pages/             BackofficeLayout.jsx · Dashboard.jsx
-├── components/        Button · Card · Modal · Table · StatCard · ProgressBar · MultiSelectFilter
+├── components/        Button · Modal · Table · StatCard · MultiSelectFilter
 └── hooks/             useNavigation.js
 
 sima-check-app/src/
 ├── data/              usuarios.js · modules.js · assignments.js
 ├── components/        Button · ProgressBar · QuestionCard
-├── hooks/             useNavigation.js
 ├── utils/             evaluation.js (pickRandomQuestions, calculateScore)
 └── pages/             UsuarioSelection · ModuleSelection · Evaluation · Results
 ```
