@@ -55,6 +55,36 @@ npm install
 npm run dev                      # → http://localhost:5174
 ```
 
+### Escenario de demo (`SEED_DEMO=true`)
+
+`prisma/seed.ts` tiene dos modos. El **seed base** (el `npx prisma db seed` de arriba) siembra sólo la estructura mínima que necesita cualquier entorno: la organización interna "Ingeniería SIMA" y los 4 módulos con su `ModuloVersion` v1 en BORRADOR, sin ningún dato de prueba. Detrás de la variable de entorno `SEED_DEMO=true` se suma un **escenario navegable de punta a punta** (`sembrarDemo()`), apagado por defecto a propósito porque son datos de demostración.
+
+```powershell
+# PowerShell
+$env:SEED_DEMO='true'; npx prisma db seed
+```
+```bash
+# bash
+SEED_DEMO=true npx prisma db seed
+```
+
+Qué siembra:
+
+| | |
+|---|---|
+| **Organizaciones** | Pan American Energy (CLIENTE) → Montajes del Sur S.R.L. (SUBCONTRATISTA), o sea la cadena `organizacionPadreId` de "para quién trabaja" un subcontratista |
+| **Catálogos** | Puestos `Soldador`/`Amolador`/`Electricista` y centros `Taller`/`Depósito`. Se **reusan por nombre** si ya existen (`resolverCatalogo`) y **nunca se borran**: son catálogo de nómina, no fixture |
+| **Base de conocimiento** | `[SEG] Seguridad Operativa` con su `fuente` y una escala de 3 niveles (`Básico`/`Intermedio`/`Avanzado`), creados sin `orden` explícito para ejercitar el appendeo → 0, 1, 2 |
+| **Banco** | 12 preguntas: 5 Básico, 3 Intermedio, 2 Avanzado y **2 sin clasificar** a propósito (son el backlog previo a las bases, y lo que ejercita el filtro "— Sin clasificar —" y su badge ámbar) |
+| **Módulo publicado** | `SIMA Básico` en **2026.01.00** (primera publicación, sin `esNuevaLinea`). Su contenido usa **los dos caminos del Sprint 7**: un criterio (Seguridad Operativa / Básico) que materializa 5 pivots `origen: CRITERIO`, más 2 preguntas del nivel Intermedio agregadas a mano que quedan `MANUAL` |
+| **Alumnos** | Carlos Ferreyra (Soldador·Taller), Andrea Quiroga (**dos pares**: Soldador·Taller + Electricista·Depósito — el caso que ejercita "el alumno rinde los módulos de TODOS sus pares") y Hernán Palacios (Electricista·Depósito) |
+| **Reglas** | Una de **cada alcance**: par exacto (Soldador, Taller) → SIMA Básico, y de **centro** (Depósito, sin `puestoId`) → Reglas de Oro. Esta última apunta a un módulo sin versión publicada a propósito, para ejercitar el sufijo "(sin versión publicada)" del backoffice |
+| **Asignaciones** | 4 vigentes, todas `AUTOMATICA` — las deriva el motor al crear las reglas; el `recalcular()` explícito del final corre como reconciliación idempotente |
+
+Dos detalles del módulo publicado, porque son el punto de la demo: las manuales son de **otro nivel** que el criterio a propósito (una pregunta ya `MANUAL` nunca se reetiqueta `CRITERIO`, así que si se solaparan el escenario no mostraría nada), y la tercera pregunta Intermedio queda **en el banco pero fuera del módulo**. En el editor del borrador y en la versión publicada las dos secciones se ven llenas y disjuntas.
+
+`sembrarDemo()` **reusa los services de Nest** (levanta un application context con `NestFactory.createApplicationContext`) en vez de escribir inserts crudos, para no saltearse las reglas que viven en ellos: la matriz rol↔organización, `resolverFuente`, el appendeo de `orden`, la resolución de criterios, el cálculo del número `AÑO.MAYOR.MENOR` y el motor de recálculo. Lo único que no corre por esa vía es la `ValidationPipe` global, que vive en `main.ts` y sólo aplica a la capa HTTP.
+
 ## Paleta de colores
 
 **Backoffice** — estética industrial/corporativa, paleta `slate` en **modo claro**. (No `zinc` y no oscuro: el código no usa `zinc` en ningún lado, y `tailwind.config.js` no tiene alias de color que lo disfrace.)
@@ -346,6 +376,9 @@ sima-check-app/src/
 - **Auth básica sin roles**: el backoffice se autentica con credenciales de entorno (`AUTH_USER`/`AUTH_PASSWORD`); el cliente front hace auto-login y cachea el token (no hay pantalla de login todavía). Lecturas abiertas, escrituras con JWT.
 - **Deploy preparado, no activo**: `Dockerfile` + `render.yaml` listos; falta crear la cuenta cloud. CI (`.github/workflows/ci-sima-training.yml`) corre lint + build + test, sin deploy.
 - **Local-first**: PostgreSQL corre en Docker Compose; requiere Docker Desktop.
+- **Regla del clean del seed: toda entidad nueva que cuelgue de otra con FK `RESTRICT` tiene que sumarse a `limpiar()` (`prisma/seed.ts`), en orden de dependencia — de las hijas a las padres.** Casi todas las FK del schema son `ON DELETE RESTRICT` (las únicas dos que no: `Asignacion.moduloVersionId` y la self-FK `Organizacion.organizacionPadreId`, las dos `SET NULL`), así que una tabla nueva que no se agregue a esa cadena **bloquea el `deleteMany()` de su padre**. Ya pasó **tres veces**, siempre igual: `Asignacion` (FK **directa** a `Usuario`, no pasa por `Vinculacion`, así que es su propia rama), `ReglaAsignacion` (FK a `Modulo`/`Puesto`/`CentroCosto`) y `ModuloVersionCriterio` (tercera rama de `ModuloVersion`, además de bloquear el `baseConocimiento.deleteMany()` de `limpiarDemo()`, que corre después). Dos motivos por los que se escapa tan fácil:
+  - **El síntoma aparece recién en la SEGUNDA corrida.** Sobre una base vacía no hay filas hijas que bloqueen nada, así que la corrida en la que se agrega la entidad pasa limpia y el error sale después, como un `..._fkey` opaco de la corrida siguiente. Por eso **la verificación de cualquier cambio al seed es correrlo dos veces seguidas**, no una.
+  - **La cadena documentada en los comentarios de `limpiar()` puede estar incompleta** — es exactamente lo que falló las tres veces. Antes de reusarla o extenderla, grepear el `schema.prisma` entero por FKs hacia la tabla target en vez de asumir que está al día.
 
 ### Backend (Sprint 2 — SIMA CHECK)
 
