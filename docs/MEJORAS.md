@@ -2,7 +2,9 @@
 
 > Análisis del **2026-08-04** sobre `develop` (`2cdae7a`), con la evidencia de cada punto.
 >
-> **Sesión 1 aplicada** (2026-08-04): se resolvieron los ítems 1.1, 1.2, 1.3 y 1.5 — las tres afirmaciones falsas del README del backend, las secciones de decisiones de los Sprints 6 y 7 con su tabla de endpoints, los árboles de archivos desactualizados y el rename de `modelo-vinculacion-propuesto.md`. Lo que sigue abierto es todo lo de acá abajo.
+> **Sesión 1 aplicada** (2026-08-04): se resolvieron los ítems 1.1, 1.2, 1.3 y 1.5 — las tres afirmaciones falsas del README del backend, las secciones de decisiones de los Sprints 6 y 7 con su tabla de endpoints, los árboles de archivos desactualizados y el rename de `modelo-vinculacion-propuesto.md`.
+>
+> **Sesión 2 aplicada** (2026-08-04): se resolvió toda la sección 2 (código muerto) — archivos sin consumidor, símbolos exportados sin caller, devDependencies sin uso, scripts npm rotos, la sección vacía del sidebar y los artefactos huérfanos de `samples/`/`scripts/`. Cada ítem se re-verificó con grep propio antes de tocarlo (algunos archivos se habían movido desde el análisis original). Lo que sigue abierto es todo lo de acá abajo.
 >
 > Distinto de [`pendientes.md`](pendientes.md): ese registra **features que faltan**; esto registra **lo que ya está y sobra, está mal documentado o se puede simplificar**. Cuando un ítem se resuelve, se borra de acá (queda en el historial de git).
 
@@ -13,7 +15,7 @@ El proyecto está **sano**. Los 199 tests pasan, el lint de los dos frontends es
 Lo que encontré se agrupó en tres frentes, en orden de impacto:
 
 1. ~~**Documentación desactualizada**~~ — **resuelto en la sesión 1.** Era el problema más caro (el README del backend afirmaba cosas que el código contradecía). Lo único que queda del frente es el tamaño de `CLAUDE.md`, que es una decisión y no una tarea.
-2. **Código muerto** — ~600 líneas y 6 devDependencies que se pueden borrar sin tocar nada vivo.
+2. ~~**Código muerto**~~ — **resuelto en la sesión 2.**
 3. **Estructura** — tres archivos de más de 850 líneas y dos pares de archivos casi idénticos.
 
 ---
@@ -23,8 +25,6 @@ Lo que encontré se agrupó en tres frentes, en orden de impacto:
 ### 1.4 `CLAUDE.md` — exacto en el contenido, pero se pasó de tamaño
 
 Verifiqué unos veinte enunciados no obvios contra el código (índices parciales, staging de `TrainingModules.jsx`, `versionParaEditar` vs. `ultimaOActivaVersion`, el UPSERT de criterios, la matriz rol↔organización, el orden de borrado del seed) y **todos son correctos**. Ese es el activo principal del proyecto y hay que cuidarlo.
-
-Queda un desajuste chico, que se resuelve junto con el borrado del código muerto: el árbol de archivos lista `sima-check-app/src/hooks/ useNavigation.js` y `components/ … Card · ProgressBar …` del backoffice, y los tres están **muertos** (ver 2.1). Al borrarlos hay que sacarlos del árbol, en el mismo commit.
 
 El problema real es el **tamaño**: 129 KB que se cargan en cada sesión.
 
@@ -42,69 +42,6 @@ Las dos primeras son, en buena medida, **el mismo material que las "Decisiones d
 Ojo que la sesión 1 **agrandó** la duplicación en vez de reducirla: para que el README del backend dejara de mentir hubo que escribirle las decisiones de los Sprints 6 y 7, que ya estaban en `CLAUDE.md`. Fue lo correcto —un README que miente es peor que uno redundante— pero deja dos copias más para mantener sincronizadas, y es exactamente el mecanismo que produjo el problema que acabamos de arreglar. Si se hace el split, la regla que lo previene es que las decisiones vivan **en un solo lugar** (`docs/decisiones/`) y que `CLAUDE.md` y los READMEs enlacen en vez de copiar.
 
 **No hacer** el split sin decidir antes qué queda en `CLAUDE.md`: lo que se lee en cada sesión (modelo de entidades, endpoints, convenciones, gotchas) tiene que quedar, y lo que es arqueología ("esto se revirtió en el Sprint 5") se puede mover.
-
----
-
-## 2. Código muerto
-
-Todo lo de esta sección se puede borrar sin que nada deje de funcionar. Lo verifiqué archivo por archivo con `grep -rlw` sobre los tres subproyectos.
-
-### 2.1 Archivos completos sin ningún consumidor
-
-| Archivo | Líneas | Evidencia |
-|---|---:|---|
-| `sima-training-backoffice/src/App.css` | 184 | Boilerplate de Vite. `main.jsx` sólo importa `index.css`; nadie importa `App.css` |
-| `sima-check-app/src/App.css` | 184 | Ídem |
-| `sima-training-backoffice/src/components/Card.jsx` | 8 | El único match de `Card` en todo `src/` es su propia definición |
-| `sima-training-backoffice/src/components/ProgressBar.jsx` | 20 | Ídem. Ojo: el `ProgressBar` de la **app tablet** sí se usa (`pages/Evaluation.jsx`) |
-| `sima-check-app/src/hooks/useNavigation.js` | ~10 | `App.jsx` navega con `useState` directo (`const [step, setStep] = useState(...)`). El del **backoffice** sí se usa |
-| `sima-training-backoffice/src/assets/` (`react.svg`, `vite.svg`, `hero.png`) | — | Boilerplate de Vite, trackeados en git, cero referencias |
-| `sima-check-app/src/assets/` (los mismos tres) | — | Ídem |
-| `sima-training-backoffice/public/icons.svg` + `tacho-*.png` (×3) | — | Los tachos son de las preguntas mock de la **tablet**; en el backoffice no los referencia nadie. `icons.svg` tampoco se usa en ninguno de los dos |
-
-**Total: ~400 líneas de JS/CSS + 9 binarios.**
-
-**Verificar antes de borrar:**
-```bash
-cd TRAINING/sima-training-backoffice/src && grep -rn "App.css\|assets/\|Card\|ProgressBar" .
-cd TRAINING/sima-check-app/src        && grep -rn "App.css\|assets/\|useNavigation" .
-```
-
-### 2.2 Símbolos exportados sin consumidor
-
-- **`basesConocimientoApi.get`** (`core/api/basesConocimiento.js:18`) — ningún caller. El endpoint `GET /bases-conocimiento/:id` existe y funciona; lo que sobra es el wrapper del cliente.
-- **`api.upload(path, file, field, extraFields)`** (`core/api/client.js:65`) — los tres callers (`preguntasApi.subirImagen`, `importApi.previewUsuarios`, `importApi.previewPreguntas`) pasan sólo `path` y `file`. `field` y `extraFields` nunca se usan; se pueden sacar de la firma.
-- **`trainingModules[].backendId` y `[].questions`** (`sima-check/data/training-modules.js`) — el único consumidor que queda del archivo es `Dashboard.jsx`, y sólo lee `name` y `active`. Los cuatro `backendId` son UUIDs del backend hardcodeados en un mock del frontend: hoy coinciden con `seed.ts:27-34`, pero es un acoplamiento que no paga nada.
-
-### 2.3 devDependencies del backend sin uso
-
-Ninguna aparece en `src/`, `prisma/`, `nest-cli.json`, `tsconfig*.json` ni `eslint.config.mjs`:
-
-| Paquete | Por qué está de más |
-|---|---|
-| `pdfkit` | No hay una sola línea de generación de PDF en el proyecto |
-| `supertest` + `@types/supertest` | Son para tests e2e, y **no existe la carpeta `test/`** |
-| `ts-loader` | Sólo hace falta con el builder webpack; `nest-cli.json` usa el default (tsc) |
-| `tsconfig-paths` | Sólo para path mapping en jest/webpack HMR; ninguno está configurado |
-| `source-map-support` | Nunca se importa ni se registra |
-
-### 2.4 Scripts de npm rotos
-
-En `sima-training-api/package.json`:
-
-- **`test:e2e`** apunta a `./test/jest-e2e.json`, que **no existe** (`ls test` → *No such file or directory*). Falla siempre.
-- **`format`** hace `prettier --write "src/**/*.ts" "test/**/*.ts"` — el segundo glob no matchea nada.
-
-O se borran los dos globs muertos, o se crea la carpeta `test/` con e2e reales. La segunda opción es trabajo real; la primera son dos líneas.
-
-### 2.5 UI muerta
-
-- **Sección "Configuración" del sidebar** (`BackofficeLayout.jsx:33-35`): `{ header: 'Configuración', items: [] }`. El render (`:58-70`) dibuja el `<div>` del header aunque `items` esté vacío, así que en pantalla queda un rótulo huérfano sin nada debajo. Está documentado como placeholder a propósito, pero visualmente lee como un bug. O se le pone un ítem deshabilitado con tooltip ("próximamente"), o se saca hasta que exista Roles y Permisos.
-
-### 2.6 Artefactos huérfanos en el repo
-
-- **`sima-training-api/samples/`** — 4 `.xlsx` trackeados (`nomina-alumnos-sima`, `nomina-alumnos-ypf`, `nomina-ejemplo`, `nomina-prueba`) que **no se referencian desde ningún lado**: ni código, ni tests, ni docs (`grep -rn "samples/" --include=*.md --include=*.ts .` → vacío). Parecen restos de verificaciones manuales. Si son la muestra canónica del formato de nómina, merecen un `samples/README.md` de tres líneas y quedarse uno o dos; si no, se borran los cuatro.
-- **`sima-training-api/scripts/auditoria-rol-vs-tipo-org.sql`** (77 líneas) — tampoco se referencia en ningún lado. Fue una auditoría puntual del Sprint 5. Mismo criterio: o se documenta cuándo correrlo, o se borra.
 
 ---
 
@@ -191,18 +128,15 @@ Es **el mismo `--fix` que ya está anotado en `pendientes.md`** como molestia lo
 
 ## 5. Por dónde empezar
 
-La **sesión 1** (documentación factual: 1.1, 1.2, 1.3, 1.5) ya está aplicada. Lo que queda, ordenado por relación impacto/costo:
+La **sesión 1** (documentación factual: 1.1, 1.2, 1.3, 1.5) y la **sesión 2** (código muerto: 2.1-2.6) ya están aplicadas. Lo que queda, ordenado por relación impacto/costo:
 
 | Sesión | # | Qué | Por qué | Tamaño |
 |---|---|---|---|---|
-| **2** | 1 | Borrar el código muerto de 2.1 + 2.2 + 2.3, cada borrado con su árbol actualizado en el mismo commit | Cero riesgo, ~600 líneas y 6 paquetes menos | 30 min |
-| **2** | 2 | Scripts npm rotos (2.4) y la sección vacía del sidebar (2.5) | Trivial | 15 min |
-| **2** | 3 | Decidir qué hacer con `samples/` y `scripts/` (2.6) | Son artefactos huérfanos: o se documentan o se borran | 15 min |
-| **3** | 4 | `lint` sin `--fix` + job de CI para la tablet (4.1, 4.2) | Dos problemas conocidos con un arreglo cada uno. **El del `--fix` es el más importante que queda**: hoy el lint del backend no puede fallar el CI | 30 min |
-| **3** | 5 | El warning de `BancoPreguntas.jsx:948` (4.5) | Es el único de los dos frontends | 10 min |
-| **4** | 6 | Unificar `Puestos.jsx`/`CentrosCosto.jsx` (3.3) | −150 líneas, un solo lugar donde arreglar bugs | 1 h |
-| **4** | 7 | Partir `BancoPreguntas.jsx` (3.2, paso 1) | El corte más barato de los tres archivos grandes | 1-2 h |
-| — | 8 | Decidir qué hacer con `CLAUDE.md` (1.4) y la duplicación entre READMEs (3.4) | Es una decisión, no una tarea — conviene charlarla antes de mover 59 KB, y la sesión 1 la volvió más urgente (ver 1.4) | — |
-| — | 9 | Partir `TrainingModules.jsx` y `ReglasAsignacion.jsx` (3.2, pasos 2-3) | Vale la pena, pero recién cuando haya que tocarlos por otra cosa | 3-4 h |
+| **3** | 1 | `lint` sin `--fix` + job de CI para la tablet (4.1, 4.2) | Dos problemas conocidos con un arreglo cada uno. **El del `--fix` es el más importante que queda**: hoy el lint del backend no puede fallar el CI | 30 min |
+| **3** | 2 | El warning de `BancoPreguntas.jsx:948` (4.5) | Es el único de los dos frontends | 10 min |
+| **4** | 3 | Unificar `Puestos.jsx`/`CentrosCosto.jsx` (3.3) | −150 líneas, un solo lugar donde arreglar bugs | 1 h |
+| **4** | 4 | Partir `BancoPreguntas.jsx` (3.2, paso 1) | El corte más barato de los tres archivos grandes | 1-2 h |
+| — | 5 | Decidir qué hacer con `CLAUDE.md` (1.4) y la duplicación entre READMEs (3.4) | Es una decisión, no una tarea — conviene charlarla antes de mover 59 KB, y la sesión 1 la volvió más urgente (ver 1.4) | — |
+| — | 6 | Partir `TrainingModules.jsx` y `ReglasAsignacion.jsx` (3.2, pasos 2-3) | Vale la pena, pero recién cuando haya que tocarlos por otra cosa | 3-4 h |
 
-Las sesiones 2 y 3 son mecánicas. En la 4 conviene ir de a un commit por ítem, con el lint y el build corriendo entre medio, y la verificación visual de las pantallas tocadas queda del lado del usuario (convención del proyecto).
+La sesión 3 es mecánica. En la 4 conviene ir de a un commit por ítem, con el lint y el build corriendo entre medio, y la verificación visual de las pantallas tocadas queda del lado del usuario (convención del proyecto).
