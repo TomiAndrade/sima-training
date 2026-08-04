@@ -37,7 +37,10 @@ src/
 │   ├── data/              training-modules.js · training-assignments.js · evaluations.js
 │   │                     (mock; hoy solo alimentan Dashboard y Resumen)
 │   ├── components/        BancoPreguntas.jsx  (banco/asignación de preguntas,
-│   │                     compartido entre Preguntas y Módulos) · bancoModulo.jsx
+│   │                     compartido entre Preguntas y Módulos) ·
+│   │                     CriteriosPanel.jsx  ("qué evalúa este módulo":
+│   │                     los criterios base+nivel de la versión en edición) ·
+│   │                     bancoModulo.jsx
 │   └── pages/             Overview.jsx (mock) · TrainingModules.jsx · Questions.jsx ·
 │                          BasesConocimiento.jsx · ReglasAsignacion.jsx ·
 │                          TrainingAssignments.jsx  (los cinco últimos, 100% backend)

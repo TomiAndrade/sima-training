@@ -47,6 +47,14 @@ npx prisma migrate dev           # crea las tablas
 npx prisma db seed               # organización interna + módulos base
 npm run start:dev                # → http://localhost:3000
 
+# (opcional) escenario de demo navegable de punta a punta, en vez del seed base:
+#   PowerShell:  $env:SEED_DEMO='true'; npx prisma db seed
+#   bash:        SEED_DEMO=true npx prisma db seed
+# Siembra organizaciones cliente→subcontratista, alumnos con sus pares
+# puesto/centro, el banco clasificado por base y nivel, un módulo publicado con
+# su número AÑO.MAYOR.MENOR y las asignaciones automáticas que derivan las
+# reglas. Apagado por defecto: son datos de demostración, no estructura.
+
 # 2. Backoffice
 cd TRAINING/sima-training-backoffice
 npm install
@@ -75,7 +83,8 @@ Sidebar global con tres secciones:
 |---|---|
 | Resumen | Métricas operacionales + gráfico SVG de aprobación por módulo + últimas evaluaciones (mock, salvo el StatCard "Módulos activos" que ya es dato real) |
 | Módulos | **100% backend**: tabla de módulos contra `/modulos`, con su ciclo de vida (BORRADOR/ACTIVO/ARCHIVADO) y versionado (`AÑO.MAYOR.MENOR`) |
-| Preguntas | **100% backend**: banco de preguntas contra `/preguntas`, filtros combinables por módulo/texto/papelera, asignación a módulos |
+| Preguntas | **100% backend**: banco de preguntas contra `/preguntas`, filtros combinables por módulo/texto/papelera/clasificación, asignación a módulos |
+| Bases | **100% backend**: la taxonomía del banco contra `/bases-conocimiento`. Cada base es un **tema** ("Gestión de residuos") y adentro define su propia escala **ordinal** de dificultad — la escala es por base a propósito, una puede necesitar 3 niveles y otra 5. Va pegada a Preguntas porque es donde se definen los temas con los que después se clasifica |
 | Reglas | **100% backend**: ABM de `ReglaAsignacion` contra `/reglas-asignacion`, en acordeón por centro de costo. Una regla puede ser por par exacto (puesto, centro) o de centro (todos sus puestos) |
 | Asignaciones | **100% backend**: pantalla de **consulta por persona**, no de acción — las asignaciones las deriva el motor desde las reglas y los pares de cada quien. Muestra vigentes con su origen (AUTOMATICA/MANUAL) y el porqué, más las revocadas en una sección aparte |
 
@@ -121,14 +130,15 @@ Al finalizar, la asignación cambia de `pending → completed` en el estado de l
 sima-training-api/                # Backend NestJS
 ├── prisma/         schema.prisma · seed.ts · migrations/
 └── src/            auth/ · usuarios/ · organizaciones/ · puestos/ · centros-costo/
-                    · etiquetas/ · preguntas/ · modulos/ · asignaciones/ · import/
-                    · storage/ · prisma/ · health/
+                    · bases-conocimiento/ · preguntas/ · modulos/ · asignaciones/
+                    · import/ · storage/ · prisma/ · health/
 
 sima-training-backoffice/src/
 ├── core/
 │   ├── api/        client.js · usuarios.js · organizaciones.js · puestos.js ·
-│   │               centrosCosto.js · preguntas.js · modulos.js · etiquetas.js ·
-│   │               import.js · reglasAsignacion.js · asignaciones.js   # capa HTTP
+│   │               centrosCosto.js · preguntas.js · modulos.js ·
+│   │               basesConocimiento.js · import.js · reglasAsignacion.js ·
+│   │               asignaciones.js   # capa HTTP
 │   ├── data/       clients.js · users.js · usuarios-mock.js (mock, en migración)
 │   ├── components/ ImportUsuariosModal.jsx · ImportPreguntasModal.jsx ·
 │   │               ParesPuestoCentro.jsx · estadoSimilitudBadge.jsx
@@ -136,9 +146,10 @@ sima-training-backoffice/src/
 ├── sima-check/
 │   ├── data/       training-modules.js · training-assignments.js · evaluations.js
 │   │               (mock; hoy solo alimentan Dashboard y Resumen)
-│   ├── components/ BancoPreguntas.jsx · bancoModulo.jsx
+│   ├── components/ BancoPreguntas.jsx · CriteriosPanel.jsx · bancoModulo.jsx
 │   └── pages/      Overview.jsx (mock) · TrainingModules.jsx · Questions.jsx ·
-│                   ReglasAsignacion.jsx · TrainingAssignments.jsx   (los 4, backend)
+│                   BasesConocimiento.jsx · ReglasAsignacion.jsx ·
+│                   TrainingAssignments.jsx   (los 5 últimos, backend)
 ├── pages/          BackofficeLayout.jsx · Dashboard.jsx
 ├── components/     Button · Card · Modal · Table · StatCard · ProgressBar · MultiSelectFilter
 └── hooks/          useNavigation.js
