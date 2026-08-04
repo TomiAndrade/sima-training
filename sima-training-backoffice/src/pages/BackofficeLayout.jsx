@@ -30,10 +30,6 @@ const NAV_SECTIONS = [
       { id: 'sima-check-overview', label: 'SIMA CHECK' },
     ],
   },
-  {
-    header: 'Configuración',
-    items: [],
-  },
 ]
 
 const ALL_NAV_ITEMS = NAV_SECTIONS.flatMap((s) => s.items)
