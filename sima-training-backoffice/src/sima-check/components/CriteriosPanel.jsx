@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import Button from '../../components/Button'
+import Modal from '../../components/Modal'
 import { basesConocimientoApi } from '../../core/api/basesConocimiento'
 import { preguntasApi } from '../../core/api/preguntas'
-import { claveCriterio } from './bancoModulo'
+import { backendTypeBadge, claveCriterio } from './bancoModulo'
 
 // Sección "Qué evalúa este módulo": los ModuloVersionCriterio de la versión en
 // edición. Un criterio es (base de conocimiento, nivel opcional) y declara el
@@ -24,11 +25,13 @@ const CUALQUIER_NIVEL = ''
 // Badge de cuántas preguntas del banco matchea un criterio. En ámbar cuando da
 // cero: no es un error (declarar el tema antes de cargar las preguntas es un
 // flujo válido y el backend lo acepta), pero sí algo que conviene ver.
-function ConteoBadge({ ids }) {
-  if (!Array.isArray(ids)) {
+// Clickeable (con 0 no tiene sentido: no hay nada que listar) — abre el modal
+// con el detalle de esas preguntas via `onVerDetalle`.
+function ConteoBadge({ preguntas, onVerDetalle }) {
+  if (!Array.isArray(preguntas)) {
     return <span className="text-slate-400 text-xs font-mono">contando...</span>
   }
-  const conteo = ids.length
+  const conteo = preguntas.length
   if (conteo === 0) {
     return (
       <span className="px-2 py-0.5 rounded text-[11px] font-semibold border bg-amber-50 text-amber-600 border-amber-200 whitespace-nowrap">
@@ -37,9 +40,13 @@ function ConteoBadge({ ids }) {
     )
   }
   return (
-    <span className="px-2 py-0.5 rounded text-[11px] font-semibold border bg-indigo-50 text-indigo-600 border-indigo-200 whitespace-nowrap">
+    <button
+      type="button"
+      onClick={onVerDetalle}
+      className="px-2 py-0.5 rounded text-[11px] font-semibold border bg-indigo-50 text-indigo-600 border-indigo-200 whitespace-nowrap hover:bg-indigo-100 cursor-pointer"
+    >
       {conteo} pregunta{conteo !== 1 ? 's' : ''}
-    </span>
+    </button>
   )
 }
 
@@ -91,10 +98,12 @@ export default function CriteriosPanel({
   // backend para materializar el pool (activa=true + base + nivel opcional). No
   // hay endpoint de dry-run justamente porque este ya responde lo mismo.
   //
-  // Se guardan los IDS y no un número: dos criterios pueden pisarse ("cualquier
-  // nivel de Seguridad" + "Seguridad-Básico"), y el backend unifica en un Set.
-  // Sumar los conteos por fila daría un total inflado que no coincide con los
-  // pivots que van a quedar.
+  // Se guarda la pregunta entera (id/texto/tipo) y no solo el id: además de
+  // contar, alimenta el modal de detalle (ver `modal` más abajo) sin un
+  // segundo request. Dos criterios pueden pisarse ("cualquier nivel de
+  // Seguridad" + "Seguridad-Básico"), y el backend unifica en un Set — sumar
+  // los conteos por fila daría un total inflado que no coincide con los
+  // pivots que van a quedar (ver `totalPreguntas`).
   const [conteos, setConteos] = useState({})
   const clavesPedidas = useMemo(
     () => criterios.filter((c) => c.baseConocimientoId).map(claveCriterio).join('|'),
@@ -108,7 +117,7 @@ export default function CriteriosPanel({
       completos.map((c) =>
         preguntasApi
           .list({ baseId: c.baseConocimientoId, nivelId: c.nivelId || undefined, activa: true })
-          .then((ps) => [claveCriterio(c), ps.map((p) => p.id)])
+          .then((ps) => [claveCriterio(c), ps.map((p) => ({ id: p.id, texto: p.texto, tipo: p.tipo }))])
           .catch(() => [claveCriterio(c), null]),
       ),
     ).then((pares) => {
@@ -119,6 +128,13 @@ export default function CriteriosPanel({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clavesPedidas, readOnly])
+
+  // Modal de detalle: qué preguntas trae el criterio en el que se clickeó el
+  // conteo. Sólo lectura — no ofrece togglear ni quitar nada desde acá, para
+  // eso está el panel de preguntas asignadas. `modal` arranca en `null` y el
+  // JSX de <Modal> se evalúa igual aunque esté cerrado, así que siempre
+  // `modal?.campo`, nunca `modal.campo`.
+  const [modal, setModal] = useState(null)
 
   const agregarFila = () => {
     onChange([...criterios, { baseConocimientoId: '', nivelId: null }])
@@ -168,8 +184,8 @@ export default function CriteriosPanel({
   const totalPreguntas = useMemo(() => {
     const union = new Set()
     for (const c of criterios) {
-      const ids = conteos[claveCriterio(c)]
-      if (Array.isArray(ids)) ids.forEach((id) => union.add(id))
+      const preguntas = conteos[claveCriterio(c)]
+      if (Array.isArray(preguntas)) preguntas.forEach((p) => union.add(p.id))
     }
     return union.size
   }, [criterios, conteos])
@@ -246,7 +262,18 @@ export default function CriteriosPanel({
                     ))}
                   </select>
                   <div className="flex items-center gap-2 flex-shrink-0">
-                    {c.baseConocimientoId && <ConteoBadge ids={conteos[claveCriterio(c)]} />}
+                    {c.baseConocimientoId && (
+                      <ConteoBadge
+                        preguntas={conteos[claveCriterio(c)]}
+                        onVerDetalle={() =>
+                          setModal({
+                            baseNombre: base?.nombre ?? '—',
+                            nivelNombre: niveles.find((n) => n.id === c.nivelId)?.nombre ?? 'Cualquier nivel',
+                            preguntas: conteos[claveCriterio(c)] ?? [],
+                          })
+                        }
+                      />
+                    )}
                     <Button variant="danger" size="sm" onClick={() => quitarFila(i)}>Quitar</Button>
                   </div>
                 </div>
@@ -267,6 +294,28 @@ export default function CriteriosPanel({
           {incompletos && ' · hay criterios sin tema elegido'}
         </div>
       )}
+
+      <Modal
+        open={!!modal}
+        onClose={() => setModal(null)}
+        title={`${modal?.baseNombre ?? ''} · ${modal?.nivelNombre ?? ''}`}
+        size="lg"
+      >
+        {(modal?.preguntas ?? []).length === 0 ? (
+          <div className="text-center text-slate-400 text-[11px] font-mono uppercase tracking-widest py-4">
+            — Sin preguntas —
+          </div>
+        ) : (
+          <div className="divide-y divide-slate-100 -mx-5">
+            {(modal?.preguntas ?? []).map((p) => (
+              <div key={p.id} className="px-5 py-2.5 flex items-center gap-3">
+                {backendTypeBadge(p.tipo)}
+                <span className="text-slate-700 text-sm flex-1">{p.texto}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </Modal>
     </div>
   )
 }

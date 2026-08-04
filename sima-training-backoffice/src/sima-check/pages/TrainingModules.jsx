@@ -544,12 +544,21 @@ export default function TrainingModules() {
               <div className="flex items-center gap-2">
                 <span className="text-slate-900 font-semibold text-sm">{questionsModule?.nombre}</span>
                 {banco.version && estadoVersionBadge(banco.version.estado)}
-                <span className="text-slate-400 text-xs font-mono">{formatVersionNumero(banco.version)}</span>
+                {/* Sólo si la versión ya tiene número: en un borrador
+                    `formatVersionNumero` cae en el fallback "Borrador" y
+                    duplicaba el badge de al lado. */}
+                {banco.version?.anio != null && (
+                  <span className="text-slate-400 text-xs font-mono">{formatVersionNumero(banco.version)}</span>
+                )}
               </div>
               <div className="text-slate-400 text-[10px] font-mono">{asignadasVista.length} preguntas</div>
             </div>
           </div>
           {!view.readOnly && (
+            /* "Activar" es la acción principal y queda sola a la derecha.
+               Descartar es la acción opuesta: pasa a terciario (ghost) y del
+               otro lado del separador, para que no compitan. El modal de
+               confirmación es el mismo y sigue explicando la consecuencia. */
             <div className="flex items-center gap-2">
               <BancoAcciones
                 backendId={view.moduleId}
@@ -558,9 +567,10 @@ export default function TrainingModules() {
                 onAssignExisting={handleAsignarLocal}
                 onAssignNew={handleNuevaPreguntaLocal}
               />
-              <Button variant="danger" onClick={() => setCancelarBorradorModal(questionsModule)}>
+              <Button variant="ghost" size="sm" onClick={() => setCancelarBorradorModal(questionsModule)}>
                 {questionsModule?.vigente?.estado === 'BORRADOR' ? 'Eliminar módulo' : 'Cancelar borrador'}
               </Button>
+              <div className="w-px h-5 bg-slate-200" />
               <Button onClick={() => { setEsNuevaLineaElegida(false); setActivarError(null); setActivarModal(true) }}>Activar</Button>
             </div>
           )}

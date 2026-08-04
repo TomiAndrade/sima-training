@@ -50,23 +50,62 @@ function ModulosPicker({ options, selectedIds, onChange }) {
   )
 }
 
-// Botones de acción + ambos modales, listos para colocar en el header.
+// Opción del selector de vía: un bloque clickeable grande con título y
+// explicación, en vez de dos botones sueltos que no dicen en qué se diferencian.
+function OpcionAgregar({ titulo, descripcion, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="w-full text-left border border-slate-200 rounded px-4 py-3 hover:border-red-600 hover:bg-slate-50 transition-colors"
+    >
+      <div className="text-slate-900 font-semibold text-sm">{titulo}</div>
+      <div className="text-slate-500 text-xs mt-0.5">{descripcion}</div>
+    </button>
+  )
+}
+
+// Un solo botón "Agregar preguntas" + los dos modales que ya existían, listos
+// para colocar en el header. Antes eran dos botones ("Nueva pregunta" /
+// "Asignar pregunta"): es una sola intención del usuario —sumarle preguntas al
+// módulo— partida en dos, y la diferencia entre ambas (de dónde sale la
+// pregunta) se explica mejor adentro que en dos labels compitiendo.
+// El selector sólo cambia CÓMO se entra: los modales son los mismos y reciben
+// exactamente las mismas props que antes.
 // `onAssignExisting`/`onAssignNew` son opcionales: si se pasan, los modales
 // dejan de pegarle al backend y en cambio le devuelven al padre lo elegido
 // (modo staged — ver TrainingModules.jsx). Sin ellos, comportamiento actual
 // (asignación inmediata + `onChanged` para refrescar).
 export function BancoAcciones({ backendId, assignedIds, baseOrden, onChanged, onAssignExisting, onAssignNew }) {
-  const [assignOpen, setAssignOpen] = useState(false)
-  const [nuevaOpen, setNuevaOpen] = useState(false)
+  // null = cerrado · 'elegir' = selector de vía · 'banco'/'nueva' = el modal.
+  const [modo, setModo] = useState(null)
 
   return (
     <div className="flex items-center gap-2">
-      <Button variant="secondary" onClick={() => setNuevaOpen(true)}>Nueva pregunta</Button>
-      <Button variant="success" onClick={() => setAssignOpen(true)}>Asignar pregunta</Button>
+      <Button variant="success" onClick={() => setModo('elegir')}>Agregar preguntas</Button>
 
-      {assignOpen && (
+      <Modal
+        open={modo === 'elegir'}
+        onClose={() => setModo(null)}
+        title="Agregar preguntas al módulo"
+      >
+        <div className="space-y-2">
+          <OpcionAgregar
+            titulo="Elegir del banco"
+            descripcion="Buscar entre las preguntas que ya existen y sumar las que correspondan."
+            onClick={() => setModo('banco')}
+          />
+          <OpcionAgregar
+            titulo="Crear una pregunta nueva"
+            descripcion="Redactar una pregunta que todavía no está en el banco y sumarla acá."
+            onClick={() => setModo('nueva')}
+          />
+        </div>
+      </Modal>
+
+      {modo === 'banco' && (
         <AsignarPreguntaModal
-          onClose={() => setAssignOpen(false)}
+          onClose={() => setModo(null)}
           backendId={backendId}
           assignedIds={assignedIds}
           baseOrden={baseOrden}
@@ -74,9 +113,9 @@ export function BancoAcciones({ backendId, assignedIds, baseOrden, onChanged, on
           onAssign={onAssignExisting}
         />
       )}
-      {nuevaOpen && (
+      {modo === 'nueva' && (
         <NuevaPreguntaModal
-          onClose={() => setNuevaOpen(false)}
+          onClose={() => setModo(null)}
           backendId={backendId}
           baseOrden={baseOrden}
           onAssigned={onChanged}
@@ -124,86 +163,160 @@ function ImagenEnunciado({ imagen, className = 'w-8 h-8' }) {
   )
 }
 
-export function PreguntasAsignadasPanel({ asignadas, error, onToggle, onRemove, togglingId }) {
+// Fila individual, reusada por las tres pestañas. `porCriterio` decide si se
+// ofrece "Quitar" (nunca para las que trajo un criterio: el backend la rechaza
+// con 409 porque la próxima resolución la vuelve a materializar — la vía es
+// "Desactivar"). `mostrarBadge` es aparte: en la pestaña "Por criterio" todas
+// las filas lo son, así que repetir el badge en cada una no distingue nada.
+function FilaPregunta({ mvp, porCriterio, mostrarBadge, onToggle, onRemove, togglingId }) {
+  const enPapelera = mvp.pregunta.activa === false
   return (
-    <div className="border border-slate-200 rounded bg-white">
-      <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between">
-        <span className="text-slate-500 text-[10px] font-semibold uppercase tracking-widest">
-          Preguntas asignadas desde el banco (backend)
+    <div className={`px-4 py-2.5 flex items-center gap-3 ${mvp.activa === false ? 'opacity-50' : ''}`}>
+      <span className="text-slate-400 text-xs font-mono w-6">{mvp.orden}</span>
+      {backendTypeBadge(mvp.pregunta.tipo)}
+      <ImagenEnunciado imagen={mvp.pregunta.imagen} />
+      <span className="text-slate-700 text-sm line-clamp-1 flex-1">{mvp.pregunta.texto}</span>
+      {porCriterio && mostrarBadge && (
+        <span
+          className="px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-indigo-50 text-indigo-600 flex-shrink-0"
+          title="La trajo un criterio del módulo. Para sacarla de la evaluación, desactivala; para sacar el tema entero, editá los criterios."
+        >
+          Por criterio
         </span>
-        <span className="text-slate-400 text-[10px] font-mono">{asignadas.length}</span>
-      </div>
-      {error && <div className="px-4 py-3 text-red-600 text-xs">{error}</div>}
-      {!error && asignadas.length === 0 && (
-        <div className="px-4 py-6 text-center text-slate-400 text-[11px] font-mono uppercase tracking-widest">
-          — Sin preguntas asignadas todavía —
+      )}
+      {enPapelera ? (
+        <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-amber-50 text-amber-600 flex-shrink-0">
+          En papelera
+        </span>
+      ) : mvp.activa === false && (
+        <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-slate-100 text-slate-400 flex-shrink-0">
+          Inactiva
+        </span>
+      )}
+      {(onToggle || onRemove) && (
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {onToggle && (
+            enPapelera ? (
+              <span className="text-slate-400 text-[11px]">Recuperala desde Preguntas</span>
+            ) : (
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={togglingId === mvp.preguntaId}
+                onClick={() => onToggle(mvp)}
+              >
+                {togglingId === mvp.preguntaId ? '...' : mvp.activa ? 'Desactivar' : 'Activar'}
+              </Button>
+            )
+          )}
+          {onRemove && !porCriterio && (
+            <Button
+              variant="danger"
+              size="sm"
+              disabled={togglingId === mvp.preguntaId}
+              onClick={() => onRemove(mvp)}
+            >
+              {togglingId === mvp.preguntaId ? '...' : 'Quitar'}
+            </Button>
+          )}
         </div>
       )}
-      {asignadas.length > 0 && (
+    </div>
+  )
+}
+
+// Pestaña del panel: label + contador. La activa se marca con el borde inferior
+// rojo, mismo patrón que la barra de tabs de SIMA CHECK en BackofficeLayout.
+function TabPreguntas({ activa, label, cantidad, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`px-4 py-2.5 text-xs font-semibold tracking-wide border-b-2 transition-colors ${
+        activa
+          ? 'border-red-600 text-slate-900'
+          : 'border-transparent text-slate-500 hover:text-slate-700'
+      }`}
+    >
+      {label}
+      <span className="ml-1.5 font-mono text-[10px] text-slate-400">{cantidad}</span>
+    </button>
+  )
+}
+
+// Las asignadas se filtran con tres pestañas — "Todas" (default), "Por
+// criterio" (origen = CRITERIO, las materializó un criterio del módulo) y
+// "Manuales" (origen = MANUAL, elegidas del banco una por una) — para que se
+// pueda ver de dónde vino cada pregunta sin partir la lista en bloques
+// apilados. El badge "Por criterio" por fila sólo se pinta en "Todas", que es
+// donde conviven las dos y hace falta distinguirlas.
+// Numeración: se muestra `mvp.orden` tal cual lo persiste el backend (el mismo
+// en las tres pestañas, no reindexado), porque es el número que gobierna el
+// orden real de la versión.
+export function PreguntasAsignadasPanel({ asignadas, error, onToggle, onRemove, togglingId }) {
+  const [tab, setTab] = useState('todas')
+
+  const ordenadas = [...asignadas].sort((a, b) => a.orden - b.orden)
+  const porCriterio = ordenadas.filter((mvp) => mvp.origen === 'CRITERIO')
+  const manuales = ordenadas.filter((mvp) => mvp.origen !== 'CRITERIO')
+  const visibles = tab === 'criterio' ? porCriterio : tab === 'manuales' ? manuales : ordenadas
+
+  // Texto del vacío según la pestaña: en "Todas" es que el módulo no tiene
+  // ninguna pregunta; en las otras dos, que no tiene de ese origen (pero puede
+  // tener del otro).
+  const vacioTexto =
+    tab === 'criterio'
+      ? '— Ninguna pregunta llegó por un criterio todavía —'
+      : tab === 'manuales'
+        ? '— Ninguna pregunta se agregó a mano —'
+        : '— Sin preguntas asignadas todavía —'
+
+  return (
+    <div className="border border-slate-200 rounded bg-white">
+      <div className="px-4 pt-3 border-b border-slate-200 flex items-end justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-1 -mb-px">
+          <TabPreguntas
+            activa={tab === 'todas'}
+            label="Todas"
+            cantidad={ordenadas.length}
+            onClick={() => setTab('todas')}
+          />
+          <TabPreguntas
+            activa={tab === 'criterio'}
+            label="Por criterio"
+            cantidad={porCriterio.length}
+            onClick={() => setTab('criterio')}
+          />
+          <TabPreguntas
+            activa={tab === 'manuales'}
+            label="Manuales"
+            cantidad={manuales.length}
+            onClick={() => setTab('manuales')}
+          />
+        </div>
+        <span className="text-slate-500 text-[10px] font-semibold uppercase tracking-widest pb-3">
+          Preguntas del módulo
+        </span>
+      </div>
+      {error && <div className="px-4 py-3 text-red-600 text-xs">{error}</div>}
+      {!error && visibles.length === 0 && (
+        <div className="px-4 py-6 text-center text-slate-400 text-[11px] font-mono uppercase tracking-widest">
+          {vacioTexto}
+        </div>
+      )}
+      {visibles.length > 0 && (
         <div className="divide-y divide-slate-100">
-          {[...asignadas]
-            .sort((a, b) => a.orden - b.orden)
-            .map((mvp) => {
-              const enPapelera = mvp.pregunta.activa === false
-              // La trajo un criterio del módulo, no se eligió a mano. "Quitar"
-              // no se ofrece: el backend lo rechaza con 409 porque la próxima
-              // resolución la volvería a materializar. La vía es "Desactivar",
-              // que sí sobrevive a las resoluciones siguientes.
-              const porCriterio = mvp.origen === 'CRITERIO'
-              return (
-                <div key={mvp.preguntaId} className={`px-4 py-2.5 flex items-center gap-3 ${mvp.activa === false ? 'opacity-50' : ''}`}>
-                  <span className="text-slate-400 text-xs font-mono w-6">{mvp.orden}</span>
-                  {backendTypeBadge(mvp.pregunta.tipo)}
-                  <ImagenEnunciado imagen={mvp.pregunta.imagen} />
-                  <span className="text-slate-700 text-sm line-clamp-1 flex-1">{mvp.pregunta.texto}</span>
-                  {porCriterio && (
-                    <span
-                      className="px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-indigo-50 text-indigo-600 flex-shrink-0"
-                      title="La trajo un criterio del módulo. Para sacarla de la evaluación, desactivala; para sacar el tema entero, editá los criterios."
-                    >
-                      Por criterio
-                    </span>
-                  )}
-                  {enPapelera ? (
-                    <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-amber-50 text-amber-600 flex-shrink-0">
-                      En papelera
-                    </span>
-                  ) : mvp.activa === false && (
-                    <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-slate-100 text-slate-400 flex-shrink-0">
-                      Inactiva
-                    </span>
-                  )}
-                  {(onToggle || onRemove) && (
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      {onToggle && (
-                        enPapelera ? (
-                          <span className="text-slate-400 text-[11px]">Recuperala desde Preguntas</span>
-                        ) : (
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            disabled={togglingId === mvp.preguntaId}
-                            onClick={() => onToggle(mvp)}
-                          >
-                            {togglingId === mvp.preguntaId ? '...' : mvp.activa ? 'Desactivar' : 'Activar'}
-                          </Button>
-                        )
-                      )}
-                      {onRemove && !porCriterio && (
-                        <Button
-                          variant="danger"
-                          size="sm"
-                          disabled={togglingId === mvp.preguntaId}
-                          onClick={() => onRemove(mvp)}
-                        >
-                          {togglingId === mvp.preguntaId ? '...' : 'Quitar'}
-                        </Button>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )
-            })}
+          {visibles.map((mvp) => (
+            <FilaPregunta
+              key={mvp.preguntaId}
+              mvp={mvp}
+              porCriterio={mvp.origen === 'CRITERIO'}
+              mostrarBadge={tab === 'todas'}
+              onToggle={onToggle}
+              onRemove={onRemove}
+              togglingId={togglingId}
+            />
+          ))}
         </div>
       )}
     </div>
