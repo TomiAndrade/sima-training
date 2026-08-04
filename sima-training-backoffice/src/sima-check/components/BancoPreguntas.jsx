@@ -945,7 +945,7 @@ export function NuevaPreguntaModal({ onClose, backendId, onAssigned, onAssign })
 // El padre solo la monta mientras está abierta (estado arranca limpio).
 export function EditarModulosModal({ pregunta, onClose, onSaved }) {
   const [modules, setModules] = useState([])
-  const asignaciones = pregunta.modulos ?? []
+  const asignaciones = useMemo(() => pregunta.modulos ?? [], [pregunta.modulos])
   const [selectedModuleIds, setSelectedModuleIds] = useState(
     () => new Set(asignaciones.filter((m) => m.activaEnModulo).map((m) => m.moduloId)),
   )
