@@ -218,7 +218,9 @@ prisma/
 
 ## Despliegue (pendiente)
 
-`Dockerfile` y `render.yaml` están preparados pero **no activos**. Para desplegar a la nube hay que crear la cuenta en Render/Railway y conectar el repo — ver comentarios en [`render.yaml`](render.yaml). El CI (`.github/workflows/ci-sima-training.yml`) corre lint + build + test, sin paso de deploy todavía.
+`Dockerfile` y `render.yaml` están preparados pero **no activos**. Para desplegar a la nube hay que crear la cuenta en Render/Railway y conectar el repo — ver comentarios en [`render.yaml`](render.yaml). El CI (`.github/workflows/ci-sima-training.yml`) corre lint + build + test + un smoke test de `start:prod` (levanta el server contra un Postgres real del job y verifica `/health`), sin paso de deploy todavía.
+
+**Storage al deployar**: va object storage (S3 o Cloudflare R2), no disco persistente — el plan free de Render no ofrece discos, y el contenedor es efímero (cada redeploy borraría `UPLOADS_DIR` con `LocalDiskStorage`). Falta escribir la implementación nueva de `StorageService` (ver `docs/pendientes.md`); el storage está detrás de una interfaz chica así que no toca schema, controllers ni frontend.
 
 ## Decisiones de diseño (Sprint 1)
 
