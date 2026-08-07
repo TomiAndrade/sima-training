@@ -27,7 +27,11 @@ const INITIAL = {
 
 // Agrupa por texto (no por fila): 5 filas con el mismo puesto nuevo comparten
 // una sola decisión, y evita crear el mismo catálogo 2 veces al confirmar.
-const claveGrupo = (tipo, texto) => `${tipo}:${texto.trim().toLowerCase()}`
+// Colapsa espacios internos además de trim+lowercase (mismo criterio que
+// normalizar() del backend) — el Excel real trae variantes como "Operador de
+// Planta" / "Operador de  Planta" (doble espacio) que sin esto generaban
+// grupos separados y arriesgaban crear el mismo puesto duplicado.
+const claveGrupo = (tipo, texto) => `${tipo}:${texto.trim().toLowerCase().replace(/\s+/g, ' ')}`
 
 // Una decisión por grupo de texto no resuelto (duplicada no genera grupo: se
 // resuelve directo con el id del catálogo, sin intervención). Default:
@@ -336,7 +340,7 @@ export default function ImportUsuariosModal({ open, onClose, onImported }) {
               )}
             </div>
             <p className="text-xs text-slate-400">
-              Formato esperado: columnas <strong>DNI · Nombre · Apellido · Puesto · Centro de Costo</strong> (obligatorias) y opcionalmente <strong>Legajo</strong> (encabezados en la primera fila). Todos los usuarios se importan como <strong>Alumno</strong> en la organización elegida arriba — un Excel es siempre de una sola empresa. Puesto y Centro de Costo se resuelven contra el catálogo en el siguiente paso.
+              Formato esperado: columnas <strong>DNI · Nombre · Apellido · Puesto · Centro de Costo</strong> (obligatorias) y opcionalmente <strong>Legajo</strong> (encabezados en la primera fila). También se acepta <strong>Apellido y Nombre</strong> combinados en una sola columna (formato &quot;APELLIDO, Nombre&quot;), y <strong>Dependencia</strong>/<strong>Puesto de Trabajo</strong> como alias de Centro de Costo/Puesto. Si el archivo tiene varias hojas, se usa la que tenga la columna DNI. Todos los usuarios se importan como <strong>Alumno</strong> en la organización elegida arriba — un Excel es siempre de una sola empresa. Puesto y Centro de Costo se resuelven contra el catálogo en el siguiente paso.
             </p>
           </>
         )}
