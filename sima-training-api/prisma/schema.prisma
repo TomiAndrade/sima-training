@@ -17,7 +17,7 @@ enum TipoOrganizacion {
 }
 
 // Rol de la vinculación persona↔organización. Vivió transitoriamente en
-// Usuario hasta que se implementó Vinculacion (ver docs/modelo-vinculacion.md).
+// Usuario hasta que se implementó Vinculacion (ver README.md, Sprint 5).
 enum RolUsuario {
   ADMINISTRADOR
   COORDINADOR
@@ -51,7 +51,7 @@ model Organizacion {
 
 // Usuario: identidad pura de cualquier persona (cuenta de sistema y/o persona
 // evaluada). Rol, organización y clasificación se movieron a Vinculacion
-// (ver docs/modelo-vinculacion.md); acá solo queda lo que identifica
+// (ver README.md, Sprint 5); acá solo queda lo que identifica
 // a la persona en sí.
 model Usuario {
   id       Int     @id @default(autoincrement())
@@ -344,7 +344,7 @@ model CentroCosto {
 // Reemplaza a Usuario.rol/organizacionId y al concepto de "clasificación"
 // (que se elimina: la pertenencia SIMA/CLIENTE/SUBCONTRATISTA se deriva de
 // Organizacion.tipo + organizacionPadreId, no se persiste acá).
-// Ver docs/modelo-vinculacion.md.
+// Ver README.md, Sprint 5.
 model Vinculacion {
   id Int @id @default(autoincrement())
 
@@ -376,7 +376,7 @@ model Vinculacion {
 // que modelaban puesto y centro como ejes independientes: la capacitación obligatoria
 // depende del par ("Soldador en YPF" ≠ "Soldador en PAE"), no de dos listas sueltas.
 // Por eso el mismo puesto en varios centros SÍ es una fila por centro.
-// Ver docs/modelo-vinculacion.md §1.1.
+// Ver README.md, Sprint 5.
 model VinculacionPuestoCentro {
   vinculacionId Int    @map("vinculacion_id")
   puestoId      String @map("puesto_id")
@@ -388,8 +388,10 @@ model VinculacionPuestoCentro {
 
   // Cuál par se muestra como "el" puesto/centro del usuario en listados/tablas.
   // Exactamente UNO en true por vinculación, garantizado por un índice único PARCIAL
-  // (UNIQUE (vinculacion_id) WHERE principal) que vive solo en la migración: Prisma
-  // no puede expresar un @@unique con WHERE.
+  // (UNIQUE (vinculacion_id) WHERE principal AND activo) que vive solo en la migración:
+  // Prisma no puede expresar un @@unique con WHERE. El `activo` del predicado es
+  // load-bearing: sin él, un par principal ya desactivado ocupa el único lugar y
+  // bloquea promover otro. Ver docs/pendientes.md.
   principal Boolean @default(false)
   activo    Boolean @default(true)
 

@@ -36,6 +36,8 @@ Registro vivo de lo que falta. Lista de trabajo, no documento formal — actuali
   | `reglas_asignacion_centro_modulo_sin_puesto` | `puesto_id IS NULL AND deleted_at IS NULL` | `20260729171533:28` |
   | `modulo_version_criterio_base_sin_nivel` | `nivel_id IS NULL` | `20260803142216:78` |
 
+  **Por qué el primero filtra por `activo` y no sólo por `principal`.** Con el predicado corto (`WHERE principal`), un par con `principal = true` y `activo = false` —un *principal fantasma*, un estado que no debería poder existir— seguía ocupando el único lugar disponible y **bloqueaba promover otro par a principal**. Con `principal AND activo`, desactivar el par principal libera el lugar y otro par activo puede tomarlo. Un unique común no sirve en ninguna de las dos formas: sobre `(vinculacion_id)` prohibiría tener más de un par, y sobre `(vinculacion_id, principal)` dejaría pasar N filas con `principal = false`.
+
   **CHECK — hoy es uno:** `preguntas_nivel_requiere_base` (`CHECK (nivel_id IS NULL OR base_conocimiento_id IS NOT NULL)`, migración `20260731143856`). Tapa el agujero de **MATCH SIMPLE**: la FK compuesta `(nivel_id, base_conocimiento_id)` de `preguntas` no se evalúa si alguna columna es NULL, lo cual es deseado para "base cargada, nivel pendiente" pero dejaría pasar el inverso.
 
   **Dos trampas de grep, anotadas para no volver a recontar mal:**

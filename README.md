@@ -107,7 +107,7 @@ Al finalizar, la asignación cambia de `pending → completed` en el estado de l
 
 > **Usuarios, Organizaciones, Puestos, Centros de Costo, Preguntas, Módulos, Reglas y Asignaciones** ya viven en el backend real (PostgreSQL); el seed carga la organización interna (Ingeniería SIMA) y los módulos base, sin datos de prueba. Lo que sigue mockeado en archivos `.js` es **Clientes**, el **Dashboard** y casi todo el **Resumen** de SIMA CHECK.
 >
-> Una persona puede tener **varios pares** (puesto, centro de costo) y debe hacer los módulos que le corresponden por **todos** ellos — el par marcado como `principal` es solo el que se muestra en el listado. Qué roles admite cada tipo de organización lo fija una matriz (`INTERNA` → todos · `CLIENTE` → auditor · `SUBCONTRATISTA` → alumno) que el backend valida tanto en el alta manual como en el import de Excel. Detalle en [`docs/modelo-vinculacion.md`](docs/modelo-vinculacion.md) y en el [README del backend](sima-training-api/README.md).
+> Una persona puede tener **varios pares** (puesto, centro de costo) y debe hacer los módulos que le corresponden por **todos** ellos — el par marcado como `principal` es solo el que se muestra en el listado. Qué roles admite cada tipo de organización lo fija una matriz (`INTERNA` → todos · `CLIENTE` → auditor · `SUBCONTRATISTA` → alumno) que el backend valida tanto en el alta manual como en el import de Excel. Detalle en el [README del backend](sima-training-api/README.md) (Sprint 5).
 >
 > El backoffice ya consume la **forma nueva** de `GET /usuarios`: rol y organización anidados en `vinculacion`, más el ABM de pares puesto/centro. La clasificación se disolvió como concepto y no se persiste en ningún lado.
 
