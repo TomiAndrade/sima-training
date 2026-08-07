@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { RolUsuario, TipoPregunta } from '@prisma/client';
-import { Workbook } from 'exceljs';
+import { Workbook, Worksheet } from 'exceljs';
 import { ModulosService } from '../modulos/modulos.service';
 import { PreguntasService } from '../preguntas/preguntas.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -16,15 +16,22 @@ import { clasificar, normalizar, RefSimilitud, toRef } from './similitud';
 // Sin columnas "rol"/"empresa"/"email": todo usuario importado se crea como
 // ALUMNO en la organización que se elige una sola vez para todo el import
 // (un Excel es siempre de una sola empresa), no por fila.
+// "dependencia"/"puesto de trabajo"/"apellido y nombre" son los headers
+// reales del Excel de nómina de Eduardo (Sprint 07-08, Story 3): dependencia
+// es el nombre de campo que usa la empresa para lo que acá es centro de
+// costo, y apellido+nombre vienen en una sola columna ("APELLIDO, Nombre").
 const COLUMN_MAP_USUARIOS: Record<string, string> = {
   dni: 'dni',
   nombre: 'nombre',
   apellido: 'apellido',
+  'apellido y nombre': 'apellidoNombreTexto',
   legajo: 'datos_legajo',
   puesto: 'puestoTexto',
+  'puesto de trabajo': 'puestoTexto',
   'centro de costo': 'centroCostoTexto',
   'centro costo': 'centroCostoTexto',
   cc: 'centroCostoTexto',
+  dependencia: 'centroCostoTexto',
 };
 
 export interface UsuarioImportData {
@@ -160,13 +167,24 @@ export class ImportService {
       throw new BadRequestException('El archivo debe ser un .xlsx');
     }
 
-    const { sheet, headers, warnings } = await this.parseSheet(file);
+    const { sheet, headers, warnings } = await this.parseSheet(
+      file,
+      COLUMN_MAP_USUARIOS,
+      'dni',
+    );
 
     const colIdx: Record<string, number> = {};
     headers.forEach((h, i) => {
       const key = COLUMN_MAP_USUARIOS[normalizar(h)];
       if (key) colIdx[key] = i;
     });
+    if (
+      colIdx['nombre'] === undefined &&
+      colIdx['apellido'] === undefined &&
+      colIdx['apellidoNombreTexto'] === undefined
+    ) {
+      warnings.push('No se encontró la columna "nombre"/"apellido"');
+    }
     if (colIdx['puestoTexto'] === undefined) {
       warnings.push('No se encontró la columna "puesto"');
     }
@@ -216,8 +234,22 @@ export class ImportService {
       totalRows++;
 
       const dni = getCol(row, 'dni');
-      const nombre = getCol(row, 'nombre');
-      const apellido = getCol(row, 'apellido');
+      let nombre = getCol(row, 'nombre');
+      let apellido = getCol(row, 'apellido');
+      const apellidoNombreTexto = getCol(row, 'apellidoNombreTexto');
+      if ((!nombre || !apellido) && apellidoNombreTexto) {
+        // Header combinado del Excel real ("APELLIDO Y NOMBRE": "OSE, Miriam
+        // Cristina"). Se parte en la primera coma nada más, por si algún
+        // archivo futuro trajera más de una — no se vio ningún caso así en
+        // las 264 filas reales verificadas.
+        const comaIdx = apellidoNombreTexto.indexOf(',');
+        if (comaIdx !== -1) {
+          apellido = apellido || apellidoNombreTexto.slice(0, comaIdx).trim();
+          nombre = nombre || apellidoNombreTexto.slice(comaIdx + 1).trim();
+        } else if (!apellido) {
+          apellido = apellidoNombreTexto.trim();
+        }
+      }
       const legajo = getCol(row, 'datos_legajo') || undefined;
       const puestoTexto = getCol(row, 'puestoTexto');
       const centroCostoTexto = getCol(row, 'centroCostoTexto');
@@ -512,7 +544,17 @@ export class ImportService {
     return { created: creadasIds.length, errors };
   }
 
-  private async parseSheet(file: Express.Multer.File) {
+  // Un Excel puede traer varias hojas (ej. el de nómina de Eduardo: "Listado
+  // de Puestos" + "Nómina de personal") — tomar siempre worksheets[0] leería
+  // la hoja equivocada. Si se pasan columnMap + campoRequerido, elige la
+  // primera hoja cuyo header row (normalizado) resuelva ese campo; si
+  // ninguna lo tiene, cae a la primera hoja igual que antes (con warning
+  // sólo si había más de una hoja entre las que elegir).
+  private async parseSheet(
+    file: Express.Multer.File,
+    columnMap?: Record<string, string>,
+    campoRequerido?: string,
+  ) {
     const workbook = new Workbook();
     try {
       const buffer = file.buffer as unknown as Parameters<
@@ -523,9 +565,24 @@ export class ImportService {
       throw new BadRequestException('No se pudo leer el archivo Excel');
     }
 
-    const sheet = workbook.worksheets[0];
-    if (!sheet || sheet.rowCount === 0) {
+    const hojas = workbook.worksheets.filter((s) => s.rowCount > 0);
+    if (hojas.length === 0) {
       throw new BadRequestException('El archivo no tiene hojas o está vacío');
+    }
+
+    let sheet = hojas[0];
+    let usadoFallback = false;
+    if (columnMap && campoRequerido) {
+      const encontrada = hojas.find((s) =>
+        this.headerRowValues(s).some(
+          (h) => columnMap[normalizar(h)] === campoRequerido,
+        ),
+      );
+      if (encontrada) {
+        sheet = encontrada;
+      } else if (hojas.length > 1) {
+        usadoFallback = true;
+      }
     }
 
     const warnings: string[] = [];
@@ -543,7 +600,21 @@ export class ImportService {
       throw new BadRequestException('La primera fila (encabezados) está vacía');
     }
 
+    if (usadoFallback) {
+      warnings.push(
+        `Ninguna hoja tiene la columna requerida; se usó la primera hoja ("${sheet.name}")`,
+      );
+    }
+
     return { sheet, headers, warnings };
+  }
+
+  private headerRowValues(sheet: Worksheet): string[] {
+    const headers: string[] = [];
+    sheet.getRow(1).eachCell({ includeEmpty: true }, (cell, colNumber) => {
+      headers[colNumber - 1] = this.cellToString(cell.value);
+    });
+    return headers;
   }
 
   private cellToString(value: unknown): string {

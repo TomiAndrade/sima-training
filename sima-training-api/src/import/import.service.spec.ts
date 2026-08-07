@@ -21,6 +21,21 @@ async function nomina(
   return { originalname: 'nomina.xlsx', buffer } as Express.Multer.File;
 }
 
+// Arma un .xlsx con varias hojas — repro del archivo real de Eduardo, que
+// trae "Listado de Puestos" antes que la hoja de nómina.
+async function nominaMultiHoja(
+  hojas: { nombre: string; headers: string[]; filas: string[][] }[],
+): Promise<Express.Multer.File> {
+  const workbook = new Workbook();
+  for (const h of hojas) {
+    const sheet = workbook.addWorksheet(h.nombre);
+    sheet.addRow(h.headers);
+    h.filas.forEach((fila) => sheet.addRow(fila));
+  }
+  const buffer = Buffer.from(await workbook.xlsx.writeBuffer());
+  return { originalname: 'nomina.xlsx', buffer } as Express.Multer.File;
+}
+
 // Catálogo de prueba: scores verificados con similitud.ts (ver import.service.spec.ts
 // history) — 'Soldadr'/'Talle' son typos por encima de UMBRAL_PARECIDA (0.7),
 // 'Amolador'/'Oficina' no se parecen a nada del catálogo.
@@ -227,6 +242,56 @@ describe('ImportService — usuarios', () => {
           'No se encontró la columna "centro de costo"',
         ]),
       );
+    });
+
+    // Sprint 07-08, Story 3: el Excel real de Eduardo trae "Listado de
+    // Puestos" (sin columna dni) antes que "Nómina de personal" — el
+    // preview no puede asumir worksheets[0].
+    it('elige la hoja con columna "dni" cuando el archivo tiene varias hojas', async () => {
+      const file = await nominaMultiHoja([
+        {
+          nombre: 'Listado de Puestos',
+          headers: ['Puesto'],
+          filas: [['Soldador']],
+        },
+        {
+          nombre: 'Nómina de personal',
+          headers,
+          filas: [['30111222', 'Ana', 'Paz', 'Soldador', 'Taller']],
+        },
+      ]);
+
+      const preview = await service.previewUsuarios(file);
+
+      expect(preview.sheetName).toBe('Nómina de personal');
+      expect(preview.filas).toHaveLength(1);
+      expect(preview.filas[0].data.dni).toBe('30111222');
+    });
+
+    it('parsea "Apellido y Nombre" combinado en una sola columna', async () => {
+      const file = await nomina(
+        ['dni', 'apellido y nombre', 'puesto', 'centro de costo'],
+        [['30111222', 'Paz, Ana Maria', 'Soldador', 'Taller']],
+      );
+
+      const preview = await service.previewUsuarios(file);
+
+      expect(preview.filas[0].data).toEqual(
+        expect.objectContaining({ apellido: 'Paz', nombre: 'Ana Maria' }),
+      );
+    });
+
+    it('reconoce "Dependencia" y "Puesto de Trabajo" como alias de centro de costo y puesto', async () => {
+      const file = await nomina(
+        ['dni', 'nombre', 'apellido', 'puesto de trabajo', 'dependencia'],
+        [['30111222', 'Ana', 'Paz', 'Soldador', 'Taller']],
+      );
+
+      const preview = await service.previewUsuarios(file);
+
+      expect(preview.filas[0].estado).toBe('ok');
+      expect(preview.filas[0].puesto?.texto).toBe('Soldador');
+      expect(preview.filas[0].centroCosto?.texto).toBe('Taller');
     });
   });
 
