@@ -1,0 +1,24 @@
+# Node
+node_modules
+npm-debug.log*
+
+# Build output — se regenera adentro de la imagen (RUN npm run build)
+dist
+coverage
+/.nyc_output
+
+# Env — nunca debe viajar en la imagen
+.env
+.env.local
+.env.*.local
+
+# Archivos subidos en local (ver UPLOADS_DIR)
+uploads
+
+# IDEs y editores
+.idea
+.vscode
+
+# Git
+.git
+.gitignore
