@@ -54,4 +54,8 @@ export default defineConfig({
       },
     }),
   ],
+  // para probar la PWA desde una tablet vía túnel HTTPS (cloudflared)
+  preview: {
+    allowedHosts: ['.trycloudflare.com'],
+  },
 })
