@@ -639,6 +639,17 @@ model Sesion {
   // pregunta, que no se reemplaza.
   aprobada         Boolean
 
+  // Idempotencia del POST de la Story 5: la APP genera un UUID por intento, al
+  // EMPEZAR la evaluación — no la sirve el backend al armar el examen. Con
+  // offline la app puede cachear un examen y rendirlo dos veces; una clave que
+  // viniera del examen sería la misma en los dos intentos y el segundo se
+  // perdería en silencio.
+  //
+  // Nullable a propósito: en Postgres un índice único admite varios NULL, así
+  // que las sesiones creadas por otros caminos (seed, futuros endpoints de
+  // backoffice) no quedan obligadas a tener clave.
+  claveIdempotencia String? @unique @map("clave_idempotencia")
+
   usuario       Usuario       @relation(fields: [usuarioId], references: [id])
   moduloVersion ModuloVersion @relation(fields: [moduloVersionId], references: [id])
   asignacion    Asignacion?   @relation(fields: [asignacionId], references: [id], onDelete: Restrict)

@@ -30,7 +30,7 @@ describe('SesionesService.registrar', () => {
       findUnique: jest.Mock;
       update: jest.Mock;
     };
-    sesion: { create: jest.Mock };
+    sesion: { create: jest.Mock; findUnique: jest.Mock };
     $transaction: jest.Mock;
   };
 
@@ -64,13 +64,16 @@ describe('SesionesService.registrar', () => {
         findUnique: jest.fn(),
         update: jest.fn(),
       },
-      sesion: { create: jest.fn() },
+      sesion: { create: jest.fn(), findUnique: jest.fn() },
       $transaction: jest.fn((cb) => cb(prisma)),
     };
 
     // Por defecto: usuario vivo, versión ACTIVA con las 3 preguntas, sin
-    // asignación vigente (los tests que la necesitan la ponen).
+    // asignación vigente (los tests que la necesitan la ponen), y ninguna
+    // sesión previa con la clave de idempotencia (los tests de dedupe la
+    // pisan).
     prisma.usuario.findFirst.mockResolvedValue({ id: 1 });
+    prisma.sesion.findUnique.mockResolvedValue(null);
     prisma.moduloVersion.findUnique.mockResolvedValue({
       id: VERSION,
       moduloId: MODULO,
@@ -234,6 +237,79 @@ describe('SesionesService.registrar', () => {
     expect(prisma.sesion.create.mock.calls[1][0].data.aprobada).toBe(true);
     // Y recién la aprobación completa la asignación.
     expect(prisma.asignacion.update).toHaveBeenCalledTimes(1);
+  });
+
+  // --- Idempotencia (claveIdempotencia) --------------------------------------
+
+  it('con la misma claveIdempotencia, el segundo envío devuelve la sesión existente sin crear otra', async () => {
+    const clave = 'clave-1';
+    const payload = dto(undefined, { claveIdempotencia: clave });
+
+    // 1er envío: no hay ninguna sesión con esa clave todavía.
+    prisma.sesion.findUnique.mockResolvedValueOnce(null);
+    const primera = await service.registrar(payload);
+
+    // 2do envío (reintento): la encuentra y la devuelve tal cual.
+    prisma.sesion.findUnique.mockResolvedValueOnce(primera);
+    const segunda = await service.registrar(payload);
+
+    expect(prisma.sesion.create).toHaveBeenCalledTimes(1);
+    expect(segunda).toBe(primera);
+  });
+
+  it('el reintento deduplicado no vuelve a tocar Asignacion.moduloVersionId', async () => {
+    prisma.asignacion.findFirst.mockResolvedValue({ id: 'a1' });
+    const clave = 'clave-2';
+    const payload = dto(undefined, { claveIdempotencia: clave });
+
+    prisma.sesion.findUnique.mockResolvedValueOnce(null);
+    const primera = await service.registrar(payload);
+    expect(prisma.asignacion.update).toHaveBeenCalledTimes(1);
+
+    prisma.sesion.findUnique.mockResolvedValueOnce(primera);
+    await service.registrar(payload);
+    expect(prisma.asignacion.update).toHaveBeenCalledTimes(1);
+  });
+
+  it('sin claveIdempotencia, dos envíos idénticos crean DOS sesiones', async () => {
+    await service.registrar(dto());
+    await service.registrar(dto());
+    expect(prisma.sesion.create).toHaveBeenCalledTimes(2);
+  });
+
+  it('la búsqueda por clave corre ANTES de las validaciones', async () => {
+    const clave = 'clave-3';
+    const payload = dto(undefined, { claveIdempotencia: clave });
+    const existente = { id: 's-vieja', usuarioId: 1, claveIdempotencia: clave, respuestas: [] };
+    prisma.sesion.findUnique.mockResolvedValueOnce(existente);
+
+    // La versión pasó a BORRADOR: si corriera la validación de nuevo, esto
+    // rechazaría con ConflictException.
+    prisma.moduloVersion.findUnique.mockResolvedValue({
+      id: VERSION,
+      moduloId: MODULO,
+      estado: 'BORRADOR',
+    });
+
+    await expect(service.registrar(payload)).resolves.toBe(existente);
+    expect(prisma.moduloVersion.findUnique).not.toHaveBeenCalled();
+    expect(prisma.sesion.create).not.toHaveBeenCalled();
+  });
+
+  it('rechaza una claveIdempotencia que pertenece a otra persona', async () => {
+    const clave = 'clave-ajena';
+    const payload = dto(undefined, { claveIdempotencia: clave, usuarioId: 1 });
+    prisma.sesion.findUnique.mockResolvedValueOnce({
+      id: 's-de-otro',
+      usuarioId: 999,
+      claveIdempotencia: clave,
+      respuestas: [],
+    });
+
+    await expect(service.registrar(payload)).rejects.toBeInstanceOf(
+      ConflictException,
+    );
+    expect(prisma.sesion.create).not.toHaveBeenCalled();
   });
 
   // --- Rechazos -------------------------------------------------------------

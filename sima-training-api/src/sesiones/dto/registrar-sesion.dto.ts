@@ -71,4 +71,11 @@ export class RegistrarSesionDto {
   @ValidateNested({ each: true })
   @Type(() => RespuestaSesionDto)
   respuestas!: RespuestaSesionDto[];
+
+  // UUID que genera la APP al empezar el intento (ver el comentario de Sesion
+  // en el schema) — no lo genera el backend. Ausente = sesión no-idempotente
+  // (seed, futuros endpoints de backoffice).
+  @IsOptional()
+  @IsUUID('4')
+  claveIdempotencia?: string;
 }
