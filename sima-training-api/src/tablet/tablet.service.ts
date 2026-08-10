@@ -1,13 +1,27 @@
 import {
+  ConflictException,
   Injectable,
+  NotFoundException,
   NotImplementedException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService, JwtSignOptions } from '@nestjs/jwt';
+import { TipoPregunta } from '@prisma/client';
 import { AsignacionesService } from '../asignaciones/asignaciones.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { resolverUrlImagen } from '../storage/url-imagen';
 import { LoginTabletDto } from './dto/login-tablet.dto';
+import { sortear } from './sorteo';
+
+// Cuántas preguntas sortea un examen. Hoy replica el 3 que hardcodea la app
+// tablet MOCKEADA (pickRandomQuestions en sima-check-app). Con
+// ModuloVersionCriterio el pool de una versión puede ser mucho más grande, y 3
+// puede quedar corto para certificar seguridad de verdad — queda anotado en
+// docs/pendientes.md como candidato a columna por módulo (o por criterio,
+// junto con la `cantidadPreguntas` que tampoco se resolvió). No se resuelve
+// acá: esta story es conectar la tablet, no rediseñar el sorteo.
+export const PREGUNTAS_POR_EXAMEN = 3;
 
 @Injectable()
 export class TabletService {
@@ -107,4 +121,121 @@ export class TabletService {
         };
       });
   }
+
+  // El examen de un módulo: sortea PREGUNTAS_POR_EXAMEN preguntas de la
+  // versión ACTIVO y las serializa sin `respuestaCorrecta` — ver
+  // serializarPregunta().
+  async examen(moduloId: string) {
+    const modulo = await this.prisma.modulo.findUnique({
+      where: { id: moduloId },
+      select: {
+        id: true,
+        nombre: true,
+        descripcion: true,
+        activo: true,
+        // A lo sumo una versión ACTIVO por módulo (regla de negocio del
+        // versionado, mismo criterio que pendientes()).
+        versiones: {
+          where: { estado: 'ACTIVO' },
+          select: { id: true, anio: true, mayor: true, menor: true },
+        },
+      },
+    });
+    if (!modulo || !modulo.activo) {
+      throw new NotFoundException(`El módulo ${moduloId} no existe`);
+    }
+
+    const version = modulo.versiones[0];
+    if (!version) {
+      // Cubre tanto "nunca se publicó" (sólo BORRADOR) como "se archivó entre
+      // que la persona cargó la lista de pendientes y tocó el botón".
+      throw new ConflictException(
+        `El módulo ${moduloId} no tiene ninguna versión publicada para rendir`,
+      );
+    }
+
+    // Filtra por `activa: true` en el PIVOT y en la PREGUNTA — a propósito
+    // ASIMÉTRICO con SesionesService.registrar(), que no filtra por `activa`
+    // en ninguno de los dos. Ahí una baja posterior no puede invalidar una
+    // rendición ya hecha; acá es al revés: no tiene sentido servir un examen
+    // nuevo con una pregunta que un admin ya desactivó o mandó a papelera. No
+    // "arreglar" ninguno de los dos para que coincidan — son momentos
+    // distintos (servir vs. corregir) con la respuesta correcta distinta.
+    const pivots = await this.prisma.moduloVersionPregunta.findMany({
+      where: {
+        moduloVersionId: version.id,
+        activa: true,
+        pregunta: { activa: true },
+      },
+      select: {
+        pregunta: {
+          // Nunca se selecciona `respuestaCorrecta`: la garantía de que no
+          // viaja al cliente no depende de que serializarPregunta() la
+          // descarte bien, depende de que ni siquiera esté en el objeto.
+          select: {
+            id: true,
+            texto: true,
+            tipo: true,
+            imagen: true,
+            opciones: true,
+          },
+        },
+      },
+    });
+    if (!pivots.length) {
+      throw new ConflictException(
+        `El módulo ${moduloId} no tiene preguntas activas para rendir`,
+      );
+    }
+
+    // Menos preguntas activas que PREGUNTAS_POR_EXAMEN no es un error: un
+    // módulo con 2 preguntas es raro pero rendible. sortear() ya devuelve
+    // "las que haya" cuando n supera el tamaño del pool.
+    const elegidas = sortear(
+      pivots.map((p) => p.pregunta),
+      PREGUNTAS_POR_EXAMEN,
+    );
+
+    return {
+      moduloId: modulo.id,
+      moduloVersionId: version.id,
+      modulo: { nombre: modulo.nombre, descripcion: modulo.descripcion },
+      version: { anio: version.anio, mayor: version.mayor, menor: version.menor },
+      preguntas: elegidas.map(serializarPregunta),
+    };
+  }
+}
+
+// Traduce una Pregunta del banco a lo que se manda a la tablet. CRÍTICO:
+// `respuestaCorrecta` no entra por diseño (ver el select de arriba, que ni
+// siquiera la trae) — todo lo que devuelve esta función se ve abriendo las
+// devtools del examen.
+function serializarPregunta(pregunta: {
+  id: string;
+  texto: string;
+  tipo: TipoPregunta;
+  imagen: string | null;
+  opciones: unknown;
+}) {
+  return {
+    id: pregunta.id,
+    texto: pregunta.texto,
+    tipo: pregunta.tipo,
+    imagen: pregunta.imagen
+      ? { clave: pregunta.imagen, url: resolverUrlImagen(pregunta.imagen) }
+      : null,
+    opciones: serializarOpciones(pregunta.tipo, pregunta.opciones),
+  };
+}
+
+// OPCION_MULTIPLE / VERDADERO_FALSO: el jsonb tal cual (array de strings).
+// OPCIONES_IMAGEN: cada string del jsonb es una CLAVE de storage — se traduce
+// a { clave, url } (la app muestra `url` y manda `clave` de vuelta como
+// respuesta; corregir.ts compara esa clave cruda, no la URL armada).
+function serializarOpciones(tipo: TipoPregunta, opciones: unknown) {
+  const lista = Array.isArray(opciones) ? (opciones as string[]) : [];
+  if (tipo === 'OPCIONES_IMAGEN') {
+    return lista.map((clave) => ({ clave, url: resolverUrlImagen(clave) }));
+  }
+  return lista;
 }

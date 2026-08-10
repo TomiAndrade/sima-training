@@ -1,4 +1,9 @@
-import { NotImplementedException, UnauthorizedException } from '@nestjs/common';
+import {
+  ConflictException,
+  NotFoundException,
+  NotImplementedException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
@@ -11,6 +16,8 @@ describe('TabletService', () => {
   let prisma: {
     usuario: { findFirst: jest.Mock };
     asignacion: { findMany: jest.Mock };
+    modulo: { findUnique: jest.Mock };
+    moduloVersionPregunta: { findMany: jest.Mock };
   };
   let jwt: { sign: jest.Mock };
   let config: { get: jest.Mock };
@@ -20,6 +27,8 @@ describe('TabletService', () => {
     prisma = {
       usuario: { findFirst: jest.fn() },
       asignacion: { findMany: jest.fn() },
+      modulo: { findUnique: jest.fn() },
+      moduloVersionPregunta: { findMany: jest.fn() },
     };
     jwt = { sign: jest.fn().mockReturnValue('fake.jwt.token') };
     // Sin TABLET_LOGIN_SIN_PIN configurada = default 'true' (login sin PIN
@@ -162,5 +171,149 @@ describe('TabletService', () => {
   it('un usuario sin asignaciones devuelve un array vacío, no un error', async () => {
     prisma.asignacion.findMany.mockResolvedValue([]);
     await expect(service.pendientes(7)).resolves.toEqual([]);
+  });
+
+  // --- examen ---------------------------------------------------------------
+
+  const moduloRow = (overrides: Record<string, unknown> = {}) => ({
+    id: 'mod-1',
+    nombre: 'SIMA Básico',
+    descripcion: 'Módulo base',
+    activo: true,
+    versiones: [{ id: 'v1', anio: 2026, mayor: 1, menor: 0 }],
+    ...overrides,
+  });
+
+  const preguntaRow = (overrides: Record<string, unknown> = {}) => ({
+    id: 'p1',
+    texto: '¿Usa arnés?',
+    tipo: 'VERDADERO_FALSO',
+    imagen: null,
+    opciones: ['Verdadero', 'Falso'],
+    ...overrides,
+  });
+
+  const mockPivots = (preguntas: Record<string, unknown>[]) =>
+    prisma.moduloVersionPregunta.findMany.mockResolvedValue(
+      preguntas.map((pregunta) => ({ pregunta })),
+    );
+
+  it('rechaza un módulo inexistente', async () => {
+    prisma.modulo.findUnique.mockResolvedValue(null);
+    await expect(service.examen('mod-x')).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+  });
+
+  it('rechaza un módulo dado de baja (activo: false)', async () => {
+    prisma.modulo.findUnique.mockResolvedValue(moduloRow({ activo: false }));
+    await expect(service.examen('mod-1')).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+  });
+
+  it('rechaza un módulo sin versión ACTIVO', async () => {
+    prisma.modulo.findUnique.mockResolvedValue(moduloRow({ versiones: [] }));
+    await expect(service.examen('mod-1')).rejects.toBeInstanceOf(
+      ConflictException,
+    );
+    expect(prisma.moduloVersionPregunta.findMany).not.toHaveBeenCalled();
+  });
+
+  it('devuelve exactamente PREGUNTAS_POR_EXAMEN preguntas cuando hay más', async () => {
+    prisma.modulo.findUnique.mockResolvedValue(moduloRow());
+    mockPivots([
+      preguntaRow({ id: 'p1' }),
+      preguntaRow({ id: 'p2' }),
+      preguntaRow({ id: 'p3' }),
+      preguntaRow({ id: 'p4' }),
+      preguntaRow({ id: 'p5' }),
+    ]);
+
+    const res = await service.examen('mod-1');
+
+    expect(res.preguntas).toHaveLength(3);
+  });
+
+  it('devuelve las que haya cuando hay menos de PREGUNTAS_POR_EXAMEN', async () => {
+    prisma.modulo.findUnique.mockResolvedValue(moduloRow());
+    mockPivots([preguntaRow({ id: 'p1' }), preguntaRow({ id: 'p2' })]);
+
+    const res = await service.examen('mod-1');
+
+    expect(res.preguntas).toHaveLength(2);
+  });
+
+  it('rechaza con Conflict un módulo sin ninguna pregunta activa', async () => {
+    prisma.modulo.findUnique.mockResolvedValue(moduloRow());
+    mockPivots([]);
+
+    await expect(service.examen('mod-1')).rejects.toBeInstanceOf(
+      ConflictException,
+    );
+  });
+
+  it('el where del sorteo excluye pivots inactivos y preguntas en papelera global', async () => {
+    prisma.modulo.findUnique.mockResolvedValue(moduloRow());
+    mockPivots([preguntaRow()]);
+
+    await service.examen('mod-1');
+
+    expect(prisma.moduloVersionPregunta.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          moduloVersionId: 'v1',
+          activa: true,
+          pregunta: { activa: true },
+        },
+      }),
+    );
+  });
+
+  it('respuestaCorrecta nunca aparece en el JSON servido, ni aunque el objeto la traiga colada', async () => {
+    prisma.modulo.findUnique.mockResolvedValue(moduloRow());
+    // Simula un select mal armado que trajera el campo de más: la garantía
+    // tiene que sostenerse igual en la serialización, no sólo en el select.
+    mockPivots([
+      preguntaRow({ respuestaCorrecta: 'SECRETO-QUE-NO-DEBE-VIAJAR' }),
+    ]);
+
+    const res = await service.examen('mod-1');
+
+    expect(JSON.stringify(res)).not.toContain('SECRETO-QUE-NO-DEBE-VIAJAR');
+  });
+
+  it('OPCIONES_IMAGEN devuelve { clave, url } con la url prefijada', async () => {
+    prisma.modulo.findUnique.mockResolvedValue(moduloRow());
+    mockPivots([
+      preguntaRow({
+        tipo: 'OPCIONES_IMAGEN',
+        imagen: 'preguntas/enunciado.png',
+        opciones: ['preguntas/a.png', 'preguntas/b.png'],
+      }),
+    ]);
+
+    const res = await service.examen('mod-1');
+
+    expect(res.preguntas[0].imagen).toEqual({
+      clave: 'preguntas/enunciado.png',
+      url: '/uploads/preguntas/enunciado.png',
+    });
+    expect(res.preguntas[0].opciones).toEqual([
+      { clave: 'preguntas/a.png', url: '/uploads/preguntas/a.png' },
+      { clave: 'preguntas/b.png', url: '/uploads/preguntas/b.png' },
+    ]);
+  });
+
+  it("una ruta legacy ('/images/x.png') se devuelve sin prefijar", async () => {
+    prisma.modulo.findUnique.mockResolvedValue(moduloRow());
+    mockPivots([preguntaRow({ imagen: '/images/cartel.png' })]);
+
+    const res = await service.examen('mod-1');
+
+    expect(res.preguntas[0].imagen).toEqual({
+      clave: '/images/cartel.png',
+      url: '/images/cartel.png',
+    });
   });
 });

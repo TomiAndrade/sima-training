@@ -4,6 +4,7 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  Param,
   Post,
   UseGuards,
 } from '@nestjs/common';
@@ -27,5 +28,15 @@ export class TabletController {
   @UseGuards(TabletAuthGuard)
   pendientes(@UsuarioTablet() usuarioId: number) {
     return this.tablet.pendientes(usuarioId);
+  }
+
+  // TabletAuthGuard exige un alumno autenticado, pero el usuarioId no se usa
+  // para personalizar la respuesta: el contenido del examen es el mismo para
+  // cualquiera que rinda esa versión del módulo. El guard acá es sólo "hace
+  // falta estar logueado en la tablet", no "es tuyo".
+  @Get('modulos/:moduloId/examen')
+  @UseGuards(TabletAuthGuard)
+  examen(@Param('moduloId') moduloId: string) {
+    return this.tablet.examen(moduloId);
   }
 }
