@@ -66,7 +66,7 @@ export default function App() {
       style={{ backgroundImage: "url('/SIMACHECK-FONDO.png')", backgroundSize: 'cover', backgroundPosition: 'center' }}
     >
       <div className="relative z-10 w-full flex flex-col items-center justify-center gap-5">
-        <img src="/logo.png" alt="SIMA CHECK" className="h-16 w-auto object-contain drop-shadow-md" />
+        <img src="/SIMA_CHECK-logo.png" alt="SIMA CHECK" className="h-16 w-auto object-contain drop-shadow-md" />
         {step === STEPS.usuario && (
           <UsuarioSelection onSelect={(u) => { setUsuario(u); setStep(STEPS.module) }} />
         )}
