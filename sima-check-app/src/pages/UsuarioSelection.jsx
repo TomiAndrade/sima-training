@@ -1,26 +1,47 @@
 import { useState } from 'react'
-import { usuarios } from '../data/usuarios'
+import { tabletApi } from '../core/api/tablet'
+import { setToken } from '../core/api/client'
 
 export default function UsuarioSelection({ onSelect }) {
   const [dni, setDni] = useState('')
   const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     const trimmed = dni.trim()
     if (!trimmed) {
       setError('Ingresá tu DNI para continuar.')
       return
     }
-    const usuario = usuarios.find((u) => u.dni === trimmed)
-    if (!usuario) {
-      setError('No se encontró ningún usuario con ese DNI. Verificá el número e intentá de nuevo.')
-      return
+
+    setLoading(true)
+    setError('')
+    try {
+      const { access_token, usuario } = await tabletApi.login(trimmed)
+      setToken(access_token)
+      // El login real sólo devuelve id/nombre/apellido — `name` se deriva acá
+      // para que ModuleSelection.jsx (todavía sobre datos mock hasta el
+      // commit 2) siga pudiendo hacer usuario.name.split(' ') sin romperse.
+      onSelect({
+        id: usuario.id,
+        nombre: usuario.nombre,
+        apellido: usuario.apellido,
+        name: `${usuario.nombre} ${usuario.apellido}`.trim(),
+      })
+    } catch (err) {
+      if (err.status === 401) {
+        setError('No se encontró ningún usuario con ese DNI. Verificá el número e intentá de nuevo.')
+      } else if (err.status === undefined) {
+        setError('No hay conexión con el servidor. Intentá de nuevo en un momento.')
+      } else {
+        setError('Ocurrió un error inesperado. Intentá de nuevo.')
+      }
+      setLoading(false)
     }
-    onSelect({ id: usuario.id, dni: usuario.dni, name: usuario.name, companyId: usuario.companyId, company: usuario.company })
   }
 
   const handleKeyDown = (e) => {
-    if (e.key === 'Enter') handleSubmit()
+    if (e.key === 'Enter' && !loading) handleSubmit()
   }
 
   return (
@@ -53,9 +74,10 @@ export default function UsuarioSelection({ onSelect }) {
 
         <button
           onClick={handleSubmit}
-          className="w-full bg-red-600 hover:bg-red-700 active:bg-red-800 text-white font-bold text-lg py-4 rounded-xl transition-colors touch-manipulation"
+          disabled={loading}
+          className="w-full bg-red-600 hover:bg-red-700 active:bg-red-800 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-lg py-4 rounded-xl transition-colors touch-manipulation"
         >
-          INGRESAR
+          {loading ? 'INGRESANDO...' : 'INGRESAR'}
         </button>
       </div>
 
