@@ -214,11 +214,13 @@ export class AsignacionesService {
   // módulo", así que aprobar CUALQUIER versión lo cubre. El join reemplaza a
   // desnormalizar moduloId en Sesion.
   //
-  // Sólo lo consume recalcular() en el paso de creación (no en el de revocación:
-  // un módulo aprobado que una regla sigue pidiendo no se revoca, sólo no se
-  // re-crea). Ojo con el `client`: el default es this.prisma para el uso suelto,
-  // pero recalcularEnTx le pasa SIEMPRE su `tx`.
-  private async modulosAprobados(
+  // Lo consume recalcular() en el paso de creación (no en el de revocación: un
+  // módulo aprobado que una regla sigue pidiendo no se revoca, sólo no se
+  // re-crea) y TabletService.pendientes() (excluir de la lista lo ya
+  // aprobado). Público por eso — misma lógica y misma firma de `client`. Ojo
+  // con el `client`: el default es this.prisma para el uso suelto, pero
+  // recalcularEnTx le pasa SIEMPRE su `tx`.
+  async modulosAprobados(
     usuarioId: number,
     client: Prisma.TransactionClient | PrismaService = this.prisma,
   ): Promise<Set<string>> {
