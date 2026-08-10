@@ -68,15 +68,17 @@ El mapeo de columnas del import quedó abierto a propósito hasta tener el Excel
 ## Story 4 — Modelar la rendición de evaluaciones
 **Prioridad:** Alta · **Estimación:** 5 pts
 
-Es la entidad que hoy no existe y que bloquea todo lo demás: aprobaciones, informe de usuario, vencimientos, estadísticas. El hueco ya está aislado en `AsignacionesService.modulosAprobados()`.
+Es la entidad que no existía y que bloqueaba todo lo demás: aprobaciones, informe de usuario, vencimientos, estadísticas. El hueco estaba aislado en `AsignacionesService.modulosAprobados()`. **Resuelta** — ver la nota de cierre.
 
 **Tareas:**
-- [ ] Definir el modelo: `Sesion` (o `Intento`) + `Respuesta` por pregunta, con `usuarioId`, `moduloVersionId`, score, aprobado, timestamps
-- [ ] Decidir si se guardan las respuestas individuales o solo el score agregado (afecta directo a las estadísticas por base de conocimiento)
-- [ ] Migración + módulo NestJS nuevo (no cambio transversal)
-- [ ] Implementar `modulosAprobados()` de verdad y verificar que `recalcular()` sigue siendo idempotente
-- [ ] Completar `Asignacion.moduloVersionId` al rendir
-- [ ] Specs de la lógica de aprobación (umbral 70%) y del reintento tras desaprobar
+- [x] Definir el modelo: `Sesion` (o `Intento`) + `Respuesta` por pregunta, con `usuarioId`, `moduloVersionId`, score, aprobado, timestamps
+- [x] Decidir si se guardan las respuestas individuales o solo el score agregado (afecta directo a las estadísticas por base de conocimiento)
+- [x] Migración + módulo NestJS nuevo (no cambio transversal)
+- [x] Implementar `modulosAprobados()` de verdad y verificar que `recalcular()` sigue siendo idempotente
+- [x] Completar `Asignacion.moduloVersionId` al rendir
+- [x] Specs de la lógica de aprobación (umbral 70%) y del reintento tras desaprobar
+
+**Nota de cierre**: se guardan las respuestas individuales (`Respuesta`), no sólo el score — es barato ahora e imposible retroactivamente. Decisiones que ordenaron el resto: la corrección se **persiste** (`correcta`, `aprobada`) en vez de recalcularse contra el banco, y el umbral se **congela** en la fila, así que subirlo mañana no reescribe los certificados viejos. El resultado lo calcula **siempre** el backend: `aprobada`/`porcentaje` no existen en el DTO y la `ValidationPipe` los rechaza con 400 — la corrección local de la tablet es una copia, no la fuente de verdad. Un reintento es una fila más (sin unicidad sobre usuario+versión); "aprobó" es `EXISTS(aprobada)` sobre cualquier versión del módulo, y `Asignacion.moduloVersionId` se completa **sólo al aprobar**, pasando a significar "con qué versión se cumplió la obligación". Aparecieron dos cosas no previstas: `modulosAprobados()` se invocaba sin el cliente transaccional (latente mientras devolvía vacío, real apenas consultó), y `Sesion` es la **cuarta** entidad que deja corta la cadena de borrado de `limpiar()` — cuelga de Usuario, ModuloVersion **y** Asignacion, así que bloqueaba las tres ramas.
 
 ---
 
