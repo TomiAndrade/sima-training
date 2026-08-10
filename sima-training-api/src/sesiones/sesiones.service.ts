@@ -27,6 +27,15 @@ export class SesionesService {
   // sigue vigente (la regla la sigue pidiendo) y recalcular() ya la trata bien — no
   // la re-crea porque está cubierta, y no la revoca porque sigue requerida. Lo que
   // cambia es que a partir de ahora modulosAprobados() la cuenta como aprobada.
+  //
+  // `duplicada` (Story 5, Commit 4): true si esta llamada NO creó una sesión nueva
+  // sino que devolvió una ya existente por claveIdempotencia. Es lo que necesita
+  // TabletController para decidir 200 (deduplicó) vs 201 (creó) sin volver a
+  // consultar nada — el booleano sale del mismo control de flujo que ya distingue
+  // "existía"/"se crea", no es una query nueva ni una segunda fuente de verdad. Se
+  // adjunta con Object.assign (in place) y no con un spread a un objeto nuevo, a
+  // propósito: así la sesión devuelta en un dedupe sigue siendo la MISMA referencia
+  // que la primera vez, que es lo que ya fijan los specs de idempotencia con toBe().
   async registrar(dto: RegistrarSesionDto, actor = 'tablet') {
     try {
       return await this.prisma.$transaction(async (tx) => {
@@ -51,11 +60,12 @@ export class SesionesService {
                 'La clave de idempotencia pertenece a una sesión de otra persona',
               );
             }
-            return existente;
+            return Object.assign(existente, { duplicada: true });
           }
         }
 
-        return this.crearSesion(tx, dto, actor);
+        const sesion = await this.crearSesion(tx, dto, actor);
+        return Object.assign(sesion, { duplicada: false });
       });
     } catch (err) {
       // Backstop de carrera: dos requests concurrentes con la misma clave
@@ -68,7 +78,7 @@ export class SesionesService {
           where: { claveIdempotencia: dto.claveIdempotencia },
           include: { respuestas: true },
         });
-        if (existente) return existente;
+        if (existente) return Object.assign(existente, { duplicada: true });
       }
       throw err;
     }

@@ -10,8 +10,10 @@ import { JwtService, JwtSignOptions } from '@nestjs/jwt';
 import { TipoPregunta } from '@prisma/client';
 import { AsignacionesService } from '../asignaciones/asignaciones.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { SesionesService } from '../sesiones/sesiones.service';
 import { resolverUrlImagen } from '../storage/url-imagen';
 import { LoginTabletDto } from './dto/login-tablet.dto';
+import { RegistrarSesionTabletDto } from './dto/registrar-sesion-tablet.dto';
 import { sortear } from './sorteo';
 
 // Cuántas preguntas sortea un examen. Hoy replica el 3 que hardcodea la app
@@ -30,6 +32,7 @@ export class TabletService {
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
     private readonly asignaciones: AsignacionesService,
+    private readonly sesiones: SesionesService,
   ) {}
 
   // Login PROVISIONAL de la app tablet: sólo DNI, sin PIN. El spike
@@ -202,6 +205,29 @@ export class TabletService {
       modulo: { nombre: modulo.nombre, descripcion: modulo.descripcion },
       version: { anio: version.anio, mayor: version.mayor, menor: version.menor },
       preguntas: elegidas.map(serializarPregunta),
+    };
+  }
+
+  // Registra el resultado de una rendición. Delega TODO en
+  // SesionesService.registrar() (corrección, umbral, idempotencia,
+  // Asignacion.moduloVersionId) — acá no se recalcula ni se reinterpreta
+  // nada de eso, sólo se arma el `usuarioId` (del token, nunca del body, ver
+  // RegistrarSesionTabletDto) y se recorta la respuesta a lo que la pantalla
+  // de Resultado necesita pintar. `duplicada` viaja aparte para que
+  // TabletController decida el status HTTP (200/201) — no forma parte del
+  // body que ve la tablet.
+  async rendir(usuarioId: number, dto: RegistrarSesionTabletDto) {
+    const sesion = await this.sesiones.registrar({ ...dto, usuarioId });
+    return {
+      duplicada: sesion.duplicada,
+      resultado: {
+        sesionId: sesion.id,
+        correctas: sesion.correctas,
+        total: sesion.total,
+        porcentaje: sesion.porcentaje,
+        aprobada: sesion.aprobada,
+        umbralAprobacion: sesion.umbralAprobacion,
+      },
     };
   }
 }

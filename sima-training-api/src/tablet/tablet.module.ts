@@ -1,23 +1,25 @@
 import { Logger, Module, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AsignacionesModule } from '../asignaciones/asignaciones.module';
+import { SesionesModule } from '../sesiones/sesiones.module';
 import { TabletAuthGuard } from './tablet-auth.guard';
 import { TabletController } from './tablet.controller';
 import { TabletService } from './tablet.service';
 
 // Módulo aparte y no un controller en sesiones/: lo que sirve la tablet
-// compone asignaciones + módulos hoy, y sesiones en el próximo commit (el
-// examen), bajo un contrato propio que nunca expone `respuestaCorrecta`. El
-// JwtService sale del AuthModule global (no hace falta importarlo acá) y
-// AuthService/AuthController del backoffice quedan intactos: son el login
-// `type: 'backoffice'`, esto es un mundo aparte.
+// compone asignaciones + módulos + sesiones bajo un contrato propio que nunca
+// expone `respuestaCorrecta`. El JwtService sale del AuthModule global (no
+// hace falta importarlo acá) y AuthService/AuthController del backoffice
+// quedan intactos: son el login `type: 'backoffice'`, esto es un mundo aparte.
 //
 // Importa AsignacionesModule (no ModulosModule: la consulta de módulo +
-// versión ACTIVO de pendientes() va por Prisma directo, mismo criterio que
-// SesionesService con `pregunta`). No hay ciclo: Asignaciones no importa
-// Tablet.
+// versión ACTIVO de pendientes()/examen() va por Prisma directo, mismo
+// criterio que SesionesService con `pregunta`) y SesionesModule (Commit 4:
+// TabletService.rendir() delega TODA la corrección/idempotencia en
+// SesionesService.registrar(), no la reimplementa). No hay ciclo: ni
+// Asignaciones ni Sesiones importan Tablet.
 @Module({
-  imports: [AsignacionesModule],
+  imports: [AsignacionesModule, SesionesModule],
   controllers: [TabletController],
   providers: [TabletService, TabletAuthGuard],
 })

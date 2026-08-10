@@ -9,6 +9,7 @@ import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
 import { AsignacionesService } from '../asignaciones/asignaciones.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { SesionesService } from '../sesiones/sesiones.service';
 import { TabletService } from './tablet.service';
 
 describe('TabletService', () => {
@@ -22,6 +23,7 @@ describe('TabletService', () => {
   let jwt: { sign: jest.Mock };
   let config: { get: jest.Mock };
   let asignaciones: { modulosAprobados: jest.Mock };
+  let sesiones: { registrar: jest.Mock };
 
   beforeEach(async () => {
     prisma = {
@@ -35,6 +37,7 @@ describe('TabletService', () => {
     // habilitado); los tests que necesitan el otro valor lo pisan.
     config = { get: jest.fn().mockReturnValue(undefined) };
     asignaciones = { modulosAprobados: jest.fn().mockResolvedValue(new Set()) };
+    sesiones = { registrar: jest.fn() };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -43,6 +46,7 @@ describe('TabletService', () => {
         { provide: JwtService, useValue: jwt },
         { provide: ConfigService, useValue: config },
         { provide: AsignacionesService, useValue: asignaciones },
+        { provide: SesionesService, useValue: sesiones },
       ],
     }).compile();
 
@@ -315,5 +319,62 @@ describe('TabletService', () => {
       clave: '/images/cartel.png',
       url: '/images/cartel.png',
     });
+  });
+
+  // --- rendir -----------------------------------------------------------
+
+  const dtoRendicion = {
+    moduloVersionId: 'v1',
+    finalizadaEn: new Date('2026-08-10T12:00:00Z'),
+    respuestas: [{ preguntaId: 'p1', respuestaDada: 'V' }],
+  };
+
+  const sesionRow = (overrides: Record<string, unknown> = {}) => ({
+    id: 's1',
+    correctas: 3,
+    total: 3,
+    porcentaje: 100,
+    aprobada: true,
+    umbralAprobacion: 70,
+    duplicada: false,
+    // Campos que SesionesService.registrar() sí devuelve pero que rendir()
+    // NO debe reenviar a la tablet — ver el spec de abajo.
+    respuestas: [{ preguntaId: 'p1', correcta: true, respuestaDada: 'V' }],
+    ...overrides,
+  });
+
+  it('delega en SesionesService.registrar con el usuarioId del TOKEN, no el del dto', async () => {
+    sesiones.registrar.mockResolvedValue(sesionRow());
+
+    await service.rendir(7, dtoRendicion as never);
+
+    expect(sesiones.registrar).toHaveBeenCalledWith({
+      ...dtoRendicion,
+      usuarioId: 7,
+    });
+  });
+
+  it('el happy path no reenvía `respuestas` ni ningún campo de más', async () => {
+    sesiones.registrar.mockResolvedValue(sesionRow());
+
+    const res = await service.rendir(7, dtoRendicion as never);
+
+    expect(res.resultado).toEqual({
+      sesionId: 's1',
+      correctas: 3,
+      total: 3,
+      porcentaje: 100,
+      aprobada: true,
+      umbralAprobacion: 70,
+    });
+    expect(res.resultado).not.toHaveProperty('respuestas');
+  });
+
+  it('propaga `duplicada` tal cual lo devuelve SesionesService.registrar', async () => {
+    sesiones.registrar.mockResolvedValue(sesionRow({ duplicada: true }));
+
+    const res = await service.rendir(7, dtoRendicion as never);
+
+    expect(res.duplicada).toBe(true);
   });
 });

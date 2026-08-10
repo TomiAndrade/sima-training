@@ -6,9 +6,12 @@ import {
   HttpStatus,
   Param,
   Post,
+  Res,
   UseGuards,
 } from '@nestjs/common';
+import { Response } from 'express';
 import { LoginTabletDto } from './dto/login-tablet.dto';
+import { RegistrarSesionTabletDto } from './dto/registrar-sesion-tablet.dto';
 import { TabletAuthGuard, UsuarioTablet } from './tablet-auth.guard';
 import { TabletService } from './tablet.service';
 
@@ -38,5 +41,30 @@ export class TabletController {
   @UseGuards(TabletAuthGuard)
   examen(@Param('moduloId') moduloId: string) {
     return this.tablet.examen(moduloId);
+  }
+
+  // El usuarioId sale del token — NUNCA del body, ver RegistrarSesionTabletDto
+  // (sin ese campo) y el comentario ahí de por qué no alcanza con "aceptarlo y
+  // pisarlo": con un token cualquiera, un usuarioId en el body dejaría rendir
+  // y aprobar en nombre de otra persona.
+  //
+  // 201 si esta llamada CREÓ la sesión, 200 si deduplicó por
+  // claveIdempotencia (ver SesionesService.registrar()). Importa
+  // distinguirlos: es lo que le permite al modo offline (sprint que viene)
+  // saber si su reintento efectivamente hizo algo. Se descartó la alternativa
+  // más simple (200 siempre + `{ duplicada }` en el body): el body es
+  // exactamente lo que la pantalla de Resultado necesita pintar, y sumarle un
+  // campo que sólo sirve para decidir un status HTTP lo ensucia para su único
+  // consumidor real — @Res({ passthrough: true }) alcanza sin tocar eso.
+  @Post('sesiones')
+  @UseGuards(TabletAuthGuard)
+  async rendir(
+    @UsuarioTablet() usuarioId: number,
+    @Body() dto: RegistrarSesionTabletDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const { duplicada, resultado } = await this.tablet.rendir(usuarioId, dto);
+    res.status(duplicada ? HttpStatus.OK : HttpStatus.CREATED);
+    return resultado;
   }
 }
