@@ -8,7 +8,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'prompt',
-      injectRegister: 'auto',
+      injectRegister: null,
       workbox: {
         globPatterns: [
           '**/*.{js,css,html,webmanifest}',

@@ -1,10 +1,12 @@
 import { useState } from 'react'
+import { useRegisterSW } from 'virtual:pwa-register/react'
 import { pickRandomQuestions, calculateScore } from './utils/evaluation'
 import { assignments as initialAssignments } from './data/assignments'
 import UsuarioSelection from './pages/UsuarioSelection'
 import ModuleSelection from './pages/ModuleSelection'
 import Evaluation from './pages/Evaluation'
 import Results from './pages/Results'
+import BannerActualizacion from './components/BannerActualizacion'
 
 const STEPS = { usuario: 'usuario', module: 'module', evaluation: 'evaluation', results: 'results' }
 
@@ -15,6 +17,8 @@ export default function App() {
   const [questions, setQuestions] = useState([])
   const [result, setResult] = useState(null)
   const [assignments, setAssignments] = useState(initialAssignments)
+
+  const { needRefresh: [needRefresh], updateServiceWorker } = useRegisterSW()
 
   const startEvaluation = (mod) => {
     const picked = pickRandomQuestions(mod.questions, 3)
@@ -67,6 +71,9 @@ export default function App() {
     >
       <div className="relative z-10 w-full flex flex-col items-center justify-center gap-5">
         <img src="/SIMA_CHECK-logo.png" alt="SIMA CHECK" className="h-16 w-auto object-contain drop-shadow-md" />
+        {needRefresh && (step === STEPS.usuario || step === STEPS.module) && (
+          <BannerActualizacion onActualizar={() => updateServiceWorker(true)} />
+        )}
         {step === STEPS.usuario && (
           <UsuarioSelection onSelect={(u) => { setUsuario(u); setStep(STEPS.module) }} />
         )}
