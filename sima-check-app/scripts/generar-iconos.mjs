@@ -1,4 +1,4 @@
-import { mkdir } from 'node:fs/promises'
+import { mkdir, stat } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import sharp from 'sharp'
@@ -7,6 +7,8 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const raiz = join(__dirname, '..')
 const origen = join(raiz, 'public', 'SIMA_CHECK-logo.png')
 const carpetaIcons = join(raiz, 'public', 'icons')
+const fondoOrigen = join(raiz, 'public', 'SIMACHECK-FONDO.png')
+const fondoDestino = join(raiz, 'public', 'SIMACHECK-FONDO.webp')
 
 async function generarTransparente(destino, tamanio) {
   await sharp(origen)
@@ -34,6 +36,10 @@ async function generarSobreFondoBlanco(destino, tamanio, proporcionLogo) {
     .toFile(destino)
 }
 
+async function generarFondoWebp() {
+  await sharp(fondoOrigen).webp({ quality: 80 }).toFile(fondoDestino)
+}
+
 async function main() {
   await mkdir(carpetaIcons, { recursive: true })
 
@@ -41,8 +47,11 @@ async function main() {
   await generarTransparente(join(carpetaIcons, 'icon-512.png'), 512)
   await generarSobreFondoBlanco(join(carpetaIcons, 'icon-maskable-512.png'), 512, 0.6)
   await generarSobreFondoBlanco(join(raiz, 'public', 'apple-touch-icon.png'), 180, 0.8)
+  await generarFondoWebp()
 
+  const { size } = await stat(fondoDestino)
   console.log('Íconos generados en public/icons/ y public/apple-touch-icon.png')
+  console.log(`Fondo convertido a public/SIMACHECK-FONDO.webp (${(size / 1024).toFixed(1)} KB)`)
 }
 
 main().catch((err) => {

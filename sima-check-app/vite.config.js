@@ -9,6 +9,17 @@ export default defineConfig({
     VitePWA({
       registerType: 'prompt',
       injectRegister: 'auto',
+      workbox: {
+        globPatterns: [
+          '**/*.{js,css,html,webmanifest}',
+          'icons/*.png',
+          'apple-touch-icon.png',
+          'favicon.svg',
+          'SIMA_CHECK-logo.png',
+          'SIMACHECK-FONDO.webp',
+        ],
+        navigateFallback: 'index.html',
+      },
       manifest: {
         id: '/',
         start_url: '/',

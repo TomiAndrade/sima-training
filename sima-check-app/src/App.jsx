@@ -63,7 +63,7 @@ export default function App() {
   return (
     <div
       className="fixed inset-0 flex items-center justify-center p-4 overflow-hidden"
-      style={{ backgroundImage: "url('/SIMACHECK-FONDO.png')", backgroundSize: 'cover', backgroundPosition: 'center' }}
+      style={{ backgroundImage: "url('/SIMACHECK-FONDO.webp')", backgroundSize: 'cover', backgroundPosition: 'center' }}
     >
       <div className="relative z-10 w-full flex flex-col items-center justify-center gap-5">
         <img src="/SIMA_CHECK-logo.png" alt="SIMA CHECK" className="h-16 w-auto object-contain drop-shadow-md" />
