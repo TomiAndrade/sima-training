@@ -41,3 +41,12 @@ DNI, gateado por la variable de entorno `TABLET_LOGIN_SIN_PIN` (default
 para que quede visible en cada arranque que la autenticación de la tablet es
 interina. El día que las tres preguntas de arriba tengan respuesta, este
 documento se actualiza con el diseño final y el flag deja de tener sentido.
+
+**Story 5 (commit 2):** el login provisional de arriba ya está implementado
+y sirviendo — `POST /tablet/login` valida DNI y emite el token con la
+sesión corta que este documento recomienda para el atril
+(`TABLET_JWT_EXPIRES_IN`, default `2h`). El resto del diseño del flujo con
+PIN completo — PIN hasheado, una entidad `Dispositivo` para enrolar el/los
+atril(es) contra el backend, enrolamiento por QR, rate limiting de
+intentos — sigue sin construir: bloqueado hasta la reunión con Eduardo que
+resuelva las tres preguntas abiertas de arriba.
