@@ -11,6 +11,7 @@ import { OrganizacionesModule } from './organizaciones/organizaciones.module';
 import { PreguntasModule } from './preguntas/preguntas.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { PuestosModule } from './puestos/puestos.module';
+import { SesionesModule } from './sesiones/sesiones.module';
 import { UsuariosModule } from './usuarios/usuarios.module';
 
 @Module({
@@ -29,6 +30,7 @@ import { UsuariosModule } from './usuarios/usuarios.module';
     PuestosModule,
     CentrosCostoModule,
     AsignacionesModule,
+    SesionesModule,
   ],
   controllers: [HealthController],
   providers: [],
