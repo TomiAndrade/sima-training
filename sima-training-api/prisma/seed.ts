@@ -38,18 +38,27 @@ const MODULOS = [
 // RESTRICT salvo dos (ver abajo), así que hay que ir siempre de las hijas a las
 // padres. Antes de agregar una tabla nueva a este orden, grepear el schema
 // entero por FKs hacia el target en vez de asumir que esta cadena está
-// completa: ya falló dos veces por ese motivo.
+// completa: ya falló TRES veces por ese motivo, y el síntoma aparece recién en
+// la SEGUNDA corrida (sobre una base vacía no hay filas hijas que bloqueen nada).
 //
 //   - Asignacion         tiene FK DIRECTA a Usuario (no pasa por Vinculacion),
 //                        así que es su propia rama.
 //   - ReglaAsignacion    tiene FK a Modulo, Puesto y CentroCosto. Faltaba en
 //                        este orden: con reglas cargadas, el modulo.deleteMany()
 //                        de más abajo falla con reglas_asignacion_modulo_id_fkey.
+//   - Sesion/Respuesta   son las MÁS hijas de todas y por eso van primeras.
+//                        Sesion cuelga de Usuario, ModuloVersion Y Asignacion —
+//                        o sea que bloquea las tres ramas de acá abajo, incluida
+//                        la de asignaciones, que hasta ahora arrancaba el orden.
+//                        Respuesta cuelga de Sesion y de Pregunta, así que además
+//                        desbloquea el pregunta.deleteMany() de limpiarDemo().
 //
 // Las dos FK que NO son RESTRICT: Asignacion.moduloVersionId (SET NULL) y la
 // self-FK Organizacion.organizacionPadreId (SET NULL, verificado en el SQL de
 // 20260624033224_init/migration.sql:45 — el .prisma no lo dice).
 async function limpiar() {
+  await prisma.respuesta.deleteMany();
+  await prisma.sesion.deleteMany();
   await prisma.asignacion.deleteMany();
   await prisma.reglaAsignacion.deleteMany();
   await prisma.vinculacionPuestoCentro.deleteMany();
