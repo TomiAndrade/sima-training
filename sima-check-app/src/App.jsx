@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { useRegisterSW } from 'virtual:pwa-register/react'
 import { pickRandomQuestions, calculateScore } from './utils/evaluation'
-import { assignments as initialAssignments } from './data/assignments'
 import UsuarioSelection from './pages/UsuarioSelection'
 import ModuleSelection from './pages/ModuleSelection'
 import Evaluation from './pages/Evaluation'
@@ -16,7 +15,6 @@ export default function App() {
   const [module, setModule] = useState(null)
   const [questions, setQuestions] = useState([])
   const [result, setResult] = useState(null)
-  const [assignments, setAssignments] = useState(initialAssignments)
 
   const { needRefresh: [needRefresh], updateServiceWorker } = useRegisterSW()
 
@@ -30,15 +28,6 @@ export default function App() {
   const finishEvaluation = (answers) => {
     const score = calculateScore(answers, questions)
     setResult(score)
-    if (score.approved) {
-      setAssignments((prev) =>
-        prev.map((a) =>
-          a.usuarioId === usuario.id && a.moduleId === module.id && a.status === 'pending'
-            ? { ...a, status: 'completed' }
-            : a
-        )
-      )
-    }
     setStep(STEPS.results)
   }
 
@@ -80,7 +69,6 @@ export default function App() {
         {step === STEPS.module && (
           <ModuleSelection
             usuario={usuario}
-            assignments={assignments}
             onSelect={startEvaluation}
             onBack={() => setStep(STEPS.usuario)}
           />
