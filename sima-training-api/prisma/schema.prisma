@@ -63,6 +63,7 @@ model Usuario {
   vinculacion Vinculacion?
 
   asignaciones Asignacion[]
+  sesiones     Sesion[]
 
   // Datos flexibles de nómina (jsonb). Dato de tránsito: los campos que se
   // estabilicen cuando llegue el Excel real se promueven a columnas (§3.4-a).
@@ -145,15 +146,16 @@ model Pregunta {
   // ya desactivadas muestren el manual que las dejó obsoletas.
   fuente             String?
 
-  base BaseConocimiento? @relation(fields: [baseConocimientoId], references: [id], onDelete: Restrict)
+  base  BaseConocimiento? @relation(fields: [baseConocimientoId], references: [id], onDelete: Restrict)
   // FK COMPUESTA: con esto la base de datos garantiza que el nivel pertenece a
   // la base de la pregunta, sin chequeo en el service. Corre bajo MATCH SIMPLE,
   // así que con nivel_id NULL no se evalúa — eso es deseado ("base cargada,
   // nivel pendiente"). El caso inverso (nivel sin base) lo tapa un CHECK
   // escrito a mano en la migración, que Prisma no conoce.
-  nivel NivelBase? @relation(fields: [nivelId, baseConocimientoId], references: [id, baseConocimientoId], onDelete: Restrict)
+  nivel NivelBase?        @relation(fields: [nivelId, baseConocimientoId], references: [id, baseConocimientoId], onDelete: Restrict)
 
-  versiones ModuloVersionPregunta[]
+  versiones  ModuloVersionPregunta[]
+  respuestas Respuesta[]
 
   // Trazabilidad
   createdAt DateTime @default(now()) @map("created_at")
@@ -177,9 +179,9 @@ model Pregunta {
 // 2026") está descartado: parte las estadísticas justo en el eje que se quiere
 // medir. El año/revisión sale de `fuente`, nunca del nombre.
 model BaseConocimiento {
-  id     String  @id @default(uuid())
-  nombre String  @unique @db.VarChar(120)
-  codigo String? @unique @db.VarChar(20)
+  id          String  @id @default(uuid())
+  nombre      String  @unique @db.VarChar(120)
+  codigo      String? @unique @db.VarChar(20)
   // Qué entra y qué no en esta base. No es decorativo: es lo que permite
   // decidir sin dudar a cuál de dos bases parecidas va una pregunta nueva.
   descripcion String?
@@ -187,11 +189,11 @@ model BaseConocimiento {
   // Rev. 4 — 03/2026"). Se copia a Pregunta.fuente al crear una pregunta y ahí
   // queda congelada: la base dice de dónde sale el temario hoy, la pregunta de
   // dónde salió ella.
-  fuente String?
-  color  String? @db.VarChar(7)
+  fuente      String?
+  color       String? @db.VarChar(7)
   // Orden de display del catálogo (alfabético rara vez es el útil).
-  orden  Int?
-  activa Boolean @default(true)
+  orden       Int?
+  activa      Boolean @default(true)
 
   niveles   NivelBase[]
   preguntas Pregunta[]
@@ -226,7 +228,7 @@ model NivelBase {
   // service — reindexa toda la escala en dos pasadas.
   orden              Int
 
-  base      BaseConocimiento @relation(fields: [baseConocimientoId], references: [id], onDelete: Restrict)
+  base      BaseConocimiento        @relation(fields: [baseConocimientoId], references: [id], onDelete: Restrict)
   preguntas Pregunta[]
   criterios ModuloVersionCriterio[]
 
@@ -293,6 +295,7 @@ model ModuloVersion {
   preguntas    ModuloVersionPregunta[]
   criterios    ModuloVersionCriterio[]
   asignaciones Asignacion[]
+  sesiones     Sesion[]
 
   // Trazabilidad
   createdAt DateTime @default(now()) @map("created_at")
@@ -409,13 +412,13 @@ model VinculacionPuestoCentro {
 
 // Pivot ModuloVersion <-> Pregunta (N a N), con orden y obligatoriedad.
 model ModuloVersionPregunta {
-  moduloVersionId String  @map("modulo_version_id")
-  preguntaId      String  @map("pregunta_id")
+  moduloVersionId String         @map("modulo_version_id")
+  preguntaId      String         @map("pregunta_id")
   orden           Int
-  obligatoria     Boolean @default(true)
+  obligatoria     Boolean        @default(true)
   // Baja lógica por módulo: una pregunta no se edita, se desactiva. Solo afecta
   // a este módulo (el banco Pregunta.activa sigue siendo el flag global).
-  activa          Boolean @default(true)
+  activa          Boolean        @default(true)
   // Por qué está esta pregunta en el módulo: la trajo un ModuloVersionCriterio
   // (CRITERIO) o la eligió un admin a mano desde el banco (MANUAL).
   // resolverCriterios() sólo crea/borra las CRITERIO — las MANUAL son las que
@@ -548,8 +551,10 @@ model Asignacion {
   id              String  @id @default(uuid())
   usuarioId       Int     @map("usuario_id")
   moduloId        String  @map("modulo_id")
-  // Se completa RECIÉN al rendir: deja registro de qué versión concreta se evaluó.
-  // Hoy nadie lo completa (la app tablet sigue mockeada).
+  // Con qué versión se CUMPLIÓ esta obligación. Lo completa SesionesService.registrar()
+  // al aprobar — un intento desaprobado no lo toca, y una aprobación posterior sobre
+  // una versión más nueva lo pisa. null = todavía no se cumplió. No es "la última
+  // versión que rindió": eso ya lo guarda cada Sesion por intento.
   moduloVersionId String? @map("modulo_version_id")
 
   origen     OrigenAsignacion @default(AUTOMATICA)
@@ -559,6 +564,7 @@ model Asignacion {
   usuario       Usuario        @relation(fields: [usuarioId], references: [id])
   modulo        Modulo         @relation(fields: [moduloId], references: [id])
   moduloVersion ModuloVersion? @relation(fields: [moduloVersionId], references: [id])
+  sesiones      Sesion[]
 
   // Trazabilidad
   createdAt DateTime @default(now()) @map("created_at")
@@ -573,4 +579,124 @@ model Asignacion {
   // coexistir una asignación revocada vieja + una vigente nueva (recontratación).
   @@index([usuarioId])
   @@map("asignaciones")
+}
+
+// Sesion: UN intento de rendición de una evaluación. Es la entidad que faltaba y
+// que bloqueaba las aprobaciones, el informe de usuario, los vencimientos y las
+// estadísticas por base de conocimiento.
+//
+// Apunta a ModuloVersion y NO a Modulo: un score sólo significa algo contra la
+// versión concreta que se rindió (las preguntas cambian entre versiones).
+//
+// INMUTABLE: es un hecho histórico, no se edita. Por eso no tiene updatedAt/
+// updatedBy — mismo tratamiento que ModuloVersion y ModuloVersionCriterio.
+//
+// Y NO tiene deletedAt, a propósito: borrar —aunque sea lógicamente— una
+// rendición cambia en silencio el historial de aprobación de una persona, y nada
+// en el dominio la borra. Si algún día hace falta anular un intento (sospecha de
+// copia), va como `anuladaAt` al estilo de Asignacion.revocadaAt, con
+// modulosAprobados() filtrándolo — no como un soft-delete.
+model Sesion {
+  id String @id @default(uuid())
+
+  usuarioId       Int     @map("usuario_id")
+  moduloVersionId String  @map("modulo_version_id")
+  // Qué obligación venía a cumplir. Nullable: rendir sin una asignación vigente es
+  // posible (y no debe ser estructuralmente imposible), pero la sesión igual vale.
+  // onDelete EXPLÍCITO porque la relación es opcional: el default de Prisma sería
+  // SetNull y acá desvincularía en silencio la sesión de su obligación. Una
+  // Asignacion no se borra nunca (se revoca), así que Restrict es una red que no
+  // debería dispararse jamás.
+  asignacionId    String? @map("asignacion_id")
+
+  // OJO: iniciadaEn/finalizadaEn son el reloj DEL DISPOSITIVO (los manda la tablet).
+  // Sirven para medir cuánto duró la evaluación y para ordenar los intentos de una
+  // misma tanda, pero NO son autoritativos: con el modo offline el POST llega horas
+  // después y el reloj de la tablet puede estar desfasado o mentido. La fecha
+  // oficial de la rendición —trazabilidad ISO, y la vigencia cuando se implemente—
+  // es `createdAt`, que lo pone el servidor.
+  iniciadaEn   DateTime @default(now()) @map("iniciada_en")
+  finalizadaEn DateTime @map("finalizada_en")
+
+  // Resultado. Lo calcula SIEMPRE el backend (src/sesiones/corregir.ts) a partir de
+  // las respuestas crudas: la tablet corrige local para mostrar el resultado al
+  // instante, pero esa corrección es una copia, no la fuente de verdad. Es una
+  // certificación de seguridad laboral — nadie se aprueba posteando aprobada: true.
+  correctas        Int
+  total            Int
+  // El porcentaje redondeado CON EL QUE SE TOMÓ LA DECISIÓN. Se deriva de
+  // correctas/total, pero el redondeo puede voltear el resultado en el borde y el
+  // registro tiene que decir qué se evaluó, no obligar a reconstruirlo.
+  porcentaje       Int
+  // Umbral CONGELADO en la fila, no leído de una constante al mostrar el resultado:
+  // si mañana se sube de 70 a 80, los certificados viejos siguen diciendo lo que
+  // decían. Hoy sale de UMBRAL_APROBACION_DEFAULT; el día que el umbral sea por
+  // módulo, esta columna ya soporta el cambio sin migrar nada.
+  umbralAprobacion Int     @map("umbral_aprobacion")
+  // La corrección se PERSISTE, no se recalcula. Compararla después contra
+  // Pregunta.respuestaCorrecta haría que un cambio en el banco reescriba el pasado
+  // — mismo criterio que las versiones ARCHIVADO inmutables y que la imagen de una
+  // pregunta, que no se reemplaza.
+  aprobada         Boolean
+
+  usuario       Usuario       @relation(fields: [usuarioId], references: [id])
+  moduloVersion ModuloVersion @relation(fields: [moduloVersionId], references: [id])
+  asignacion    Asignacion?   @relation(fields: [asignacionId], references: [id], onDelete: Restrict)
+
+  respuestas Respuesta[]
+
+  // Trazabilidad
+  createdAt DateTime @default(now()) @map("created_at")
+  createdBy String?  @map("created_by")
+
+  // NO hay unicidad sobre (usuario, moduloVersion): un reintento es simplemente una
+  // fila más. Es la diferencia con Asignacion, donde el índice parcial
+  // asignaciones_usuario_modulo_vigente deja a lo sumo una vigente. "¿Aprobó el
+  // módulo?" es EXISTS(aprobada) sobre cualquier versión de ese módulo, y "¿cuál fue
+  // el último intento?" se ordena por finalizadaEn — las dos derivadas, sin ningún
+  // flag `vigente` que mantener consistente.
+  @@index([usuarioId, aprobada])
+  @@index([moduloVersionId])
+  @@map("sesiones")
+}
+
+// Respuesta: una fila por pregunta contestada dentro de una Sesion.
+//
+// Se guardan las respuestas INDIVIDUALES y no sólo el score agregado, para poder
+// saber en qué pregunta se falla (y así corregir preguntas malas) y para derivar
+// las estadísticas por base de conocimiento. Es barato ahora e imposible
+// retroactivamente.
+//
+// La base y el nivel NO se copian acá: se llegan por join
+// (Respuesta → Pregunta → BaseConocimiento). Desnormalizarlos sería útil sólo si
+// una pregunta pudiera cambiar de base, y hoy Pregunta no tiene endpoint de
+// edición (el único PATCH es el toggle de papelera).
+model Respuesta {
+  id String @id @default(uuid())
+
+  sesionId   String @map("sesion_id")
+  preguntaId String @map("pregunta_id")
+
+  // Lo que contestó la persona. String porque Pregunta.respuestaCorrecta lo es, y
+  // en OPCIONES_IMAGEN la identidad de una opción ES la clave cruda de storage (no
+  // la URL armada). Nullable = no contestó: hoy la tablet obliga a responder, pero
+  // "en blanco" es un estado real y NULL lo dice sin inventar un string centinela.
+  respuestaDada String? @map("respuesta_dada")
+  // Corrección persistida (ver el comentario de Sesion.aprobada).
+  correcta      Boolean
+
+  sesion   Sesion   @relation(fields: [sesionId], references: [id])
+  pregunta Pregunta @relation(fields: [preguntaId], references: [id])
+
+  // Trazabilidad: sólo createdAt. Es hija de un registro inmutable y createdBy
+  // repetiría el de la sesión en cada fila.
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // La misma pregunta no se contesta dos veces en el mismo intento. Sin NULLs de
+  // por medio, así que lo expresa Prisma y NO hace falta un sexto índice parcial
+  // escrito a mano.
+  @@unique([sesionId, preguntaId])
+  // Para "qué preguntas se fallan más" y para el join de estadísticas por base.
+  @@index([preguntaId])
+  @@map("respuestas")
 }
