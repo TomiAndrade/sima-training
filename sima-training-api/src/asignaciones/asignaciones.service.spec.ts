@@ -17,6 +17,12 @@ const vigente = (
   origen: 'AUTOMATICA' | 'MANUAL',
 ) => ({ id, moduloId, origen });
 
+// Sesión aprobada como la lee modulosAprobados: entra por moduloVersionId y sale
+// por moduloId (aprobar CUALQUIER versión cubre el módulo).
+const sesionAprobadaDe = (moduloId: string) => ({
+  moduloVersion: { moduloId },
+});
+
 describe('AsignacionesService.recalcular', () => {
   let service: AsignacionesService;
   let prisma: {
@@ -28,6 +34,7 @@ describe('AsignacionesService.recalcular', () => {
       createMany: jest.Mock;
       updateMany: jest.Mock;
     };
+    sesion: { findMany: jest.Mock };
     $transaction: jest.Mock;
   };
 
@@ -41,12 +48,14 @@ describe('AsignacionesService.recalcular', () => {
         createMany: jest.fn(),
         updateMany: jest.fn(),
       },
+      sesion: { findMany: jest.fn() },
       $transaction: jest.fn((cb) => cb(prisma)),
     };
 
-    // Por defecto: usuario existe, sin vigentes previas.
+    // Por defecto: usuario existe, sin vigentes previas y sin nada aprobado.
     prisma.usuario.findFirst.mockResolvedValue({ id: 1 });
     prisma.asignacion.findMany.mockResolvedValue([]);
+    prisma.sesion.findMany.mockResolvedValue([]);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -196,12 +205,9 @@ describe('AsignacionesService.recalcular', () => {
 
   it('no re-asigna un módulo ya aprobado, pero no revoca su AUTOMATICA si un par lo sigue pidiendo', async () => {
     // m1 ya aprobado; m1 y m2 requeridos por los pares; m1 ya tiene AUTOMATICA.
-    jest
-      .spyOn(
-        service as unknown as { modulosAprobados: () => Promise<Set<string>> },
-        'modulosAprobados',
-      )
-      .mockResolvedValue(new Set(['m1']));
+    // Se maneja por el mock de `sesion` y no espiando modulosAprobados: así el
+    // test ejercita la query de verdad (incluido el join a moduloVersion).
+    prisma.sesion.findMany.mockResolvedValue([sesionAprobadaDe('m1')]);
     prisma.vinculacionPuestoCentro.findMany.mockResolvedValue([
       par('p-soldador', 'c-ypf'),
     ]);
@@ -222,6 +228,86 @@ describe('AsignacionesService.recalcular', () => {
     expect(prisma.asignacion.createMany).toHaveBeenCalledWith({
       data: [expect.objectContaining({ moduloId: 'm2' })],
     });
+    expect(prisma.asignacion.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('sólo cuentan las sesiones APROBADAS: haber rendido y desaprobado no exime', async () => {
+    // El where filtra por aprobada: true, así que la sesión fallida no llega acá —
+    // se maneja el resultado de la query, y se fija el filtro contra el llamado.
+    prisma.sesion.findMany.mockResolvedValue([]);
+    prisma.vinculacionPuestoCentro.findMany.mockResolvedValue([
+      par('p-soldador', 'c-ypf'),
+    ]);
+    prisma.reglaAsignacion.findMany.mockResolvedValue([{ moduloId: 'm1' }]);
+    prisma.asignacion.createMany.mockResolvedValue({ count: 1 });
+
+    const res = await service.recalcular(1);
+
+    // Sin aprobación, el módulo se sigue asignando.
+    expect(res).toEqual({ creadas: 1, revocadas: 0 });
+    expect(prisma.sesion.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { usuarioId: 1, aprobada: true } }),
+    );
+  });
+
+  it('aprobar CUALQUIER versión cubre el módulo entero', async () => {
+    // La sesión es de una versión vieja (ya archivada); la obligación es "este
+    // módulo", así que igual lo cubre.
+    prisma.sesion.findMany.mockResolvedValue([sesionAprobadaDe('m1')]);
+    prisma.vinculacionPuestoCentro.findMany.mockResolvedValue([
+      par('p-soldador', 'c-ypf'),
+    ]);
+    prisma.reglaAsignacion.findMany.mockResolvedValue([{ moduloId: 'm1' }]);
+
+    const res = await service.recalcular(1);
+
+    // No hay vigente de m1 (es la recontratación): aprobado ⇒ no se re-crea.
+    expect(res).toEqual({ creadas: 0, revocadas: 0 });
+    expect(prisma.asignacion.createMany).not.toHaveBeenCalled();
+  });
+
+  it('modulosAprobados lee por el cliente TRANSACCIONAL, no por this.prisma', async () => {
+    // Con el recálculo embebido (ABM de usuarios/reglas) tiene que ver lo mismo que
+    // el resto de la transacción. El `tx` de este test es un objeto DISTINTO del
+    // prisma inyectado: si el service leyera por this.prisma, este sesion.findMany
+    // no se llamaría.
+    const tx = {
+      ...prisma,
+      sesion: {
+        findMany: jest.fn().mockResolvedValue([sesionAprobadaDe('m1')]),
+      },
+    };
+    prisma.vinculacionPuestoCentro.findMany.mockResolvedValue([
+      par('p-soldador', 'c-ypf'),
+    ]);
+    prisma.reglaAsignacion.findMany.mockResolvedValue([{ moduloId: 'm1' }]);
+
+    const res = await service.recalcularEnTx(
+      tx as unknown as Prisma.TransactionClient,
+      1,
+    );
+
+    expect(tx.sesion.findMany).toHaveBeenCalled();
+    expect(prisma.sesion.findMany).not.toHaveBeenCalled();
+    // Y el resultado es el del tx: m1 aprobado ⇒ no se crea.
+    expect(res).toEqual({ creadas: 0, revocadas: 0 });
+  });
+
+  it('sigue siendo idempotente con un módulo ya aprobado: dos corridas no tocan nada', async () => {
+    prisma.sesion.findMany.mockResolvedValue([sesionAprobadaDe('m1')]);
+    prisma.vinculacionPuestoCentro.findMany.mockResolvedValue([
+      par('p-soldador', 'c-ypf'),
+    ]);
+    prisma.reglaAsignacion.findMany.mockResolvedValue([{ moduloId: 'm1' }]);
+    prisma.asignacion.findMany.mockResolvedValue([
+      vigente('a1', 'm1', 'AUTOMATICA'),
+    ]);
+
+    expect(await service.recalcular(1)).toEqual({ creadas: 0, revocadas: 0 });
+    expect(await service.recalcular(1)).toEqual({ creadas: 0, revocadas: 0 });
+    expect(prisma.asignacion.createMany).not.toHaveBeenCalled();
+    // Lo que importa del aprobado: NO se revoca la vigente que la regla sigue
+    // pidiendo (el paso 6 compara contra `requeridos`, sin restarle los aprobados).
     expect(prisma.asignacion.updateMany).not.toHaveBeenCalled();
   });
 

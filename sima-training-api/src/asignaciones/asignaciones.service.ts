@@ -147,8 +147,11 @@ export class AsignacionesService {
       for (const regla of reglas) requeridos.add(regla.moduloId);
     }
 
-    // 3. Módulos ya aprobados (HUECO — hoy vacío, ver modulosAprobados).
-    const aprobados = await this.modulosAprobados(usuarioId);
+    // 3. Módulos que la persona ya aprobó (ver modulosAprobados). Va por `tx`, no
+    //    por this.prisma: cuando el recálculo corre embebido (el ABM de usuarios
+    //    reemplazando pares, el de reglas) tiene que ver lo mismo que el resto de
+    //    la transacción, no una foto de afuera.
+    const aprobados = await this.modulosAprobados(usuarioId, tx);
 
     // 4. Asignaciones vigentes actuales.
     const vigentes = await tx.asignacion.findMany({
@@ -199,18 +202,31 @@ export class AsignacionesService {
     return { creadas: aCrear.length, revocadas: aRevocar.length };
   }
 
-  // HUECO EXPLÍCITO: módulos que el usuario YA APROBÓ. Todavía no existe el
-  // registro de aprobaciones (se modela cuando la app tablet se conecte al
-  // backend y exista el flujo de rendir evaluación). Devuelve vacío por ahora.
-  // Cuando exista la entidad, se llena SOLO acá: recalcular() ya la consume en
-  // el paso de creación, así que la regla "si ya aprobó, no vuelve a tener que
-  // rendir aunque le corresponda por un par nuevo" (una recontratación) queda
-  // cubierta sin reescribir la lógica de recalcular.
-  private async modulosAprobados(usuarioId: number): Promise<Set<string>> {
-    // Todavía no hay a quién consultarle: se ignora el usuarioId a propósito
-    // hasta que exista la entidad de aprobaciones.
-    void usuarioId;
-    return new Set();
+  // Módulos que el usuario YA APROBÓ. Es lo que hace que una recontratación no
+  // obligue a rendir de nuevo algo que la persona ya tenía aprobado.
+  //
+  // Aprobar es un hecho que NO se des-aprueba: alcanza con que exista UNA Sesion
+  // aprobada, sin importar cuántos intentos fallidos haya alrededor ni cuál fue el
+  // último. Si más adelante vuelve a rendir y desaprueba, la aprobación anterior
+  // sigue valiendo — lo que la caduca es la vigencia (Story 8), no un intento malo.
+  //
+  // Se entra por moduloVersionId y se sale por moduloId: la obligación es "este
+  // módulo", así que aprobar CUALQUIER versión lo cubre. El join reemplaza a
+  // desnormalizar moduloId en Sesion.
+  //
+  // Sólo lo consume recalcular() en el paso de creación (no en el de revocación:
+  // un módulo aprobado que una regla sigue pidiendo no se revoca, sólo no se
+  // re-crea). Ojo con el `client`: el default es this.prisma para el uso suelto,
+  // pero recalcularEnTx le pasa SIEMPRE su `tx`.
+  private async modulosAprobados(
+    usuarioId: number,
+    client: Prisma.TransactionClient | PrismaService = this.prisma,
+  ): Promise<Set<string>> {
+    const sesiones = await client.sesion.findMany({
+      where: { usuarioId, aprobada: true },
+      select: { moduloVersion: { select: { moduloId: true } } },
+    });
+    return new Set(sesiones.map((sesion) => sesion.moduloVersion.moduloId));
   }
 
   private async assertUsuarioExiste(
