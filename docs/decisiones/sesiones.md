@@ -18,7 +18,7 @@ Hoy `Pregunta` no tiene endpoint de edición, así que es defensa en profundidad
 
 ## El umbral se congela en la fila
 
-`umbralAprobacion` se persiste por sesión. Hoy sale de `UMBRAL_APROBACION_DEFAULT = 70` en `sesiones/corregir.ts` —el mismo 70 que hardcodea `calculateScore()` de la tablet—, pero no se vuelve a leer al mostrar un resultado viejo: subirlo a 80 mañana **no puede reescribir lo que decían los certificados ya emitidos**. El día que el umbral sea por módulo, la columna ya lo soporta sin migrar.
+`umbralAprobacion` se persiste por sesión. Hoy sale de `UMBRAL_APROBACION_DEFAULT = 70` en `sesiones/corregir.ts`, pero no se vuelve a leer al mostrar un resultado viejo: subirlo a 80 mañana **no puede reescribir lo que decían los certificados ya emitidos**. El día que el umbral sea por módulo, la columna ya lo soporta sin migrar.
 
 Es la decisión **opuesta** a la de `vigenciaMeses`, que se lee viva, y las dos son a propósito: ver [asignaciones.md](./asignaciones.md#vigenciameses-se-lee-vivo-de-modulo-no-se-congela-en-la-sesion).
 
@@ -30,7 +30,9 @@ De `correctas`/`total` saldría solo, pero el redondeo puede voltear el resultad
 
 `RegistrarSesionDto` recibe **sólo respuestas crudas** (`preguntaId` + `respuestaDada`). `correctas` / `total` / `porcentaje` / `aprobada` / el umbral **no existen en el DTO**, y la `ValidationPipe` global de `main.ts` (`whitelist` + `forbidNonWhitelisted`) los rechaza con **400**, no en silencio.
 
-La tablet corrige local para mostrarle el resultado a la persona al instante, pero esa corrección es una **copia**: sin esto, cualquiera con `curl` se aprueba todos los módulos, y es una certificación de seguridad laboral.
+Sin esto, cualquiera con `curl` se aprueba todos los módulos, y es una certificación de seguridad laboral.
+
+La app **no corrige local**: muestra el resultado que devuelve este endpoint, porque el contrato de la tablet nunca le manda `respuestaCorrecta` ([tablet.md](./tablet.md#namespace-y-contrato-propios-no-un-controller-dentro-de-sesiones)). Es lo que hace que el backend sea la única fuente del veredicto, y también lo que deja abierta una pregunta para el modo offline: sin conexión no hay con qué mostrar un score (ver [`../pendientes.md`](../pendientes.md)).
 
 Para que la garantía alcance a los items de `respuestas[]` hacen falta `@ValidateNested({ each: true })` + `@Type()` — **verificado que son load-bearing**: sin ellos la pipe no entra al array y un item cuela campos de más.
 

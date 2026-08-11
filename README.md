@@ -95,11 +95,11 @@ Sidebar global con tres secciones:
 Todas las pantallas son tarjetas blancas (`bg-white border border-slate-200 shadow-2xl`) sobre un fondo claro con imagen de industria de fondo (modo claro, pensado para uso en exteriores Oil & Gas) — no fondo oscuro.
 
 1. **Ingreso por DNI** — campo numérico, validación vacío / no encontrado
-2. **Capacitaciones pendientes** — nombre y empresa de la persona + módulos con `status === 'pending'`
+2. **Capacitaciones pendientes** — nombre y empresa de la persona + lo que devuelve `GET /tablet/pendientes`: sus asignaciones vigentes **sin aprobación**
 3. **Evaluación** — 3 preguntas aleatorias, barra de progreso (avanza al responder), opciones táctiles grandes; V/F con verde/rojo; opción múltiple seleccionada en oscuro; `image-options` en grid 2×2
-4. **Resultado** — score %, badge APROBADO (≥70%) / DESAPROBADO (<70%), botones de acción
+4. **Resultado** — score %, badge APROBADO / DESAPROBADO, botones de acción. **El resultado lo calcula el backend**: la app manda respuestas crudas y recibe el veredicto
 
-Al finalizar, la asignación cambia de `pending → completed` en el estado de la sesión — solo si aprueba.
+Al finalizar, el módulo sale de pendientes sólo si aprobó. No cambia ningún estado: la `Asignacion` sigue vigente y se completa su `moduloVersionId`, así que "pendiente" es *vigente sin aprobación* — ver [`docs/decisiones/sesiones.md`](docs/decisiones/sesiones.md).
 
 ---
 
@@ -158,10 +158,10 @@ sima-training-backoffice/src/
 └── hooks/          useNavigation.js
 
 sima-check-app/src/
-├── data/           usuarios.js · modules.js · assignments.js
-├── components/     Button · ProgressBar · QuestionCard
-├── utils/          evaluation.js (pickRandomQuestions, calculateScore)
-└── pages/          UsuarioSelection · ModuleSelection · Evaluation · Results
+├── core/api/       client.js · tablet.js · imagenes.js   # capa HTTP
+├── components/     Button · ProgressBar · QuestionCard · BannerActualizacion
+├── pages/          UsuarioSelection · ModuleSelection · Evaluation · Results
+└── App.jsx         eleva el estado del flujo y registra el service worker
 ```
 
 ---

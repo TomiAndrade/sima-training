@@ -283,24 +283,25 @@ Todas las pantallas son **tarjetas blancas** (`bg-white border border-slate-200 
 El **logo** (`public/SIMA_CHECK-logo.png`) se renderiza en `App.jsx` encima de la card, visible en todas las pantallas.
 
 1. **Ingreso por DNI** — campo numérico (`inputMode="numeric"`), botón INGRESAR, validaciones: vacío / DNI no encontrado
-2. **Capacitaciones pendientes** — nombre y empresa del empleado + solo módulos con `assignment.status === 'pending'`; lista vertical de botones (`red-600`) con ícono y título; estado vacío si no hay pendientes
+2. **Capacitaciones pendientes** — nombre y empresa de la persona + lo que devuelve `GET /tablet/pendientes`: sus asignaciones **vigentes sin aprobación**; lista vertical de botones (`red-600`) con ícono y título; estado vacío si no hay pendientes
 3. **Evaluación** — 3 preguntas aleatorias del módulo; barra de progreso avanza **al responder** (no al llegar); tipos de pregunta:
    - `truefalse`: 2 botones V/F (verde/rojo)
    - `multiple`: lista vertical, selección en `slate-900`
    - `image-options`: grid 2×2 de imágenes, selección con borde `red-600` + ring
-   - Campo opcional `image` en cualquier pregunta: muestra la imagen del enunciado encima de las opciones (la ejercita la pregunta mock 112). Cuando la app se conecte al backend, `image` va a llegar como la URL armada desde `Pregunta.imagen` — `QuestionCard` no cambia, usa el `src` tal cual
-4. **Resultado** — score %, badge APROBADO (≥70%) / DESAPROBADO (<70%), botones: Mis capacitaciones / Reintentar / Volver al inicio
+   - Campo opcional `imagen` en cualquier pregunta: muestra la imagen del enunciado encima de las opciones. Llega como `{ clave, url }` — `QuestionCard` muestra la `url` y manda la `clave` de vuelta, porque el backend corrige contra la clave cruda de storage
+4. **Resultado** — score %, badge APROBADO / DESAPROBADO, botones: Mis capacitaciones / Reintentar / Volver al inicio. **El resultado lo calcula el backend**, no la app: el POST manda respuestas crudas y devuelve el veredicto
 
-Al finalizar una evaluación, la asignación cambia de `pending → completed` **solo si el empleado aprueba** (≥70%). Si desaprueba, queda `pending` y el módulo sigue apareciendo en la lista.
+Al finalizar, el módulo deja de aparecer en pendientes **sólo si aprobó**. No hay ningún estado que cambie: la `Asignacion` sigue vigente y lo que pasa es que se completa su `moduloVersionId`, así que "pendiente" es *vigente sin aprobación* — ver [decisiones/sesiones.md](docs/decisiones/sesiones.md) y [decisiones/asignaciones.md](docs/decisiones/asignaciones.md). Si desaprueba, el módulo sigue en la lista y puede reintentar; cada intento es una `Sesion` nueva.
 
 ## Datos mockeados
 
+Todos en el **backoffice**; la app tablet ya no tiene ninguno.
+
 - **Clientes**: YPF, Pan American Energy, TotalEnergies, Pluspetrol, Vista Energy
 - **Usuarios**: 8 usuarios con roles `administrador` o `coordinador`
-- **Empleados**: 15 empleados con `id`, `dni`, `name`, `companyId` (y `company` para display en la app)
-- **Módulos de capacitación**: 4 módulos, ~10 preguntas cada uno (incluye preguntas reales de SIMA Avanzado)
+- **UsuarioMock**: 15 personas con `id`, `dni`, `name`, `clientId` — sólo lo consume `Dashboard.jsx`
 - **Evaluaciones**: 20 registros históricos para el dashboard del backoffice
-- **Asignaciones**: 27 asignaciones mockeadas con `status: 'pending' | 'completed' | 'expired'`
+- **Asignaciones**: 27 asignaciones mockeadas con `status: 'pending' | 'completed' | 'expired'` — esos tres estados son **del mock, no del modelo real** (ver la advertencia más arriba)
 
 Las preguntas mock se retiraron del backoffice (`sima-check/data/training-modules.js` quedó con `questions: []`) antes de arrancar el trabajo real sobre el dominio de preguntas; el banco real vive en backend. La **app tablet ya no tiene ningún mock**: `sima-check-app/src/data/` se eliminó al conectarla, y usuarios, módulos y preguntas salen de `/tablet/*`.
 
@@ -362,10 +363,11 @@ sima-training-backoffice/src/
 └── hooks/             useNavigation.js
 
 sima-check-app/src/
-├── data/              usuarios.js · modules.js · assignments.js
-├── components/        Button · ProgressBar · QuestionCard
-├── utils/             evaluation.js (pickRandomQuestions, calculateScore)
-└── pages/             UsuarioSelection · ModuleSelection · Evaluation · Results
+├── core/api/          client.js · tablet.js (login, pendientes, examen,
+│                      registrar resultado) · imagenes.js   # capa HTTP
+├── components/        Button · ProgressBar · QuestionCard · BannerActualizacion
+├── pages/             UsuarioSelection · ModuleSelection · Evaluation · Results
+└── App.jsx            eleva el estado del flujo y registra el service worker
 ```
 
 ## Decisiones de arquitectura
@@ -373,12 +375,11 @@ sima-check-app/src/
 - No se usa react-router intencionalmente.
 - No existe persistencia entre sesiones — todo es estado local en React.
 - **Regla de dependencia**: `sima-check/` puede importar de `core/`. `core/` nunca importa de `sima-check/`. `Dashboard` puede importar de ambos.
-- El estado de `assignments` se eleva a `App.jsx` en la app tablet para permitir actualizaciones reactivas durante la sesión.
+- El estado del flujo de la app tablet (persona, pendiente elegido, examen, respuestas, resultado) se eleva a `App.jsx`: las pantallas son de presentación y no piden datos por su cuenta. Es también el motivo por el que una recarga a mitad de rendir pierde la evaluación, y por el que el banner de actualización no se muestra durante la evaluación (ver [decisiones/tablet.md](docs/decisiones/tablet.md)).
 - Los modales manejan estado local.
 - Los gráficos son SVG puro (sin librerías).
 - Tailwind v3 es obligatorio.
-- El campo `company` (string) se mantiene en el usuario de la app junto a `companyId` para evitar importar `companies.js` en la app tablet.
-- **Los dos frontends nombran la entidad `usuario`, no `employee`** — alineado con el `Usuario` del backend, que unifica `User` + `Employee` (ver arriba). En la **app tablet** alcanza a los archivos (`data/usuarios.js`, `pages/UsuarioSelection.jsx`), al prop que se pasa entre pantallas (`usuario`) y al campo `assignments[].usuarioId`. En el **backoffice**, a `core/data/usuarios-mock.js` (export `usuariosMock`), al campo `trainingAssignments[].usuarioId` y a `evaluations[].usuarioName`. Los duplicados del modelo viejo (`sima-check-app/src/data/employees.js` + `pages/EmployeeSelection.jsx`, `sima-training-backoffice/src/core/data/employees.js`) se eliminaron; quedan en el historial de git. `User` (`core/data/users.js`) **no** entra en este rename: son las cuentas del backoffice (administrador/coordinador), otra cosa.
+- **Los dos frontends nombran la entidad `usuario`, no `employee`** — alineado con el `Usuario` del backend, que unifica `User` + `Employee` (ver arriba). En la **app tablet** alcanza a `pages/UsuarioSelection.jsx` y al prop que se pasa entre pantallas (`usuario`); en el **backoffice**, a `core/data/usuarios-mock.js` (export `usuariosMock`), al campo `trainingAssignments[].usuarioId` y a `evaluations[].usuarioName`. Los duplicados del modelo viejo (los `employees.js` de los dos frontends y `EmployeeSelection.jsx`) se eliminaron; quedan en el historial de git. `User` (`core/data/users.js`) **no** entra en este rename: son las cuentas del backoffice (administrador/coordinador), otra cosa.
 - La navegación de SIMA CHECK en el backoffice usa un Set (`SIMA_CHECK_PAGES`) en `BackofficeLayout.jsx` para detectar cuándo renderizar la barra de tabs y el breadcrumb de dos niveles.
 - La pantalla Preguntas maneja su propia navegación interna (`selectedModuleId`) con `useState` — no requiere cambios en el router global.
 - Las imágenes le llegan a la app tablet como `{ clave, url }`: muestra la `url` y manda la `clave` de vuelta como respuesta, porque el backend corrige contra la clave cruda de storage. Las rutas relativas a `public/` (ej. `/images/cartel.png`) sobreviven sólo como formato legacy del import de Excel.

@@ -70,12 +70,7 @@ Se eligió el registro manual sobre `injectRegister: 'auto'` porque el banner de
 
 Queda afuera `SIMACHECK-FONDO.png`, el original sin convertir, que sigue en `public/` sin cachear.
 
-<!-- HUECO AL FUSIONAR (F7): el origen justificaba dejar afuera "las imágenes de preguntas
-     mockeadas (los tachos de data/modules.js)" con que "se van apenas la app se conecte
-     al backend". Eso YA PASÓ: src/data/ no existe y las imágenes de las preguntas llegan
-     del backend bajo /uploads, o sea que son runtime y no assets del build. Se omitió la
-     justificación obsoleta en vez de reescribirla, porque el motivo por el que HOY no se
-     precachean es el cacheo de datos, que está pendiente y ya se enlaza arriba. -->
+Las **imágenes de las preguntas** tampoco entran, y no por una decisión de este precache: llegan del backend bajo `/uploads`, así que son runtime y no assets del build. Cachearlas es parte del offline de datos.
 
 ### El fondo se convirtió de PNG a WebP
 
