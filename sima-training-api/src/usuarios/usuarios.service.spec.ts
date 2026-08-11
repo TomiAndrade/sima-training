@@ -6,6 +6,7 @@ import {
 import { Test, TestingModule } from '@nestjs/testing';
 import { RolUsuario, TipoOrganizacion } from '@prisma/client';
 import { AsignacionesService } from '../asignaciones/asignaciones.service';
+import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { UsuariosService } from './usuarios.service';
 
@@ -48,9 +49,11 @@ describe('UsuariosService', () => {
     puesto: { findMany: jest.Mock };
     centroCosto: { findMany: jest.Mock };
     vinculacionPuestoCentro: { deleteMany: jest.Mock };
+    vinculacion: { findUnique: jest.Mock };
     $transaction: jest.Mock;
   };
   let asignaciones: { recalcularEnTx: jest.Mock };
+  let audit: { registrar: jest.Mock };
 
   const vinculacionSima = {
     organizacionId: 1,
@@ -70,9 +73,11 @@ describe('UsuariosService', () => {
       puesto: { findMany: jest.fn() },
       centroCosto: { findMany: jest.fn() },
       vinculacionPuestoCentro: { deleteMany: jest.fn() },
+      vinculacion: { findUnique: jest.fn() },
       $transaction: jest.fn((cb: (tx: unknown) => unknown) => cb(prisma)),
     };
     asignaciones = { recalcularEnTx: jest.fn().mockResolvedValue(undefined) };
+    audit = { registrar: jest.fn().mockResolvedValue(undefined) };
 
     // Por defecto: organización INTERNA (acepta cualquier rol) y DNI libre.
     prisma.organizacion.findUnique.mockResolvedValue({
@@ -80,12 +85,18 @@ describe('UsuariosService', () => {
     });
     prisma.usuario.findFirst.mockResolvedValue(null);
     prisma.usuario.create.mockResolvedValue(usuarioConVinculacion());
+    // Default inocuo: "no había vinculación antes" — a los tests que no les
+    // importa la auditoría (la mayoría, preexistentes a Story 9) les alcanza
+    // con que esta lectura nueva no reviente; los tests de auditoría lo
+    // pisan con un estado previo real.
+    prisma.vinculacion.findUnique.mockResolvedValue(null);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         UsuariosService,
         { provide: PrismaService, useValue: prisma },
         { provide: AsignacionesService, useValue: asignaciones },
+        { provide: AuditService, useValue: audit },
       ],
     }).compile();
 
@@ -284,7 +295,12 @@ describe('UsuariosService', () => {
 
   // --- Recálculo automático de asignaciones al cambiar los pares ---
 
-  it('alta sin pares NO abre transacción ni recalcula (camino del import)', async () => {
+  it('alta sin pares no recalcula (camino del import)', async () => {
+    // Desde Story 9 esta rama SÍ abre una transacción chica (create + audit
+    // log — AuditService.registrar() exige un cliente transaccional), así
+    // que ya no vale la afirmación "no abre transacción" que tenía este test
+    // antes de la auditoría. Lo que sigue siendo cierto, y es lo que importa
+    // acá, es que sin pares no hay nada que recalcular.
     await service.create({
       nombre: 'Ana',
       apellido: 'Paz',
@@ -292,7 +308,6 @@ describe('UsuariosService', () => {
       vinculacion: vinculacionSima,
     });
 
-    expect(prisma.$transaction).not.toHaveBeenCalled();
     expect(asignaciones.recalcularEnTx).not.toHaveBeenCalled();
   });
 
@@ -502,5 +517,384 @@ describe('UsuariosService', () => {
         data: expect.objectContaining({ deletedAt: expect.any(Date) }),
       }),
     );
+  });
+
+  // --- Auditoría de Vinculacion y sus pares (Story 9, paso 3) -------------
+  // `prisma.vinculacion.findUnique` se llama DOS veces dentro de update()
+  // (antes de escribir y después, ver el service): mockResolvedValueOnce
+  // encadenado dos veces simula el "antes" y el "después" por separado. En
+  // remove() se llama una sola vez.
+
+  describe('auditoría', () => {
+    it('el alta con pares genera un CREATE de Vinculacion y un CREATE por cada par', async () => {
+      prisma.puesto.findMany.mockResolvedValue([{ id: 'p-soldador' }]);
+      prisma.centroCosto.findMany.mockResolvedValue([{ id: 'c-ypf' }]);
+      prisma.usuario.create.mockResolvedValue({
+        id: 1,
+        vinculacion: {
+          id: 10,
+          usuarioId: 1,
+          organizacionId: 1,
+          rol: RolUsuario.ALUMNO,
+          activa: true,
+          puestosCentros: [
+            {
+              puestoId: 'p-soldador',
+              centroCostoId: 'c-ypf',
+              principal: true,
+              activo: true,
+            },
+          ],
+        },
+      });
+
+      await service.create({
+        nombre: 'Ana',
+        apellido: 'Paz',
+        dni: '30111222',
+        vinculacion: {
+          ...vinculacionSima,
+          pares: [{ puestoId: 'p-soldador', centroCostoId: 'c-ypf' }],
+        },
+      });
+
+      expect(audit.registrar).toHaveBeenCalledWith(
+        prisma,
+        expect.objectContaining({
+          entidad: 'Vinculacion',
+          accion: 'CREATE',
+          actor: 'backoffice',
+        }),
+      );
+      expect(audit.registrar).toHaveBeenCalledWith(
+        prisma,
+        expect.objectContaining({
+          entidad: 'VinculacionPuestoCentro',
+          accion: 'CREATE',
+          entidadId: '10:p-soldador:c-ypf',
+          actor: 'backoffice',
+        }),
+      );
+    });
+
+    it('el actor pasado a create() es el que queda en el log', async () => {
+      prisma.usuario.create.mockResolvedValue({
+        id: 1,
+        vinculacion: {
+          id: 10,
+          usuarioId: 1,
+          organizacionId: 1,
+          rol: RolUsuario.ALUMNO,
+          activa: true,
+          puestosCentros: [],
+        },
+      });
+
+      await service.create(
+        {
+          nombre: 'Ana',
+          apellido: 'Paz',
+          dni: '30111222',
+          vinculacion: vinculacionSima,
+        },
+        'import',
+      );
+
+      expect(audit.registrar).toHaveBeenCalledWith(
+        prisma,
+        expect.objectContaining({ entidad: 'Vinculacion', actor: 'import' }),
+      );
+    });
+
+    it('cambiar sólo el rol genera un UPDATE de Vinculacion con sólo ese campo en el diff', async () => {
+      prisma.usuario.findFirst.mockResolvedValue(usuarioConVinculacion());
+      prisma.usuario.update.mockResolvedValue(usuarioConVinculacion());
+      prisma.vinculacion.findUnique
+        .mockResolvedValueOnce({
+          id: 10,
+          usuarioId: 1,
+          organizacionId: 1,
+          rol: RolUsuario.ALUMNO,
+          activa: true,
+          puestosCentros: [],
+        })
+        .mockResolvedValueOnce({
+          id: 10,
+          usuarioId: 1,
+          organizacionId: 1,
+          rol: RolUsuario.COORDINADOR,
+          activa: true,
+          puestosCentros: [],
+        });
+
+      await service.update(1, { vinculacion: { rol: RolUsuario.COORDINADOR } });
+
+      expect(audit.registrar).toHaveBeenCalledWith(prisma, {
+        entidad: 'Vinculacion',
+        entidadId: '10',
+        accion: 'UPDATE',
+        diff: {
+          rol: { antes: RolUsuario.ALUMNO, despues: RolUsuario.COORDINADOR },
+        },
+        actor: 'backoffice',
+      });
+    });
+
+    it('agregar un par nuevo genera un CREATE sólo de ese par', async () => {
+      prisma.usuario.findFirst.mockResolvedValue(usuarioConVinculacion());
+      prisma.usuario.update.mockResolvedValue(usuarioConVinculacion());
+      prisma.puesto.findMany.mockResolvedValue([
+        { id: 'p-soldador' },
+        { id: 'p-amolador' },
+      ]);
+      prisma.centroCosto.findMany.mockResolvedValue([{ id: 'c-ypf' }]);
+      const parViejo = {
+        puestoId: 'p-soldador',
+        centroCostoId: 'c-ypf',
+        principal: true,
+        activo: true,
+      };
+      const parNuevo = {
+        puestoId: 'p-amolador',
+        centroCostoId: 'c-ypf',
+        principal: false,
+        activo: true,
+      };
+      prisma.vinculacion.findUnique
+        .mockResolvedValueOnce({
+          id: 10,
+          usuarioId: 1,
+          organizacionId: 1,
+          rol: RolUsuario.ALUMNO,
+          activa: true,
+          puestosCentros: [parViejo],
+        })
+        .mockResolvedValueOnce({
+          id: 10,
+          usuarioId: 1,
+          organizacionId: 1,
+          rol: RolUsuario.ALUMNO,
+          activa: true,
+          puestosCentros: [parViejo, parNuevo],
+        });
+
+      await service.update(1, {
+        vinculacion: {
+          pares: [
+            { puestoId: 'p-soldador', centroCostoId: 'c-ypf' },
+            { puestoId: 'p-amolador', centroCostoId: 'c-ypf' },
+          ],
+        },
+      });
+
+      expect(audit.registrar).toHaveBeenCalledWith(
+        prisma,
+        expect.objectContaining({
+          entidad: 'VinculacionPuestoCentro',
+          accion: 'CREATE',
+          entidadId: '10:p-amolador:c-ypf',
+        }),
+      );
+      expect(audit.registrar).not.toHaveBeenCalledWith(
+        prisma,
+        expect.objectContaining({ entidadId: '10:p-soldador:c-ypf' }),
+      );
+    });
+
+    it('sacar un par genera un DELETE de ese par', async () => {
+      prisma.usuario.findFirst.mockResolvedValue(usuarioConVinculacion());
+      prisma.usuario.update.mockResolvedValue(usuarioConVinculacion());
+      prisma.puesto.findMany.mockResolvedValue([{ id: 'p-soldador' }]);
+      prisma.centroCosto.findMany.mockResolvedValue([{ id: 'c-ypf' }]);
+      const parQueQueda = {
+        puestoId: 'p-soldador',
+        centroCostoId: 'c-ypf',
+        principal: true,
+        activo: true,
+      };
+      const parQueSeVa = {
+        puestoId: 'p-amolador',
+        centroCostoId: 'c-ypf',
+        principal: false,
+        activo: true,
+      };
+      prisma.vinculacion.findUnique
+        .mockResolvedValueOnce({
+          id: 10,
+          usuarioId: 1,
+          organizacionId: 1,
+          rol: RolUsuario.ALUMNO,
+          activa: true,
+          puestosCentros: [parQueQueda, parQueSeVa],
+        })
+        .mockResolvedValueOnce({
+          id: 10,
+          usuarioId: 1,
+          organizacionId: 1,
+          rol: RolUsuario.ALUMNO,
+          activa: true,
+          puestosCentros: [parQueQueda],
+        });
+
+      await service.update(1, {
+        vinculacion: {
+          pares: [{ puestoId: 'p-soldador', centroCostoId: 'c-ypf' }],
+        },
+      });
+
+      expect(audit.registrar).toHaveBeenCalledWith(
+        prisma,
+        expect.objectContaining({
+          entidad: 'VinculacionPuestoCentro',
+          accion: 'DELETE',
+          entidadId: '10:p-amolador:c-ypf',
+        }),
+      );
+    });
+
+    it('un par que se desactiva pero sigue existiendo genera UPDATE, no DELETE', async () => {
+      // El caso concreto que motiva leer el "después" simétrico al "antes"
+      // (tx.vinculacion.findUnique explícito, no actualizado.vinculacion de
+      // USUARIO_INCLUDE): si el "después" viniera filtrado por activo: true,
+      // este par desaparecería del array y se leería como borrado.
+      prisma.usuario.findFirst.mockResolvedValue(usuarioConVinculacion());
+      prisma.usuario.update.mockResolvedValue(usuarioConVinculacion());
+      prisma.puesto.findMany.mockResolvedValue([{ id: 'p-soldador' }]);
+      prisma.centroCosto.findMany.mockResolvedValue([{ id: 'c-ypf' }]);
+      prisma.vinculacion.findUnique
+        .mockResolvedValueOnce({
+          id: 10,
+          usuarioId: 1,
+          organizacionId: 1,
+          rol: RolUsuario.ALUMNO,
+          activa: true,
+          puestosCentros: [
+            {
+              puestoId: 'p-soldador',
+              centroCostoId: 'c-ypf',
+              principal: true,
+              activo: true,
+            },
+          ],
+        })
+        .mockResolvedValueOnce({
+          id: 10,
+          usuarioId: 1,
+          organizacionId: 1,
+          rol: RolUsuario.ALUMNO,
+          activa: true,
+          puestosCentros: [
+            {
+              puestoId: 'p-soldador',
+              centroCostoId: 'c-ypf',
+              principal: true,
+              activo: false,
+            },
+          ],
+        });
+
+      await service.update(1, {
+        vinculacion: {
+          pares: [{ puestoId: 'p-soldador', centroCostoId: 'c-ypf' }],
+        },
+      });
+
+      expect(audit.registrar).toHaveBeenCalledWith(
+        prisma,
+        expect.objectContaining({
+          entidad: 'VinculacionPuestoCentro',
+          accion: 'UPDATE',
+          entidadId: '10:p-soldador:c-ypf',
+          diff: { activo: { antes: true, despues: false } },
+        }),
+      );
+      expect(audit.registrar).not.toHaveBeenCalledWith(
+        prisma,
+        expect.objectContaining({
+          entidadId: '10:p-soldador:c-ypf',
+          accion: 'DELETE',
+        }),
+      );
+    });
+
+    it('mandar los mismos pares no genera ningún log de VinculacionPuestoCentro', async () => {
+      prisma.usuario.findFirst.mockResolvedValue(usuarioConVinculacion());
+      prisma.usuario.update.mockResolvedValue(usuarioConVinculacion());
+      prisma.puesto.findMany.mockResolvedValue([{ id: 'p-soldador' }]);
+      prisma.centroCosto.findMany.mockResolvedValue([{ id: 'c-ypf' }]);
+      const par = {
+        puestoId: 'p-soldador',
+        centroCostoId: 'c-ypf',
+        principal: true,
+        activo: true,
+      };
+      const vinc = {
+        id: 10,
+        usuarioId: 1,
+        organizacionId: 1,
+        rol: RolUsuario.ALUMNO,
+        activa: true,
+        puestosCentros: [par],
+      };
+      prisma.vinculacion.findUnique
+        .mockResolvedValueOnce(vinc)
+        .mockResolvedValueOnce(vinc);
+
+      await service.update(1, {
+        vinculacion: {
+          pares: [{ puestoId: 'p-soldador', centroCostoId: 'c-ypf' }],
+        },
+      });
+
+      expect(audit.registrar).not.toHaveBeenCalledWith(
+        prisma,
+        expect.objectContaining({ entidad: 'VinculacionPuestoCentro' }),
+      );
+    });
+
+    it('un update que no cambia nada no genera ningún log', async () => {
+      const vinc = {
+        id: 10,
+        usuarioId: 1,
+        organizacionId: 1,
+        rol: RolUsuario.ALUMNO,
+        activa: true,
+        puestosCentros: [],
+      };
+      prisma.usuario.findFirst.mockResolvedValue(usuarioConVinculacion());
+      prisma.usuario.update.mockResolvedValue(usuarioConVinculacion());
+      prisma.vinculacion.findUnique
+        .mockResolvedValueOnce(vinc)
+        .mockResolvedValueOnce(vinc);
+
+      await service.update(1, { nombre: 'Ana María' }); // no toca la vinculación
+
+      expect(audit.registrar).not.toHaveBeenCalled();
+    });
+
+    it('remove() genera un DELETE de Vinculacion', async () => {
+      prisma.usuario.findFirst.mockResolvedValue({ id: 3, vinculacion: null });
+      prisma.usuario.update.mockResolvedValue({ id: 3, deletedAt: new Date() });
+      prisma.vinculacion.findUnique.mockResolvedValue({
+        id: 20,
+        usuarioId: 3,
+        organizacionId: 1,
+        rol: RolUsuario.ALUMNO,
+        activa: true,
+        puestosCentros: [],
+      });
+
+      await service.remove(3);
+
+      expect(audit.registrar).toHaveBeenCalledWith(
+        prisma,
+        expect.objectContaining({
+          entidad: 'Vinculacion',
+          entidadId: '20',
+          accion: 'DELETE',
+          actor: 'backoffice',
+        }),
+      );
+    });
   });
 });

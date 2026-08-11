@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { RolUsuario, TipoOrganizacion } from '@prisma/client';
 import { Workbook } from 'exceljs';
 import { AsignacionesService } from '../asignaciones/asignaciones.service';
+import { AuditService } from '../audit/audit.service';
 import { ModulosService } from '../modulos/modulos.service';
 import { PreguntasService } from '../preguntas/preguntas.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -78,6 +79,10 @@ describe('ImportService — usuarios', () => {
 
     // UsuariosService va real, no mockeado: el punto de estos tests es que el
     // import pase por la MISMA validación (matriz, pares, DNI) que el alta manual.
+    // AuditService sí va mockeado (sólo hace falta para satisfacer el
+    // constructor): el mock de usuario.create de este archivo siempre
+    // devuelve `vinculacion: null`, así que UsuariosService nunca llega a
+    // llamar a registrar() en estos tests.
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ImportService,
@@ -86,6 +91,7 @@ describe('ImportService — usuarios', () => {
         { provide: PreguntasService, useValue: {} },
         { provide: ModulosService, useValue: {} },
         { provide: AsignacionesService, useValue: asignaciones },
+        { provide: AuditService, useValue: { registrar: jest.fn() } },
       ],
     }).compile();
 

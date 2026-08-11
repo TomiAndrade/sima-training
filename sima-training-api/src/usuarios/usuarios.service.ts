@@ -6,6 +6,8 @@ import {
 } from '@nestjs/common';
 import { Prisma, RolUsuario } from '@prisma/client';
 import { AsignacionesService } from '../asignaciones/asignaciones.service';
+import { AuditService } from '../audit/audit.service';
+import { calcularDiff, hayCambios } from '../audit/calcular-diff';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateUsuarioDto, ParPuestoCentroDto } from './dto/create-usuario.dto';
 import { FindAllUsuariosDto } from './dto/find-all-usuarios.dto';
@@ -28,11 +30,75 @@ type UsuarioConVinculacion = Prisma.UsuarioGetPayload<{
   include: typeof USUARIO_INCLUDE;
 }>;
 
+// Story 9 (auditoría) — campos de trazabilidad, ignorados siempre en el diff
+// de Vinculacion: cambian en cada escritura y no son parte de lo que audita
+// esta story.
+const CAMPOS_TRAZABILIDAD_IGNORADOS = [
+  'createdAt',
+  'updatedAt',
+  'createdBy',
+  'updatedBy',
+];
+
+// Shapes ESTRUCTURALES chicos, con sólo los campos que importan para auditar
+// — no un tipo generado de Prisma. Así los helpers de abajo aceptan tanto la
+// fila "cruda" de tx.vinculacion.findUnique() como la que trae
+// USUARIO_INCLUDE (que además carga organizacion/puesto/centroCosto), sin
+// pelearse con dos tipos de Prisma distintos.
+type VinculacionParaAudit = {
+  id: number;
+  usuarioId: number;
+  organizacionId: number;
+  rol: RolUsuario;
+  activa: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+  createdBy: string | null;
+  updatedBy: string | null;
+  deletedAt: Date | null;
+};
+
+type ParParaAudit = {
+  puestoId: string;
+  centroCostoId: string;
+  principal: boolean;
+  activo: boolean;
+};
+
+// Arman un objeto NUEVO picking sólo los campos declarados — nunca un spread
+// del objeto recibido. Un spread arrastraría `organizacion` / `puesto` /
+// `centroCosto` (las relaciones de USUARIO_INCLUDE) al diff, y esas no son
+// parte de lo que se audita acá.
+function vinculacionEscalar(v: VinculacionParaAudit): Record<string, unknown> {
+  return {
+    id: v.id,
+    usuarioId: v.usuarioId,
+    organizacionId: v.organizacionId,
+    rol: v.rol,
+    activa: v.activa,
+    createdAt: v.createdAt,
+    updatedAt: v.updatedAt,
+    createdBy: v.createdBy,
+    updatedBy: v.updatedBy,
+    deletedAt: v.deletedAt,
+  };
+}
+
+function parEscalar(p: ParParaAudit): Record<string, unknown> {
+  return {
+    puestoId: p.puestoId,
+    centroCostoId: p.centroCostoId,
+    principal: p.principal,
+    activo: p.activo,
+  };
+}
+
 @Injectable()
 export class UsuariosService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly asignaciones: AsignacionesService,
+    private readonly audit: AuditService,
   ) {}
 
   // `actor` va a created_by/updated_by: 'backoffice' en el ABM, 'import' cuando
@@ -93,6 +159,15 @@ export class UsuariosService {
         // remove() sólo setea deletedAt, no revoca asignaciones—, así que
         // aunque reviva sin pares hay que revocar las que ya no correspondan.
         await this.asignaciones.recalcularEnTx(tx, dadoDeBaja.id, actor);
+        // Story 9: se audita como CREATE, no UPDATE, aunque el upsert de
+        // arriba en la práctica actualice una fila de Vinculacion que ya
+        // existía (nunca se borró al dar de baja al usuario). Lo que se
+        // registra es un HECHO DE NEGOCIO —"esta persona volvió a estar
+        // vinculada"—, no un evento de base de datos —"se insertó una
+        // fila"—. Por eso CREATE, con el mismo helper que el alta nueva.
+        if (revivido.vinculacion) {
+          await this.auditarAltaVinculacion(tx, revivido.vinculacion, actor);
+        }
         return this.aRespuesta(revivido);
       });
     }
@@ -112,15 +187,25 @@ export class UsuariosService {
       },
     } satisfies Prisma.UsuarioCreateInput;
 
-    // Sin pares no hay nada que derivar en un usuario nuevo (requeridos = ∅,
-    // vigentes = ∅): create plano, sin transacción ni recálculo. Es el camino
-    // del import de nómina, que siempre crea sin pares.
+    // Sin pares no hay nada que derivar (requeridos = ∅, vigentes = ∅), así
+    // que no hace falta recalcular — pero desde Story 9 igual se abre una
+    // transacción chica (create + audit log), porque AuditService.registrar()
+    // exige un cliente transaccional. Es el camino del import de nómina, que
+    // siempre crea sin pares: para una tanda grande (264 filas hoy) son 264
+    // transacciones en vez de 264 inserts sueltos. No es un problema real a
+    // ese volumen — que quede escrito acá para que dentro de unos meses nadie
+    // se pregunte por qué el import se siente más lento de lo esperado.
     if (!pares.length) {
-      const creado = await this.prisma.usuario.create({
-        data,
-        include: USUARIO_INCLUDE,
+      return this.prisma.$transaction(async (tx) => {
+        const creado = await tx.usuario.create({
+          data,
+          include: USUARIO_INCLUDE,
+        });
+        if (creado.vinculacion) {
+          await this.auditarAltaVinculacion(tx, creado.vinculacion, actor);
+        }
+        return this.aRespuesta(creado);
       });
-      return this.aRespuesta(creado);
     }
 
     // Con pares: crear y recalcular en la MISMA transacción, para que las
@@ -131,6 +216,9 @@ export class UsuariosService {
         include: USUARIO_INCLUDE,
       });
       await this.asignaciones.recalcularEnTx(tx, creado.id, actor);
+      if (creado.vinculacion) {
+        await this.auditarAltaVinculacion(tx, creado.vinculacion, actor);
+      }
       return this.aRespuesta(creado);
     });
   }
@@ -233,6 +321,17 @@ export class UsuariosService {
     }
 
     return this.prisma.$transaction(async (tx) => {
+      // Story 9: estado previo, leído DENTRO de la transacción y ANTES de
+      // escribir — no `actual` (leído más arriba, FUERA de la transacción):
+      // entre esa lectura y el commit puede haber pasado otra escritura, y el
+      // diff de auditoría tiene que reflejar el estado real inmediatamente
+      // anterior a ESTE cambio. Es la lectura nueva que pide la story — hoy
+      // el método pisaba sin leer.
+      const vinculacionAntes = await tx.vinculacion.findUnique({
+        where: { usuarioId: id },
+        include: { puestosCentros: true },
+      });
+
       if (puestosCentros) {
         // Reemplazo completo del set de pares. El borrado va primero y en la
         // misma transacción: el índice único parcial de `principal` no es
@@ -283,17 +382,177 @@ export class UsuariosService {
       if (puestosCentros !== undefined) {
         await this.asignaciones.recalcularEnTx(tx, id, actor);
       }
+
+      // Story 9: el "después" NO sale de `actualizado.vinculacion` (el
+      // include de USUARIO_INCLUDE, pensado para la respuesta HTTP) — se
+      // hace una lectura explícita, SIMÉTRICA a la de `vinculacionAntes` de
+      // arriba. Hoy USUARIO_INCLUDE no filtra sus `puestosCentros` (no lleva
+      // `where`), así que ahora mismo reusar `actualizado.vinculacion`
+      // funcionaría igual — pero acoplar la auditoría a un include que
+      // existe para otra cosa es frágil: el día que alguien le sume un
+      // filtro (ej. sólo pares activos, para no mostrar los desactivados en
+      // el listado), este diff empezaría a comparar arrays que ya no
+      // representan lo mismo y generaría DELETE fantasma de pares que sólo
+      // se desactivaron, no que se borraron. Una query de más a cambio de no
+      // depender de eso.
+      const vinculacionDespues = await tx.vinculacion.findUnique({
+        where: { usuarioId: id },
+        include: { puestosCentros: true },
+      });
+      await this.auditarVinculacion(
+        tx,
+        'UPDATE',
+        vinculacionAntes,
+        vinculacionDespues,
+        actor,
+      );
+      const vinculacionId = vinculacionAntes?.id ?? vinculacionDespues?.id;
+      if (vinculacionId) {
+        await this.auditarPares(
+          tx,
+          vinculacionId,
+          vinculacionAntes?.puestosCentros ?? [],
+          vinculacionDespues?.puestosCentros ?? [],
+          actor,
+        );
+      }
+
       return this.aRespuesta(actualizado);
     });
   }
 
   // Baja lógica: marca deletedAt, no borra la fila (trazabilidad).
   async remove(id: number) {
-    await this.findOne(id);
-    return this.prisma.usuario.update({
-      where: { id },
-      data: { deletedAt: new Date() },
+    await this.findOne(id); // valida existencia (o 404) sin usar el resultado
+
+    return this.prisma.$transaction(async (tx) => {
+      const vinculacion = await tx.vinculacion.findUnique({
+        where: { usuarioId: id },
+        include: { puestosCentros: true },
+      });
+      const usuario = await tx.usuario.update({
+        where: { id },
+        data: { deletedAt: new Date() },
+      });
+      // Story 9: la Vinculacion en sí no se toca en la base (remove() sólo
+      // marca deletedAt en Usuario), pero en los hechos deja de aplicar, así
+      // que se audita como una baja. Los pares NO se tocan acá (a diferencia
+      // de update()) y por eso no generan log — instrucción explícita del
+      // paso 3.
+      if (vinculacion) {
+        await this.auditarVinculacion(
+          tx,
+          'DELETE',
+          vinculacion,
+          null,
+          // remove() no recibe `actor` hoy (ni siquiera setea updatedBy) —
+          // se hardcodea el mismo vocabulario que usa el resto del código en
+          // vez de sumarle un parámetro nuevo al método sólo para esto.
+          'backoffice',
+        );
+      }
+      return usuario;
     });
+  }
+
+  // --- Auditoría (Story 9, paso 3) ---------------------------------------
+
+  // Log de la Vinculacion en sí (organizacionId/rol/activa). Si el diff da
+  // vacío, no llama a registrar() — el chequeo se hace ACÁ y no se delega en
+  // AuditService: importa que se pueda testear con AuditService mockeado
+  // (un mock no reproduce el "no escribe si el diff está vacío" del service
+  // real).
+  private async auditarVinculacion(
+    tx: Prisma.TransactionClient,
+    accion: 'CREATE' | 'UPDATE' | 'DELETE',
+    antes: VinculacionParaAudit | null,
+    despues: VinculacionParaAudit | null,
+    actor: string,
+  ) {
+    const referencia = antes ?? despues;
+    if (!referencia) return;
+
+    const diff = calcularDiff(
+      antes ? vinculacionEscalar(antes) : null,
+      despues ? vinculacionEscalar(despues) : null,
+      CAMPOS_TRAZABILIDAD_IGNORADOS,
+    );
+    if (!hayCambios(diff)) return;
+
+    await this.audit.registrar(tx, {
+      entidad: 'Vinculacion',
+      entidadId: String(referencia.id),
+      accion,
+      diff,
+      actor,
+    });
+  }
+
+  // Reconciliación de pares por clave (`puestoId:centroCostoId`, único par
+  // posible entre dos catálogos — no hace falta más). Un par que sólo está
+  // en un lado es CREATE o DELETE; en los dos con algún campo distinto
+  // (activo, principal) es UPDATE; en los dos e idéntico, calcularDiff da
+  // {} y no se llama a registrar().
+  private async auditarPares(
+    tx: Prisma.TransactionClient,
+    vinculacionId: number,
+    antes: ParParaAudit[],
+    despues: ParParaAudit[],
+    actor: string,
+  ) {
+    const clave = (p: ParParaAudit) => `${p.puestoId}:${p.centroCostoId}`;
+    const antesPorClave = new Map(antes.map((p) => [clave(p), p]));
+    const despuesPorClave = new Map(despues.map((p) => [clave(p), p]));
+    const claves = new Set([
+      ...antesPorClave.keys(),
+      ...despuesPorClave.keys(),
+    ]);
+
+    for (const c of claves) {
+      const parAntes = antesPorClave.get(c) ?? null;
+      const parDespues = despuesPorClave.get(c) ?? null;
+
+      const diff = calcularDiff(
+        parAntes ? parEscalar(parAntes) : null,
+        parDespues ? parEscalar(parDespues) : null,
+      );
+      if (!hayCambios(diff)) continue;
+
+      await this.audit.registrar(tx, {
+        entidad: 'VinculacionPuestoCentro',
+        // VinculacionPuestoCentro no tiene un id escalar propio: su PK es
+        // compuesta [vinculacionId, puestoId, centroCostoId]. Se serializa
+        // esa PK completa como clave estable en vez de inventar un id que no
+        // existe en el schema.
+        entidadId: `${vinculacionId}:${c}`,
+        accion:
+          parAntes === null
+            ? 'CREATE'
+            : parDespues === null
+              ? 'DELETE'
+              : 'UPDATE',
+        diff,
+        actor,
+      });
+    }
+  }
+
+  // Alta: CREATE de la Vinculacion + CREATE de cada par inicial. Reusa
+  // auditarPares con `antes: []`: todo par entra por el lado "sólo en
+  // despues", que es exactamente CREATE.
+  private async auditarAltaVinculacion(
+    tx: Prisma.TransactionClient,
+    vinculacion: VinculacionParaAudit & { puestosCentros: ParParaAudit[] },
+    actor: string,
+  ) {
+    await this.auditarVinculacion(tx, 'CREATE', null, vinculacion, actor);
+    await this.auditarPares(
+      tx,
+      vinculacion.id,
+      [],
+      vinculacion.puestosCentros,
+      actor,
+    );
   }
 
   // Forma de respuesta: rol y organización van ANIDADOS dentro de `vinculacion`

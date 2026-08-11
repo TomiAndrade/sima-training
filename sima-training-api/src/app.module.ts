@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { AsignacionesModule } from './asignaciones/asignaciones.module';
+import { AuditModule } from './audit/audit.module';
 import { AuthModule } from './auth/auth.module';
 import { BasesConocimientoModule } from './bases-conocimiento/bases-conocimiento.module';
 import { CentrosCostoModule } from './centros-costo/centros-costo.module';
@@ -23,6 +24,7 @@ import { UsuariosModule } from './usuarios/usuarios.module';
     PrismaModule,
     AuthModule,
     OrganizacionesModule,
+    AuditModule,
     UsuariosModule,
     ImportModule,
     BasesConocimientoModule,
