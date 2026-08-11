@@ -445,6 +445,57 @@ describe('SesionesService.registrar', () => {
   });
 });
 
+describe('SesionesService.listarPorUsuario', () => {
+  let service: SesionesService;
+  let prisma: { sesion: { findMany: jest.Mock } };
+
+  beforeEach(async () => {
+    prisma = { sesion: { findMany: jest.fn() } };
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        SesionesService,
+        { provide: PrismaService, useValue: prisma },
+      ],
+    }).compile();
+
+    service = module.get(SesionesService);
+  });
+
+  it('devuelve TODAS las sesiones (aprobadas y no), más recientes primero', async () => {
+    const sesiones = [
+      { id: 's2', aprobada: false, createdAt: new Date('2026-08-02') },
+      { id: 's1', aprobada: true, createdAt: new Date('2026-08-01') },
+    ];
+    prisma.sesion.findMany.mockResolvedValue(sesiones);
+
+    const resultado = await service.listarPorUsuario(1);
+
+    expect(resultado).toBe(sesiones);
+    expect(prisma.sesion.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { usuarioId: 1 },
+        orderBy: { createdAt: 'desc' },
+      }),
+    );
+  });
+
+  it('incluye el módulo y el número público de la versión rendida', async () => {
+    prisma.sesion.findMany.mockResolvedValue([]);
+
+    await service.listarPorUsuario(1);
+
+    const { include } = prisma.sesion.findMany.mock.calls[0][0];
+    expect(include.moduloVersion.select).toMatchObject({
+      moduloId: true,
+      modulo: { select: { nombre: true } },
+      anio: true,
+      mayor: true,
+      menor: true,
+    });
+  });
+});
+
 // La otra mitad de "el backend manda sobre el resultado": que el payload ni
 // siquiera entre. Se ejercita la pipe instanciada a mano con la MISMA config de
 // main.ts, porque esta story todavía no tiene controller donde probarla por HTTP

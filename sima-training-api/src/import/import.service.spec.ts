@@ -6,6 +6,7 @@ import { AuditService } from '../audit/audit.service';
 import { ModulosService } from '../modulos/modulos.service';
 import { PreguntasService } from '../preguntas/preguntas.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { SesionesService } from '../sesiones/sesiones.service';
 import { UsuariosService } from '../usuarios/usuarios.service';
 import { ImportService } from './import.service';
 
@@ -82,7 +83,8 @@ describe('ImportService — usuarios', () => {
     // AuditService sí va mockeado (sólo hace falta para satisfacer el
     // constructor): el mock de usuario.create de este archivo siempre
     // devuelve `vinculacion: null`, así que UsuariosService nunca llega a
-    // llamar a registrar() en estos tests.
+    // llamar a registrar() en estos tests. SesionesService (Story 10) igual:
+    // sólo lo pide el constructor, el import nunca llama a informe().
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ImportService,
@@ -92,6 +94,7 @@ describe('ImportService — usuarios', () => {
         { provide: ModulosService, useValue: {} },
         { provide: AsignacionesService, useValue: asignaciones },
         { provide: AuditService, useValue: { registrar: jest.fn() } },
+        { provide: SesionesService, useValue: {} },
       ],
     }).compile();
 

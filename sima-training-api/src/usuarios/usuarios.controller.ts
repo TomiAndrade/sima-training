@@ -50,6 +50,14 @@ export class UsuariosController {
     return this.audit.listarPorUsuario(id);
   }
 
+  // Informe agregado de habilitación (Story 10): usuario + asignaciones +
+  // sesiones + auditoría + veredicto, en un solo request. Lectura abierta,
+  // igual que el resto de los GET.
+  @Get(':id/informe')
+  informe(@Param('id', ParseIntPipe) id: number) {
+    return this.usuarios.informe(id);
+  }
+
   @Patch(':id')
   @UseGuards(JwtAuthGuard)
   update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateUsuarioDto) {

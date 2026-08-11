@@ -51,3 +51,48 @@ describe('UsuariosController.auditLog', () => {
     );
   });
 });
+
+describe('UsuariosController.informe', () => {
+  let controller: UsuariosController;
+  let usuarios: { informe: jest.Mock };
+
+  beforeEach(async () => {
+    usuarios = { informe: jest.fn() };
+
+    const module: TestingModule = await Test.createTestingModule({
+      controllers: [UsuariosController],
+      providers: [
+        { provide: UsuariosService, useValue: usuarios },
+        { provide: AuditService, useValue: {} },
+      ],
+    })
+      .overrideGuard(JwtAuthGuard)
+      .useValue({ canActivate: () => true })
+      .compile();
+
+    controller = module.get(UsuariosController);
+  });
+
+  it('responde con lo que devuelve UsuariosService.informe y le pasa el id', async () => {
+    const informe = {
+      usuario: { id: 5 },
+      veredicto: { estado: 'EN_REGLA', asignacion: null },
+    };
+    usuarios.informe.mockResolvedValue(informe);
+
+    const result = await controller.informe(5);
+
+    expect(usuarios.informe).toHaveBeenCalledWith(5);
+    expect(result).toBe(informe);
+  });
+
+  it('propaga el NotFoundException que tira el service si el usuario no existe', async () => {
+    usuarios.informe.mockRejectedValue(
+      new NotFoundException('Usuario 99 no encontrado'),
+    );
+
+    await expect(controller.informe(99)).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+  });
+});

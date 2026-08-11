@@ -8,6 +8,7 @@ import { RolUsuario, TipoOrganizacion } from '@prisma/client';
 import { AsignacionesService } from '../asignaciones/asignaciones.service';
 import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { SesionesService } from '../sesiones/sesiones.service';
 import { UsuariosService } from './usuarios.service';
 
 // Usuario tal como lo devuelve Prisma con USUARIO_INCLUDE (lo que aRespuesta
@@ -97,6 +98,9 @@ describe('UsuariosService', () => {
         { provide: PrismaService, useValue: prisma },
         { provide: AsignacionesService, useValue: asignaciones },
         { provide: AuditService, useValue: audit },
+        // Story 10: sólo lo pide el constructor — este archivo no ejercita
+        // informe(), eso vive en usuarios.service.informe.spec.ts.
+        { provide: SesionesService, useValue: {} },
       ],
     }).compile();
 

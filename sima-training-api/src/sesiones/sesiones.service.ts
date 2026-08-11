@@ -84,6 +84,30 @@ export class SesionesService {
     }
   }
 
+  // Todas las sesiones de una persona (aprobadas y no), más recientes primero
+  // — a diferencia de modulosAprobados()/aprobacionesPorModulo() de
+  // AsignacionesService, que sólo miran las aprobadas para decidir cobertura.
+  // El informe de usuario (Story 10) necesita "qué rindió", no "qué aprobó".
+  // Sin paginación, mismo criterio que AuditService.listarPorUsuario(): decenas
+  // de filas por persona, no cientos.
+  async listarPorUsuario(usuarioId: number) {
+    return this.prisma.sesion.findMany({
+      where: { usuarioId },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        moduloVersion: {
+          select: {
+            moduloId: true,
+            modulo: { select: { nombre: true } },
+            anio: true,
+            mayor: true,
+            menor: true,
+          },
+        },
+      },
+    });
+  }
+
   private esConflictoDeClaveIdempotencia(
     err: unknown,
   ): err is Prisma.PrismaClientKnownRequestError {

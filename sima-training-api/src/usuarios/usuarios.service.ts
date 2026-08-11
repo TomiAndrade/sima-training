@@ -5,11 +5,16 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma, RolUsuario } from '@prisma/client';
+import {
+  AsignacionParaVeredicto,
+  calcularVeredicto,
+} from '../asignaciones/veredicto';
 import { AsignacionesService } from '../asignaciones/asignaciones.service';
 import { AuditService } from '../audit/audit.service';
 import { calcularDiff, hayCambios } from '../audit/calcular-diff';
 import { entidadIdPar } from '../audit/entidad-id';
 import { PrismaService } from '../prisma/prisma.service';
+import { SesionesService } from '../sesiones/sesiones.service';
 import { CreateUsuarioDto, ParPuestoCentroDto } from './dto/create-usuario.dto';
 import { FindAllUsuariosDto } from './dto/find-all-usuarios.dto';
 import { UpdateUsuarioDto } from './dto/update-usuario.dto';
@@ -100,6 +105,7 @@ export class UsuariosService {
     private readonly prisma: PrismaService,
     private readonly asignaciones: AsignacionesService,
     private readonly audit: AuditService,
+    private readonly sesiones: SesionesService,
   ) {}
 
   // `actor` va a created_by/updated_by: 'backoffice' en el ABM, 'import' cuando
@@ -281,6 +287,48 @@ export class UsuariosService {
       throw new NotFoundException(`Usuario ${id} no encontrado`);
     }
     return this.aRespuesta(usuario);
+  }
+
+  // Informe de habilitación de una persona (Story 10): junta en un solo
+  // request las cuatro fuentes que hoy están repartidas — usuario, sus
+  // asignaciones con vencimiento, su historial de rendiciones y su
+  // auditoría — más el veredicto agregado que resume todo eso en un solo
+  // estado (ver asignaciones/veredicto.ts).
+  async informe(id: number) {
+    // findOne() SECUENCIAL y no dentro del Promise.all de abajo, a propósito:
+    // si las cuatro corrieran en paralelo, un usuario inexistente igual
+    // dispararía las otras tres queries (que van a devolver vacío) y, peor,
+    // AuditService.listarPorUsuario() tiene su PROPIO NotFoundException — dos
+    // rechazos compitiendo en el mismo Promise.all hacen que el 404 que gana
+    // dependa de cuál resuelve primero, y son mensajes distintos (el de audit
+    // no filtra deletedAt, ver audit.service.ts). Pagar un round trip de más
+    // acá es lo que hace el 404 determinista. No "optimizar" esto metiéndolo
+    // de nuevo adentro del Promise.all.
+    const usuario = await this.findOne(id);
+
+    const [asignaciones, sesiones, auditLog] = await Promise.all([
+      this.asignaciones.findByUsuario(id),
+      this.sesiones.listarPorUsuario(id),
+      this.audit.listarPorUsuario(id),
+    ]);
+
+    // El veredicto se arma acá, no en AsignacionesService: reempaqueta el
+    // `vencimiento` que ya calculó findByUsuario() a la forma de veredicto.ts,
+    // sin recalcular nada.
+    const paraVeredicto: AsignacionParaVeredicto[] = asignaciones.map((a) => ({
+      id: a.id,
+      moduloNombre: a.modulo.nombre,
+      revocadaAt: a.revocadaAt,
+      vencimiento: { estado: a.vencimiento.estado },
+    }));
+
+    return {
+      usuario,
+      veredicto: calcularVeredicto(paraVeredicto),
+      asignaciones,
+      sesiones,
+      auditLog,
+    };
   }
 
   async update(id: number, dto: UpdateUsuarioDto, actor = 'backoffice') {
