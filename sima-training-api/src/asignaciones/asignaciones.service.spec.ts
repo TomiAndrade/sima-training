@@ -584,3 +584,164 @@ describe('AsignacionesService.recalcular', () => {
     expect(prisma.asignacion.updateMany).not.toHaveBeenCalled();
   });
 });
+
+// Bloque aparte: findByUsuario() sólo toca `asignacion` y `sesion`, un
+// subconjunto chico del mock grande de arriba (pensado para recalcular).
+describe('AsignacionesService.findByUsuario — vencimiento (Story 8, paso 3)', () => {
+  let service: AsignacionesService;
+  let prisma: {
+    asignacion: { findMany: jest.Mock };
+    sesion: { findMany: jest.Mock };
+  };
+
+  // Asignación tal como la devuelve el include de findByUsuario.
+  const asignacionDe = (
+    moduloId: string,
+    {
+      id = 'a1',
+      revocadaAt = null,
+      vigenciaMeses = null,
+    }: {
+      id?: string;
+      revocadaAt?: Date | null;
+      vigenciaMeses?: number | null;
+    } = {},
+  ) => ({
+    id,
+    usuarioId: 1,
+    moduloId,
+    origen: 'AUTOMATICA' as const,
+    revocadaAt,
+    createdAt: new Date(Date.UTC(2020, 0, 1)),
+    modulo: { id: moduloId, nombre: `Módulo ${moduloId}`, vigenciaMeses },
+  });
+
+  // Sesión aprobada con la forma que lee aprobacionesPorModulo.
+  const sesionAprobadaDe = (
+    moduloId: string,
+    createdAt: Date,
+    vigenciaMeses: number | null = null,
+  ) => ({
+    createdAt,
+    moduloVersion: { moduloId, modulo: { vigenciaMeses } },
+  });
+
+  beforeEach(async () => {
+    prisma = {
+      asignacion: { findMany: jest.fn() },
+      sesion: { findMany: jest.fn() },
+    };
+    prisma.sesion.findMany.mockResolvedValue([]);
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        AsignacionesService,
+        { provide: PrismaService, useValue: prisma },
+      ],
+    }).compile();
+
+    service = module.get(AsignacionesService);
+  });
+
+  it('sin ninguna sesión aprobada: SIN_APROBAR, sin fechas', async () => {
+    prisma.asignacion.findMany.mockResolvedValue([asignacionDe('m1')]);
+
+    const [asignacion] = await service.findByUsuario(1);
+
+    expect(asignacion.vencimiento).toEqual({
+      estado: 'SIN_APROBAR',
+      aprobadaEn: null,
+      venceEl: null,
+    });
+  });
+
+  it('aprobado y sin vigenciaMeses: VIGENTE para siempre', async () => {
+    const aprobadaEn = new Date(Date.UTC(2020, 0, 1));
+    prisma.asignacion.findMany.mockResolvedValue([
+      asignacionDe('m1', { vigenciaMeses: null }),
+    ]);
+    prisma.sesion.findMany.mockResolvedValue([
+      sesionAprobadaDe('m1', aprobadaEn, null),
+    ]);
+
+    const [asignacion] = await service.findByUsuario(1);
+
+    expect(asignacion.vencimiento).toEqual({
+      estado: 'VIGENTE',
+      aprobadaEn,
+      venceEl: null,
+    });
+  });
+
+  it('a menos de 30 días del vencimiento: POR_VENCER', async () => {
+    // Fecha calculada relativa a "ahora" DENTRO del test (mismo truco que los
+    // specs de recalcular del paso 2): no se rompe con el paso del tiempo, y
+    // evita jest.useFakeTimers() (podría interactuar mal con el Promise.all
+    // de findByUsuario, y un test que falla antes de restaurar el reloj
+    // contamina el resto de la suite).
+    const ahora = new Date();
+    // Objetivo: que venceEl caiga 10 días en el futuro (dentro de la ventana
+    // de aviso de 30). Con vigencia de 12 meses, eso es aprobar hace 12
+    // meses de calendario menos esos 10 días.
+    const objetivoVenceEl = new Date(
+      ahora.getTime() + 10 * 24 * 60 * 60 * 1000,
+    );
+    const aprobadaEn = new Date(
+      Date.UTC(
+        objetivoVenceEl.getUTCFullYear() - 1,
+        objetivoVenceEl.getUTCMonth(),
+        objetivoVenceEl.getUTCDate(),
+      ),
+    );
+    prisma.asignacion.findMany.mockResolvedValue([
+      asignacionDe('m1', { vigenciaMeses: 12 }),
+    ]);
+    prisma.sesion.findMany.mockResolvedValue([
+      sesionAprobadaDe('m1', aprobadaEn, 12),
+    ]);
+
+    const [asignacion] = await service.findByUsuario(1);
+
+    expect(asignacion.vencimiento.estado).toBe('POR_VENCER');
+    expect(asignacion.vencimiento.aprobadaEn).toEqual(aprobadaEn);
+  });
+
+  it('vencido hace rato: VENCIDO', async () => {
+    // Aprobado en el año 2000 con vigencia de 12 meses: vencido para
+    // cualquier "ahora" real, presente o futuro — no necesita fake timers.
+    const aprobadaEn = new Date(Date.UTC(2000, 0, 1));
+    prisma.asignacion.findMany.mockResolvedValue([
+      asignacionDe('m1', { vigenciaMeses: 12 }),
+    ]);
+    prisma.sesion.findMany.mockResolvedValue([
+      sesionAprobadaDe('m1', aprobadaEn, 12),
+    ]);
+
+    const [asignacion] = await service.findByUsuario(1);
+
+    expect(asignacion.vencimiento.estado).toBe('VENCIDO');
+  });
+
+  it('una REVOCADA también trae su vencimiento calculado, sin ramificar', async () => {
+    const aprobadaEn = new Date(Date.UTC(2000, 0, 1));
+    prisma.asignacion.findMany.mockResolvedValue([
+      asignacionDe('m1', {
+        id: 'a-revocada',
+        revocadaAt: new Date(Date.UTC(2021, 0, 1)),
+        vigenciaMeses: 12,
+      }),
+    ]);
+    prisma.sesion.findMany.mockResolvedValue([
+      sesionAprobadaDe('m1', aprobadaEn, 12),
+    ]);
+
+    const [asignacion] = await service.findByUsuario(1);
+
+    expect(asignacion.revocadaAt).toEqual(new Date(Date.UTC(2021, 0, 1)));
+    expect(asignacion.vencimiento).toEqual({
+      estado: 'VENCIDO',
+      aprobadaEn,
+      venceEl: new Date(Date.UTC(2001, 0, 1)),
+    });
+  });
+});

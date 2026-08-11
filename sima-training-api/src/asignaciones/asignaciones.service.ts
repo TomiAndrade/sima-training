@@ -13,13 +13,38 @@ import { calcularVencimiento } from './vigencia';
 export class AsignacionesService {
   constructor(private readonly prisma: PrismaService) {}
 
-  // Lista las asignaciones de una persona (vigentes y revocadas). Trae el módulo
-  // para poder mostrar el nombre sin un segundo request.
-  findByUsuario(usuarioId: number) {
-    return this.prisma.asignacion.findMany({
-      where: { usuarioId },
-      include: { modulo: { select: { id: true, nombre: true } } },
-      orderBy: { createdAt: 'desc' },
+  // Lista las asignaciones de una persona (vigentes y revocadas), cada una con
+  // su `vencimiento` (Story 8): { estado, aprobadaEn, venceEl }. Se calcula
+  // para TODAS por igual, sin ramificar por `revocadaAt` — una revocada de un
+  // módulo que la persona aprobó sigue teniendo un vencimiento real, y meter
+  // un caso especial acá sería más confuso que el dato de más.
+  //
+  // `aprobacionesPorModulo` se pide UNA sola vez para toda la persona (no una
+  // query por fila) y se cruza en memoria por moduloId. `ahora` se calcula
+  // una sola vez fuera del `.map()` para que todas las filas de la misma
+  // respuesta se evalúen contra el mismo instante.
+  async findByUsuario(usuarioId: number) {
+    const [asignaciones, aprobaciones] = await Promise.all([
+      this.prisma.asignacion.findMany({
+        where: { usuarioId },
+        include: {
+          modulo: { select: { id: true, nombre: true, vigenciaMeses: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.aprobacionesPorModulo(usuarioId),
+    ]);
+
+    const ahora = new Date();
+    return asignaciones.map((asignacion) => {
+      const aprobadaEn =
+        aprobaciones.get(asignacion.moduloId)?.aprobadaEn ?? null;
+      const { estado, venceEl } = calcularVencimiento(
+        aprobadaEn,
+        asignacion.modulo.vigenciaMeses,
+        ahora,
+      );
+      return { ...asignacion, vencimiento: { estado, aprobadaEn, venceEl } };
     });
   }
 
