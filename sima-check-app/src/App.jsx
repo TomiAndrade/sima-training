@@ -19,17 +19,28 @@ export default function App() {
   // Respuesta completa de GET /tablet/modulos/:moduloId/examen
   // ({ moduloId, moduloVersionId, modulo, version, preguntas }).
   const [examen, setExamen] = useState(null)
-  // [{ preguntaId, respuestaDada }], armado en finishEvaluation — lo que el
-  // commit 4 va a mandar en POST /tablet/sesiones junto con
-  // pendiente.asignacionId y examen.moduloVersionId. Sin lectura propia
-  // todavía en este componente (el commit 4 la agrega junto con el POST).
-  const [, setRespuestas] = useState([])
-  // Resultado real de la rendición. Queda en null hasta que el commit 4
-  // conecte el POST y lo complete con lo que devuelve el backend — no hay
-  // forma de calcularlo local sin respuestaCorrecta.
+  // [{ preguntaId, respuestaDada }], armado en finishEvaluation y mandado
+  // en POST /tablet/sesiones junto con pendiente.asignacionId y
+  // examen.moduloVersionId.
+  const [respuestas, setRespuestas] = useState([])
+  // Momento en que se terminó de responder (reloj del dispositivo, no
+  // autoritativo — el backend igual lo usa para medir duración).
+  const [finalizadaEn, setFinalizadaEn] = useState(null)
+  // UUID por INTENTO, generado al cargar el examen (no al enviarlo). Un
+  // reintento de EVALUACIÓN (retry()) pide el examen de nuevo y por lo
+  // tanto genera uno nuevo; un reintento de ENVÍO (reintentarEnvio) manda
+  // el mismo, para que el backend deduplique si el POST anterior sí llegó.
+  const [claveIdempotencia, setClaveIdempotencia] = useState(null)
+  const [iniciadaEn, setIniciadaEn] = useState(null)
+  // Resultado real de la rendición ({ sesionId, correctas, total,
+  // porcentaje, aprobada, umbralAprobacion }), lo que devuelve
+  // POST /tablet/sesiones. No hay forma de calcularlo local: el backend
+  // nunca manda respuestaCorrecta.
   const [result, setResult] = useState(null)
   const [cargandoExamen, setCargandoExamen] = useState(false)
   const [errorExamen, setErrorExamen] = useState('')
+  const [enviandoResultado, setEnviandoResultado] = useState(false)
+  const [errorEnvio, setErrorEnvio] = useState('')
 
   const { needRefresh: [needRefresh], updateServiceWorker } = useRegisterSW()
 
@@ -40,6 +51,8 @@ export default function App() {
       const data = await tabletApi.examen(item.moduloId)
       setPendiente(item)
       setExamen(data)
+      setClaveIdempotencia(crypto.randomUUID())
+      setIniciadaEn(new Date())
       setStep(STEPS.evaluation)
     } catch (err) {
       // El examen puede tirar 409 si el módulo se archivó (o se quedó sin
@@ -57,18 +70,58 @@ export default function App() {
 
   const startEvaluation = (item) => cargarExamen(item)
 
+  // POST /tablet/sesiones. Recibe respuestas/momentoFin explícitos en vez de
+  // leerlos de `respuestas`/`finalizadaEn` (state) porque finishEvaluation los
+  // necesita ANTES de que el setState correspondiente se refleje en este
+  // closure; reintentarEnvio, en cambio, sí puede leerlos del state (ya están
+  // asentados de la primera vez).
+  const enviarResultado = async (respuestasPayload, momentoFin) => {
+    setEnviandoResultado(true)
+    setErrorEnvio('')
+    try {
+      const resultado = await tabletApi.registrarSesion({
+        moduloVersionId: examen.moduloVersionId,
+        asignacionId: pendiente.asignacionId,
+        claveIdempotencia,
+        iniciadaEn: iniciadaEn.toISOString(),
+        finalizadaEn: momentoFin.toISOString(),
+        respuestas: respuestasPayload,
+      })
+      setResult(resultado)
+    } catch (err) {
+      setErrorEnvio(
+        err.status === undefined
+          ? 'No hay conexión con el servidor. Reintentá cuando tengas señal.'
+          : 'No pudimos registrar el resultado. Reintentá en un momento.',
+      )
+    } finally {
+      setEnviandoResultado(false)
+    }
+  }
+
   const finishEvaluation = (answers) => {
     // answers = { [preguntaId]: respuestaDada }, ver Evaluation.jsx — no
     // depende del orden en que se hayan recorrido las preguntas.
-    setRespuestas(examen.preguntas.map((q) => ({ preguntaId: q.id, respuestaDada: answers[q.id] ?? null })))
+    const respuestasPayload = examen.preguntas.map((q) => ({ preguntaId: q.id, respuestaDada: answers[q.id] ?? null }))
+    const momentoFin = new Date()
+    setRespuestas(respuestasPayload)
+    setFinalizadaEn(momentoFin)
     setStep(STEPS.results)
+    enviarResultado(respuestasPayload, momentoFin)
   }
+
+  // Reintentar el ENVÍO (no la evaluación): misma claveIdempotencia, mismas
+  // respuestas — si el POST anterior sí había llegado y solo se perdió la
+  // respuesta, el backend dedupe y devuelve la sesión ya guardada en vez de
+  // duplicarla.
+  const reintentarEnvio = () => enviarResultado(respuestas, finalizadaEn)
 
   const retry = () => {
     setResult(null)
-    // TODO(commit 4): cuando exista claveIdempotencia, generar acá una NUEVA
-    // — es por intento, no por módulo. Reusar la del intento anterior haría
-    // que el backend deduplique este reintento contra la sesión vieja.
+    setErrorEnvio('')
+    // cargarExamen genera una claveIdempotencia NUEVA — es por intento, no
+    // por módulo: reusar la anterior haría que el backend deduplique este
+    // reintento contra la sesión vieja.
     cargarExamen(pendiente)
   }
 
@@ -76,8 +129,12 @@ export default function App() {
     setPendiente(null)
     setExamen(null)
     setRespuestas([])
+    setFinalizadaEn(null)
+    setClaveIdempotencia(null)
+    setIniciadaEn(null)
     setResult(null)
     setErrorExamen('')
+    setErrorEnvio('')
     setStep(STEPS.module)
   }
 
@@ -86,8 +143,12 @@ export default function App() {
     setPendiente(null)
     setExamen(null)
     setRespuestas([])
+    setFinalizadaEn(null)
+    setClaveIdempotencia(null)
+    setIniciadaEn(null)
     setResult(null)
     setErrorExamen('')
+    setErrorEnvio('')
     setStep(STEPS.usuario)
   }
 
@@ -127,6 +188,9 @@ export default function App() {
             usuario={usuario}
             module={pendiente}
             result={result}
+            enviando={enviandoResultado}
+            errorEnvio={errorEnvio}
+            onReintentarEnvio={reintentarEnvio}
             onRetry={retry}
             onGoToModules={goToModules}
             onHome={goHome}
