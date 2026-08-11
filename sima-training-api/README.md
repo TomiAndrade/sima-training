@@ -102,6 +102,7 @@ Ver [`.env.example`](.env.example). Las principales:
 | `PATCH` | `/usuarios/:id` | JWT | Edición. `vinculacion` acepta `organizacionId`/`rol`/`pares` sueltos; mandar `pares` **reemplaza el set completo**, omitirlo lo deja como está |
 | `DELETE` | `/usuarios/:id` | JWT | Baja lógica (soft-delete) |
 | `GET` | `/usuarios/:id/audit-log` | — | Historial de auditoría de esta persona (`Vinculacion` + sus pares), más reciente primero, sin paginar (Story 9) |
+| `GET` | `/usuarios/:id/informe` | — | **Hoja de vida** de esta persona en un solo request (Story 10): `{ usuario, veredicto, asignaciones, sesiones, auditLog }`. `veredicto` es `{ estado, asignacion }` con el estado de habilitación calculado en el backend (ver las decisiones de diseño); `asignaciones` es lo mismo que devuelve `GET /asignaciones?usuarioId=` (con su `vencimiento` por fila), `sesiones` son **todas** las rendiciones —aprobadas y no— más recientes primero, y `auditLog` es lo mismo que `/audit-log`. 404 si el usuario no existe o está dado de baja. Sin paginar ninguna de las tres listas |
 | `GET` | `/organizaciones` | — | Lista organizaciones |
 | `POST` | `/organizaciones` | JWT | Alta (cliente o subcontratista) |
 | `GET` | `/organizaciones/:id` | — | Detalle |
@@ -187,7 +188,10 @@ src/
 ├── auth/            Login JWT + guard (sin roles, Sprint 1)
 ├── usuarios/        ABM de Usuario (identidad pura) + su Vinculacion y sus pares,
 │                    anidados en el mismo request. matriz-rol-organizacion.ts:
-│                    la matriz tipo-de-organización ↔ rol, compartida con el import
+│                    la matriz tipo-de-organización ↔ rol, compartida con el import.
+│                    De acá cuelgan también los dos endpoints por persona que no
+│                    son ABM: /audit-log (Story 9) y /informe (Story 10, agrega
+│                    asignaciones + sesiones + auditoría + veredicto)
 ├── organizaciones/  ABM de Organizacion (cliente/subcontratista, jerarquía)
 ├── puestos/         Catálogo de Puesto (baja lógica con `activo`)
 ├── centros-costo/   Catálogo de CentroCosto (baja lógica con `activo`)
@@ -205,9 +209,14 @@ src/
 │                    resolverCriterios() (declarar el tema y materializar el pool)
 ├── asignaciones/    Asignacion (obligación de una persona de rendir un módulo) +
 │                    ReglaAsignacion (qué módulo exige cada par puesto+centro) +
-│                    AsignacionesService.recalcular() (deriva las AUTOMATICA)
+│                    AsignacionesService.recalcular() (deriva las AUTOMATICA).
+│                    Dos módulos de funciones puras: vigencia.ts (cuándo vence una
+│                    aprobación) y veredicto.ts (Story 10: el estado de habilitación
+│                    de una persona, agregando el vencimiento de sus asignaciones)
 ├── sesiones/        Sesion (un intento de rendición) + Respuesta (una por pregunta
-│                    contestada) + corregir.ts (funciones puras: umbral y corrección)
+│                    contestada) + corregir.ts (funciones puras: umbral y corrección).
+│                    listarPorUsuario() devuelve TODAS las rendiciones de una
+│                    persona (aprobadas y no) para el informe de la Story 10
 ├── tablet/          Namespace HTTP de la app tablet (Story 5): login de alumno
 │                    (JWT propio, `tipo: 'alumno'`) + TabletAuthGuard + los tres
 │                    endpoints (pendientes/examen/registrar resultado). Delega la
@@ -396,3 +405,16 @@ Cierra el sprint 07-08 del lado del backend: hasta acá se sabía calcular corre
 - **El borrado físico de `VinculacionPuestoCentro` es legítimo gracias a esta story, no a pesar de ella**: la tabla dice "qué pares tiene hoy", el log dice "qué pares tuvo". Por eso `AuditLog` es inmutable y sin soft-delete — es infraestructura crítica, no un adicional.
 - **`entidadId` no es FK — la tabla es polimórfica a propósito** (`entidad` + `entidadId` en vez de una relación tipada, ver el comentario en `schema.prisma`). La base no garantiza que un `entidadId` apunte a algo que existe hoy; para un par eliminado apunta a propósito a una fila que ya no está.
 - **Costo asumido**: `update()` lee el estado previo antes de escribir, y la rama "alta sin pares" del import abre una transacción por fila.
+
+## Decisiones de diseño (Story 10 — Informe de usuario)
+
+La "hoja de vida" de una persona: `GET /usuarios/:id/informe` devuelve datos, veredicto de habilitación, asignaciones con su vencimiento, rendiciones y auditoría en un solo request. Tres piezas: `src/asignaciones/veredicto.ts` (funciones puras) → `SesionesService.listarPorUsuario()` (la query que faltaba) → `UsuariosService.informe()` (el agregador).
+
+- **El veredicto lo calcula el BACKEND, no el frontend.** *"Esta persona está habilitada"* es una regla de seguridad laboral, no una decisión de presentación: si vive en el cliente, el día que haga falta desde otro lado (un PDF, un reporte, la tablet) se reimplementa. Ya hay precedente anotado como deuda — la columna "Por qué" de `TrainingAssignments.jsx` duplica el matching de `recalcularEnTx` (ver [`../docs/pendientes.md`](../docs/pendientes.md)).
+- **Es una jerarquía de GRAVEDAD, no de conteo**: una sola asignación VENCIDO pesa más que diez SIN_APROBAR — no se cuentan casos ni se promedian estados, se busca la peor situación y esa sola decide. `NO_HABILITADO` > `PENDIENTE` > `POR_VENCER` > `EN_REGLA`. Con varias asignaciones en el mismo estado disparador, el veredicto apunta a la **primera del array**: no hay criterio de "peor" entre dos vencidas, así que no se inventa un desempate.
+- **`SIN_OBLIGACIONES` es distinto de `EN_REGLA`**: no tener nada que cumplir no es lo mismo que estar al día. Son dos respuestas distintas a "¿puede entrar a planta?" y colapsarlas escondería a alguien sin ninguna capacitación asignada detrás de un verde.
+- **Las asignaciones REVOCADAS no cuentan para el veredicto** — ya no le corresponden a la persona, aunque hayan estado vencidas antes de revocarse. Se filtran primero, antes de aplicar la jerarquía.
+- **Un endpoint AGREGADOR y no tres requests orquestados en el cliente.** Es un endpoint hecho a medida de una pantalla, algo que en general conviene evitar porque ata la API al layout. Se acepta acá porque el **informe de usuario es una entidad de producto** (lo pidieron Cristian y Eduardo con ese nombre, ver la Story 10 del sprint), no una conveniencia de render: la pregunta "¿cuál es el estado de esta persona?" existe en el dominio independientemente de qué pantalla la haga.
+- **`findOne()` corre SECUENCIAL antes del `Promise.all`, no adentro.** Con las cuatro fuentes en paralelo, un id inexistente dispara las otras tres queries al pedo y —lo que importa— hace competir **dos** `NotFoundException` con mensajes distintos: `AuditService.listarPorUsuario()` tiene el suyo y **no filtra `deletedAt`** (a propósito: su caso de uso es ver el historial de alguien dado de baja). El 404 que ganaba dependía de cuál promesa rechazaba primero. Pagar un round trip de más deja el 404 determinista.
+- **`SesionesService.listarPorUsuario()` devuelve TODAS las sesiones, aprobadas y no** — a diferencia de `modulosAprobados()`/`aprobacionesPorModulo()`, que sólo miran las aprobadas para decidir cobertura. El informe responde "qué rindió", no "qué aprobó": un intento desaprobado es parte del recorrido de la persona. Va en `SesionesService` y no en `UsuariosService` porque la query es sobre `sesion` — mismo precedente que `modulosAprobados()`, cada service consulta su propia tabla por Prisma directo.
+- **`SesionesModule` sigue sin controller propio**, como desde el Sprint 8: la ruta cuelga de la persona (`/usuarios/:id/informe`), igual que el `/audit-log` de la Story 9, porque es el historial *de alguien* y no un listado global de sesiones.

@@ -1,6 +1,6 @@
 # SIMA TRAINING — MVP
 
-> **Estado: MVP con backend real.** El backend (NestJS + PostgreSQL) ya expone **Usuarios** (con su vinculación a organización/rol y sus pares puesto+centro de costo), **Puestos**, **Centros de Costo**, **Organizaciones**, el banco de **Preguntas**, los **Módulos** versionados y el motor de **Asignaciones automáticas** (regla puesto+centro → módulo). El backoffice ya consume 100% del backend para Usuarios, Puestos, Centros de Costo, Preguntas, Módulos, Reglas de Asignación y Asignaciones; quedan mockeados Clientes, el Dashboard y casi todo el Resumen de SIMA CHECK. La app tablet sigue 100% mockeada, sin conexión al backend.
+> **Estado: MVP con backend real.** El backend (NestJS + PostgreSQL) ya expone **Usuarios** (con su vinculación a organización/rol y sus pares puesto+centro de costo), **Puestos**, **Centros de Costo**, **Organizaciones**, el banco de **Preguntas**, los **Módulos** versionados y el motor de **Asignaciones automáticas** (regla puesto+centro → módulo). El backoffice ya consume 100% del backend para Usuarios, Puestos, Centros de Costo, Preguntas, Módulos, Reglas de Asignación y Asignaciones, e incluye la **hoja de vida por persona** (veredicto de habilitación, capacitaciones con su vencimiento, rendiciones y auditoría, todo en un request); quedan mockeados Clientes, el Dashboard y casi todo el Resumen de SIMA CHECK. La app tablet sigue 100% mockeada, sin conexión al backend.
 
 MVP de alta fidelidad para **Ingeniería Sima**, orientado a la industria Oil & Gas. Arquitectura multi-producto: **SIMA CHECK** (capacitaciones y evaluaciones) es el primer producto integrado. El sistema está preparado para incorporar SIMA INSPECTIONS, SIMA AUDITS, etc.
 
@@ -74,7 +74,7 @@ npm run dev   # → http://localhost:5174
 Sidebar global con tres secciones:
 
 - **Panel Principal** — vista de plataforma: KPIs operacionales, tabla de actividad reciente, estado del sistema (OPERATIVO/ADVERTENCIA), product cards
-- **Administración** — Clientes · Usuarios · Puestos · Centros de Costo (Usuarios, Puestos y Centros de Costo ya consumen la API real; Clientes sigue mock)
+- **Administración** — Clientes · Usuarios · Puestos · Centros de Costo (Usuarios, Puestos y Centros de Costo ya consumen la API real; Clientes sigue mock). Cada fila de **Usuarios** tiene **"Ver historial"**: la hoja de vida de esa persona (`GET /usuarios/:id/informe`) con su **veredicto de habilitación** —calculado en el backend— arriba de todo, las capacitaciones asignadas con su estado de vencimiento, y tres secciones plegadas: revocadas, rendiciones y el historial de cambios del AuditLog
 - **Productos** — SIMA CHECK (ítem único; al entrar aparece tab bar interno)
 
 ### SIMA CHECK (tab bar interno)
@@ -140,9 +140,12 @@ sima-training-backoffice/src/
 │   │               basesConocimiento.js · import.js · reglasAsignacion.js ·
 │   │               asignaciones.js   # capa HTTP
 │   ├── data/       clients.js · users.js · usuarios-mock.js (mock, en migración)
+│   ├── format/     version.js (número AÑO.MAYOR.MENOR) · badges.js (roleBadge,
+│   │               origenBadge)   # helpers compartidos entre core/ y sima-check/
 │   ├── components/ ImportUsuariosModal.jsx · ImportPreguntasModal.jsx ·
 │   │               ParesPuestoCentro.jsx · estadoSimilitudBadge.jsx
-│   └── pages/      Clients.jsx (mock) · Usuarios.jsx · Puestos.jsx · CentrosCosto.jsx
+│   └── pages/      Clients.jsx (mock) · Usuarios.jsx · Puestos.jsx · CentrosCosto.jsx ·
+│                   HistorialUsuario.jsx (hoja de vida de una persona)
 ├── sima-check/
 │   ├── data/       training-modules.js · training-assignments.js · evaluations.js
 │   │               (mock; hoy solo alimentan Dashboard y Resumen)

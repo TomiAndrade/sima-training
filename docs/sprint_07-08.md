@@ -157,15 +157,17 @@ Hoy el `PATCH /usuarios` reemplaza el set completo de pares, así que el histori
 ## Story 10 — Armar el informe de usuario
 **Prioridad:** Media · **Estimación:** 5 pts
 
-La "hoja de vida" de cada persona que pidieron Cristian y Eduardo: entrar a un usuario y ver todo su recorrido. Depende de las Stories 4, 8 y 9 — sin ellas no hay qué mostrar. Va en la sección Usuarios del backoffice, no dentro de SIMA CHECK.
+La "hoja de vida" de cada persona que pidieron Cristian y Eduardo: entrar a un usuario y ver todo su recorrido. Depende de las Stories 4, 8 y 9 — sin ellas no hay qué mostrar. Va en la sección Usuarios del backoffice, no dentro de SIMA CHECK. **Resuelta** — ver la nota de cierre.
 
 **Tareas:**
-- [ ] Vista de detalle de un usuario con sus datos y su vinculación
-- [ ] Resultados: todas las veces que rindió, con score y aprobado/desaprobado
-- [ ] Módulos pendientes y módulos vencidos
-- [ ] Historial de puestos, centros y organización (del AuditLog)
-- [ ] Fecha de primera alta
-- [ ] Exportar a CSV
+- [x] Vista de detalle de un usuario con sus datos y su vinculación
+- [x] Resultados: todas las veces que rindió, con score y aprobado/desaprobado
+- [x] Módulos pendientes y módulos vencidos
+- [x] Historial de puestos, centros y organización (del AuditLog)
+- [x] Fecha de primera alta
+- [ ] ~~Exportar a CSV~~ — **fuera de alcance a propósito**, no es un pendiente de implementación. Un CSV **por persona** obliga a N descargas para auditar N personas, que es justo el caso de uso. Lo que probablemente sirve es un reporte **agregado** ("todos los vencidos hoy", "la nómina con su estado"), y eso es otra pantalla. Queda como pregunta abierta para Eduardo en [`pendientes.md`](pendientes.md)
+
+**Nota de cierre**: la decisión que ordenó todo lo demás es que **el veredicto lo calcula el backend** (`src/asignaciones/veredicto.ts`, función pura) y no el frontend: *"esta persona está habilitada"* es una regla de seguridad laboral, y si vive en el cliente se reimplementa el día que haga falta desde un PDF o un reporte — hay precedente, la columna "Por qué" de `TrainingAssignments.jsx` ya duplica el matching de `recalcularEnTx`. El veredicto es una jerarquía de **gravedad, no de conteo** (una sola VENCIDO pesa más que diez SIN_APROBAR) y `SIN_OBLIGACIONES` se distingue de `EN_REGLA`: no tener nada que cumplir no es estar al día. Las asignaciones **revocadas** no cuentan para el veredicto pero se muestran igual, aparte y colapsadas. Se expuso como **un endpoint agregador** (`GET /usuarios/:id/informe`) y no como tres requests orquestados en el cliente: es un endpoint a medida de una pantalla —algo que en general conviene evitar— y se aceptó porque el informe de usuario es una entidad de producto, no un capricho de layout. Dos cosas que aparecieron implementando: `findOne()` tuvo que salir del `Promise.all` y correr **secuencial antes**, porque en paralelo competían dos `NotFoundException` con mensajes distintos (el de `AuditService` no filtra `deletedAt`) y el 404 que ganaba dependía de cuál rechazaba primero; y la vista se navega con un **early return dentro de `Usuarios.jsx`** en vez de una página propia de `App.jsx`, para que la lista no se desmonte y conserve filtros y búsqueda al volver. Salió además un refactor previo y aparte (`core/format/`), porque `core/` no puede importar de `sima-check/` y el formateo del número de versión vivía del lado equivocado.
 
 ---
 
