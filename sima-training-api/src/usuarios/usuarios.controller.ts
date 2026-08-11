@@ -12,6 +12,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
+import { AuditService } from '../audit/audit.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CreateUsuarioDto } from './dto/create-usuario.dto';
 import { FindAllUsuariosDto } from './dto/find-all-usuarios.dto';
@@ -20,7 +21,10 @@ import { UsuariosService } from './usuarios.service';
 
 @Controller('usuarios')
 export class UsuariosController {
-  constructor(private readonly usuarios: UsuariosService) {}
+  constructor(
+    private readonly usuarios: UsuariosService,
+    private readonly audit: AuditService,
+  ) {}
 
   @Post()
   @UseGuards(JwtAuthGuard)
@@ -36,6 +40,14 @@ export class UsuariosController {
   @Get(':id')
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.usuarios.findOne(id);
+  }
+
+  // Historial de auditoría DE ESTA PERSONA (Vinculacion + sus pares) — no un
+  // log global, por eso cuelga acá y no de un controller propio de audit/.
+  // Lectura abierta, igual que el resto de los GET.
+  @Get(':id/audit-log')
+  auditLog(@Param('id', ParseIntPipe) id: number) {
+    return this.audit.listarPorUsuario(id);
   }
 
   @Patch(':id')

@@ -8,6 +8,7 @@ import { Prisma, RolUsuario } from '@prisma/client';
 import { AsignacionesService } from '../asignaciones/asignaciones.service';
 import { AuditService } from '../audit/audit.service';
 import { calcularDiff, hayCambios } from '../audit/calcular-diff';
+import { entidadIdPar } from '../audit/entidad-id';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateUsuarioDto, ParPuestoCentroDto } from './dto/create-usuario.dto';
 import { FindAllUsuariosDto } from './dto/find-all-usuarios.dto';
@@ -500,7 +501,12 @@ export class UsuariosService {
     despues: ParParaAudit[],
     actor: string,
   ) {
-    const clave = (p: ParParaAudit) => `${p.puestoId}:${p.centroCostoId}`;
+    // clave = entidadIdPar(...) directamente: ya es el entidadId completo,
+    // no hace falta reconstruirlo después (ver ../audit/entidad-id.ts, única
+    // fuente de verdad de este formato — AuditService.listarPorUsuario() lo
+    // lee con el mismo helper).
+    const clave = (p: ParParaAudit) =>
+      entidadIdPar(vinculacionId, p.puestoId, p.centroCostoId);
     const antesPorClave = new Map(antes.map((p) => [clave(p), p]));
     const despuesPorClave = new Map(despues.map((p) => [clave(p), p]));
     const claves = new Set([
@@ -520,11 +526,7 @@ export class UsuariosService {
 
       await this.audit.registrar(tx, {
         entidad: 'VinculacionPuestoCentro',
-        // VinculacionPuestoCentro no tiene un id escalar propio: su PK es
-        // compuesta [vinculacionId, puestoId, centroCostoId]. Se serializa
-        // esa PK completa como clave estable en vez de inventar un id que no
-        // existe en el schema.
-        entidadId: `${vinculacionId}:${c}`,
+        entidadId: c,
         accion:
           parAntes === null
             ? 'CREATE'
