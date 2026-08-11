@@ -8,6 +8,7 @@ import { puestosApi } from '../api/puestos'
 import { centrosCostoApi } from '../api/centrosCosto'
 import ImportUsuariosModal from '../components/ImportUsuariosModal'
 import ParesPuestoCentro from '../components/ParesPuestoCentro'
+import HistorialUsuario from './HistorialUsuario'
 import { roleBadge } from '../format/badges'
 
 // Decisión de producto: el backoffice solo da de alta ALUMNOS por ahora (la
@@ -67,6 +68,8 @@ export default function Usuarios() {
   const [formError, setFormError] = useState(null)
   const [importOpen, setImportOpen] = useState(false)
   const [search, setSearch] = useState('')
+  // Id de la persona cuyo historial se está viendo, o null para la lista.
+  const [historialId, setHistorialId] = useState(null)
 
   const fetchAll = async () => {
     const [us, orgs, pue, centros] = await Promise.all([
@@ -293,6 +296,31 @@ export default function Usuarios() {
     },
   ]
 
+  // El historial se muestra EN LUGAR de la lista, con un early return — mismo
+  // patrón que la vista de contenido de TrainingModules.jsx. Es lo que hace que
+  // volver conserve la tab, la búsqueda y los usuarios ya cargados: este
+  // componente NUNCA se desmonta (no hay navegación de página, `useNavigation`
+  // sigue en 'usuarios'), así que todos sus useState siguen vivos y no hace
+  // falta levantar el estado a ningún lado.
+  //
+  // OJO: mover esta vista a una página propia de App.jsx sí desmontaría
+  // Usuarios, y volver resetearía los filtros a cero. No es una simplificación
+  // pendiente, es lo que este early return evita a propósito.
+  if (historialId) {
+    return (
+      <HistorialUsuario
+        usuarioId={historialId}
+        onVolver={() => setHistorialId(null)}
+        // Los catálogos ya están en memoria (los trae fetchAll al montar): se
+        // pasan para traducir a nombres los ids crudos del audit log, sin
+        // agregar un request.
+        puestos={puestos}
+        centrosCosto={centrosCosto}
+        organizaciones={organizaciones}
+      />
+    )
+  }
+
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between">
@@ -371,6 +399,9 @@ export default function Usuarios() {
           data={usuariosFiltrados}
           actions={(row) => (
             <>
+              <Button variant="ghost" size="sm" onClick={() => setHistorialId(row.id)}>
+                Ver historial
+              </Button>
               <Button variant="ghost" size="sm" onClick={() => openEdit(row)}>
                 Editar
               </Button>
