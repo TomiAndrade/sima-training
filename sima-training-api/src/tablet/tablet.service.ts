@@ -203,7 +203,11 @@ export class TabletService {
       moduloId: modulo.id,
       moduloVersionId: version.id,
       modulo: { nombre: modulo.nombre, descripcion: modulo.descripcion },
-      version: { anio: version.anio, mayor: version.mayor, menor: version.menor },
+      version: {
+        anio: version.anio,
+        mayor: version.mayor,
+        menor: version.menor,
+      },
       preguntas: elegidas.map(serializarPregunta),
     };
   }

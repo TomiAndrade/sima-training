@@ -24,10 +24,7 @@ describe('TabletAuthGuard', () => {
     jwt = { verifyAsync: jest.fn() };
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        TabletAuthGuard,
-        { provide: JwtService, useValue: jwt },
-      ],
+      providers: [TabletAuthGuard, { provide: JwtService, useValue: jwt }],
     }).compile();
 
     guard = module.get(TabletAuthGuard);
@@ -42,7 +39,10 @@ describe('TabletAuthGuard', () => {
   });
 
   it('rechaza un token de backoffice (type: backoffice, no tipo: alumno)', async () => {
-    jwt.verifyAsync.mockResolvedValue({ sub: 'admin@sima.com', type: 'backoffice' });
+    jwt.verifyAsync.mockResolvedValue({
+      sub: 'admin@sima.com',
+      type: 'backoffice',
+    });
     const { context } = buildContext('Bearer token-backoffice');
 
     await expect(guard.canActivate(context)).rejects.toBeInstanceOf(

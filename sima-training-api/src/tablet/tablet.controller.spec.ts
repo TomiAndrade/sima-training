@@ -103,7 +103,10 @@ describe('RegistrarSesionTabletDto contra la ValidationPipe de main.ts', () => {
     moduloVersionId: '3fa85f64-5717-4562-b3fc-2c963f66afa6',
     finalizadaEn: '2026-08-10T12:00:00.000Z',
     respuestas: [
-      { preguntaId: '3fa85f64-5717-4562-b3fc-2c963f66afa7', respuestaDada: 'V' },
+      {
+        preguntaId: '3fa85f64-5717-4562-b3fc-2c963f66afa7',
+        respuestaDada: 'V',
+      },
     ],
   };
 

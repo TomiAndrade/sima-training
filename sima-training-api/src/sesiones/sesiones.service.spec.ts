@@ -280,7 +280,12 @@ describe('SesionesService.registrar', () => {
   it('la búsqueda por clave corre ANTES de las validaciones', async () => {
     const clave = 'clave-3';
     const payload = dto(undefined, { claveIdempotencia: clave });
-    const existente = { id: 's-vieja', usuarioId: 1, claveIdempotencia: clave, respuestas: [] };
+    const existente = {
+      id: 's-vieja',
+      usuarioId: 1,
+      claveIdempotencia: clave,
+      respuestas: [],
+    };
     prisma.sesion.findUnique.mockResolvedValueOnce(existente);
 
     // La versión pasó a BORRADOR: si corriera la validación de nuevo, esto
