@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { tabletApi } from '../core/api/tablet'
 
-export default function ModuleSelection({ usuario, onSelect, onBack }) {
+export default function ModuleSelection({ usuario, onSelect, onBack, cargandoExamen = false, errorExamen = '' }) {
   const [pendientes, setPendientes] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
@@ -68,11 +68,17 @@ export default function ModuleSelection({ usuario, onSelect, onBack }) {
 
         {!loading && !error && pendientes.length > 0 && (
           <div className="flex flex-col gap-3">
+            {errorExamen && (
+              <div className="bg-red-50 border border-red-300 rounded-xl px-4 py-3">
+                <p className="text-red-600 text-sm leading-relaxed">{errorExamen}</p>
+              </div>
+            )}
             {pendientes.map((item) => (
               <button
                 key={item.asignacionId}
                 onClick={() => onSelect(item)}
-                className="group w-full flex items-center gap-4 bg-red-600 hover:bg-red-700 active:bg-red-800 rounded-xl px-5 py-4 transition-all duration-150 touch-manipulation"
+                disabled={cargandoExamen}
+                className="group w-full flex items-center gap-4 bg-red-600 hover:bg-red-700 active:bg-red-800 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl px-5 py-4 transition-all duration-150 touch-manipulation"
               >
                 <span className="flex-1 text-left text-white text-lg font-bold leading-tight">{item.nombre}</span>
                 <span className="text-white text-2xl font-bold flex-shrink-0 group-hover:translate-x-1 transition-transform">›</span>

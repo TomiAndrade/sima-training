@@ -1,3 +1,5 @@
+import { resolverImagenUrl } from '../core/api/imagenes'
+
 const LETTERS = ['A', 'B', 'C', 'D']
 
 function getTFStyle(opt, isSelected) {
@@ -13,22 +15,22 @@ function getTFStyle(opt, isSelected) {
 }
 
 export default function QuestionCard({ question, selectedAnswer, onSelect }) {
-  const isTF = question.type === 'truefalse'
-  const isImageOpts = question.type === 'image-options'
-  const options = isTF ? ['Verdadero', 'Falso'] : question.options
+  const isTF = question.tipo === 'VERDADERO_FALSO'
+  const isImageOpts = question.tipo === 'OPCIONES_IMAGEN'
+  const options = isTF ? ['Verdadero', 'Falso'] : question.opciones
 
   return (
     <div className="space-y-4">
-      <p className="text-slate-900 text-2xl font-semibold leading-snug">{question.statement}</p>
-      {question.image && (
+      <p className="text-slate-900 text-2xl font-semibold leading-snug">{question.texto}</p>
+      {question.imagen && (
         <div className="rounded-xl overflow-hidden border border-slate-200 bg-slate-50">
-          <img src={question.image} alt="Imagen de referencia" className="w-full max-h-64 object-contain" />
+          <img src={resolverImagenUrl(question.imagen.url)} alt="Imagen de referencia" className="w-full max-h-64 object-contain" />
         </div>
       )}
       <div className={`grid gap-3 mt-6 ${isTF || isImageOpts ? 'grid-cols-2' : 'grid-cols-1'}`}>
         {options.map((opt, i) => {
-          const isSelected = selectedAnswer === opt
           if (isTF) {
+            const isSelected = selectedAnswer === opt
             return (
               <button
                 key={i}
@@ -40,20 +42,27 @@ export default function QuestionCard({ question, selectedAnswer, onSelect }) {
             )
           }
           if (isImageOpts) {
+            // opt es { clave, url }: se MUESTRA la url (resuelta contra el backend)
+            // pero se GUARDA/COMPARA la clave — el backend corrige contra la clave
+            // cruda de storage (corregir.ts), nunca contra la url armada. Si acá se
+            // mandara `opt.url` como respuesta, ninguna quedaría bien y todos
+            // desaprobarían siempre.
+            const isSelected = selectedAnswer === opt.clave
             return (
               <button
-                key={i}
-                onClick={() => onSelect(opt)}
+                key={opt.clave}
+                onClick={() => onSelect(opt.clave)}
                 className={`w-full aspect-square rounded-2xl overflow-hidden border-2 transition-all duration-150 touch-manipulation select-none ${
                   isSelected
                     ? 'border-red-600 ring-2 ring-red-600/30'
                     : 'border-slate-200 hover:border-slate-400'
                 }`}
               >
-                <img src={opt} alt={`Opción ${LETTERS[i]}`} className="w-full h-full object-cover" />
+                <img src={resolverImagenUrl(opt.url)} alt={`Opción ${LETTERS[i]}`} className="w-full h-full object-cover" />
               </button>
             )
           }
+          const isSelected = selectedAnswer === opt
           return (
             <button
               key={i}

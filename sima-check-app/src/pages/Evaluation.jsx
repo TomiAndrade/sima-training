@@ -5,18 +5,17 @@ import Button from '../components/Button'
 
 export default function Evaluation({ usuario, module: mod, questions, onFinish, onBack }) {
   const [currentIndex, setCurrentIndex] = useState(0)
-  const [answers, setAnswers] = useState(Array(questions.length).fill(null))
+  // Indexado por preguntaId (no por posición): así App.jsx puede armar
+  // `respuestas` sin depender de que este componente recorra las preguntas
+  // en el mismo orden que examen.preguntas.
+  const [answers, setAnswers] = useState({})
 
   const current = questions[currentIndex]
-  const currentAnswer = answers[currentIndex]
+  const currentAnswer = answers[current.id]
   const isLast = currentIndex === questions.length - 1
 
   const handleSelect = (answer) => {
-    setAnswers((prev) => {
-      const next = [...prev]
-      next[currentIndex] = answer
-      return next
-    })
+    setAnswers((prev) => ({ ...prev, [current.id]: answer }))
   }
 
   const handleNext = () => {
@@ -38,7 +37,7 @@ export default function Evaluation({ usuario, module: mod, questions, onFinish, 
         <div className="flex items-center justify-between mb-4">
           <div>
             <p className="text-slate-500 text-sm">{usuario.name}</p>
-            <p className="text-red-600 font-semibold text-sm">{mod.name}</p>
+            <p className="text-red-600 font-semibold text-sm">{mod.nombre}</p>
           </div>
           <button onClick={onBack} className="text-slate-400 text-sm hover:text-slate-700 touch-manipulation">
             Cancelar
