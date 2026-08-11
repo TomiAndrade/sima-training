@@ -2,7 +2,7 @@
 
 ## Qué es esto
 
-MVP de alta fidelidad para validar la plataforma **SIMA TRAINING** de **Ingeniería Sima** ante clientes de la industria Oil & Gas. Nació como demo navegable solo-frontend (datos mockeados) y desde el **Sprint 1** tiene un **backend real** (NestJS + PostgreSQL): el ABM de Usuarios del backoffice ya persiste contra base de datos. La app tablet sigue mockeada por ahora.
+MVP de alta fidelidad para validar la plataforma **SIMA TRAINING** de **Ingeniería Sima** ante clientes de la industria Oil & Gas. Nació como demo navegable solo-frontend (datos mockeados) y desde el **Sprint 1** tiene un **backend real** (NestJS + PostgreSQL). Hoy el backoffice persiste contra base de datos en casi todas sus pantallas y **la app tablet también está conectada**: rinde contra `/tablet/*` y el resultado lo calcula el backend.
 
 **SIMA CHECK** (capacitaciones y evaluaciones industriales) es el primer producto integrado en la plataforma. La arquitectura está preparada para incorporar productos futuros (SIMA INSPECTIONS, SIMA AUDITS, etc.) sin reorganizaciones.
 
@@ -27,7 +27,7 @@ MVP de alta fidelidad para validar la plataforma **SIMA TRAINING** de **Ingenier
 - **Prisma 6** (ORM + migraciones)
 - **JWT** para auth básica (sin roles todavía)
 
-> El backoffice ya consume la API real (ver `src/core/api/`) en **Usuarios, Puestos, Centros de Costo, Módulos, Preguntas, Reglas de asignación y Asignaciones**. Siguen mockeadas **Dashboard, Clientes y casi todo el Resumen de SIMA CHECK**; se migran ABM por ABM en sprints siguientes. La app tablet (`sima-check-app`) todavía no está conectada.
+> El backoffice ya consume la API real (ver `src/core/api/`) en **Usuarios, Puestos, Centros de Costo, Módulos, Preguntas, Reglas de asignación y Asignaciones**. Siguen mockeadas **Dashboard, Clientes y casi todo el Resumen de SIMA CHECK**; se migran ABM por ABM en sprints siguientes. La app tablet (`sima-check-app`) **ya está conectada**: consume `/tablet/*` vía `src/core/api/` y no le queda ningún mock de datos (`src/data/` se eliminó). Lo que sigue pendiente ahí es el **offline de datos**, no la conexión.
 
 ## Cómo correr
 
@@ -49,7 +49,7 @@ npm install
 cp .env.example .env             # VITE_API_URL apunta al backend local
 npm run dev                      # → http://localhost:5173
 
-# 3. App tablet (mockeada, sin backend aún)
+# 3. App tablet (consume el backend: necesita la API corriendo)
 cd TRAINING/sima-check-app
 npm install
 npm run dev                      # → http://localhost:5174
@@ -302,7 +302,7 @@ Al finalizar una evaluación, la asignación cambia de `pending → completed` *
 - **Evaluaciones**: 20 registros históricos para el dashboard del backoffice
 - **Asignaciones**: 27 asignaciones mockeadas con `status: 'pending' | 'completed' | 'expired'`
 
-Las preguntas mock se retiraron del backoffice (`sima-check/data/training-modules.js` quedó con `questions: []`) antes de arrancar el trabajo real sobre el dominio de preguntas; el banco real vive en backend. La **app tablet** (`sima-check-app/src/data/modules.js`) **mantiene su mock de preguntas** (módulo SIMA Avanzado, IDs 301–310, etc.) hasta que se conecte al backend.
+Las preguntas mock se retiraron del backoffice (`sima-check/data/training-modules.js` quedó con `questions: []`) antes de arrancar el trabajo real sobre el dominio de preguntas; el banco real vive en backend. La **app tablet ya no tiene ningún mock**: `sima-check-app/src/data/` se eliminó al conectarla, y usuarios, módulos y preguntas salen de `/tablet/*`.
 
 ## Arquitectura de archivos
 
@@ -381,7 +381,7 @@ sima-check-app/src/
 - **Los dos frontends nombran la entidad `usuario`, no `employee`** — alineado con el `Usuario` del backend, que unifica `User` + `Employee` (ver arriba). En la **app tablet** alcanza a los archivos (`data/usuarios.js`, `pages/UsuarioSelection.jsx`), al prop que se pasa entre pantallas (`usuario`) y al campo `assignments[].usuarioId`. En el **backoffice**, a `core/data/usuarios-mock.js` (export `usuariosMock`), al campo `trainingAssignments[].usuarioId` y a `evaluations[].usuarioName`. Los duplicados del modelo viejo (`sima-check-app/src/data/employees.js` + `pages/EmployeeSelection.jsx`, `sima-training-backoffice/src/core/data/employees.js`) se eliminaron; quedan en el historial de git. `User` (`core/data/users.js`) **no** entra en este rename: son las cuentas del backoffice (administrador/coordinador), otra cosa.
 - La navegación de SIMA CHECK en el backoffice usa un Set (`SIMA_CHECK_PAGES`) en `BackofficeLayout.jsx` para detectar cuándo renderizar la barra de tabs y el breadcrumb de dos niveles.
 - La pantalla Preguntas maneja su propia navegación interna (`selectedModuleId`) con `useState` — no requiere cambios en el router global.
-- El campo `image` de las preguntas **mockeadas de la app tablet** es una ruta relativa a `public/` (ej: `/images/cartel.png`). En el backend, `Pregunta.imagen` ya no es eso: guarda una clave de storage y se sirve bajo `/uploads` (ver [decisiones/preguntas.md](docs/decisiones/preguntas.md)); las rutas a `public/` sobreviven solo como formato legacy del import de Excel.
+- Las imágenes le llegan a la app tablet como `{ clave, url }`: muestra la `url` y manda la `clave` de vuelta como respuesta, porque el backend corrige contra la clave cruda de storage. Las rutas relativas a `public/` (ej. `/images/cartel.png`) sobreviven sólo como formato legacy del import de Excel.
 - El tipo `image-options` usa las mismas rutas en `options[]` y `correctAnswer` — la comparación de respuesta correcta es por igualdad de string (misma ruta).
 
 ## Decisiones de diseño — [`docs/decisiones/`](docs/decisiones/)
