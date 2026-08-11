@@ -7,6 +7,7 @@ import {
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateAsignacionDto } from './dto/create-asignacion.dto';
+import { calcularVencimiento } from './vigencia';
 
 @Injectable()
 export class AsignacionesService {
@@ -202,33 +203,100 @@ export class AsignacionesService {
     return { creadas: aCrear.length, revocadas: aRevocar.length };
   }
 
-  // Módulos que el usuario YA APROBÓ. Es lo que hace que una recontratación no
-  // obligue a rendir de nuevo algo que la persona ya tenía aprobado.
+  // Última aprobación de cada módulo, con la vigencia (Modulo.vigenciaMeses)
+  // que regía en el momento de leerla — el insumo crudo que calcularVencimiento()
+  // necesita, sin decidir todavía qué está cubierto. Separado de
+  // modulosAprobados() porque es lo que Story 10 (informe de aprobaciones)
+  // va a necesitar sin el filtro de vigencia.
   //
-  // Aprobar es un hecho que NO se des-aprueba: alcanza con que exista UNA Sesion
-  // aprobada, sin importar cuántos intentos fallidos haya alrededor ni cuál fue el
-  // último. Si más adelante vuelve a rendir y desaprueba, la aprobación anterior
-  // sigue valiendo — lo que la caduca es la vigencia (Story 8), no un intento malo.
+  // Una sola query, agrupada en JS quedándose con el createdAt más reciente
+  // por moduloId. NO se usa groupBy ni SQL crudo: el volumen de sesiones
+  // aprobadas por persona es de decenas de filas, así que agrupar en memoria
+  // mantiene el método usable dentro de una transacción sin sumar otra query.
+  async aprobacionesPorModulo(
+    usuarioId: number,
+    client: Prisma.TransactionClient | PrismaService = this.prisma,
+  ): Promise<Map<string, { aprobadaEn: Date; vigenciaMeses: number | null }>> {
+    const sesiones = await client.sesion.findMany({
+      where: { usuarioId, aprobada: true },
+      select: {
+        createdAt: true,
+        moduloVersion: {
+          select: {
+            moduloId: true,
+            modulo: { select: { vigenciaMeses: true } },
+          },
+        },
+      },
+    });
+
+    const porModulo = new Map<
+      string,
+      { aprobadaEn: Date; vigenciaMeses: number | null }
+    >();
+    for (const sesion of sesiones) {
+      const moduloId = sesion.moduloVersion.moduloId;
+      const actual = porModulo.get(moduloId);
+      // createdAt (reloj de SERVIDOR) y no finalizadaEn (reloj del
+      // DISPOSITIVO, ver el comentario de Sesion en el schema): la fecha
+      // oficial de una aprobación no puede depender de un reloj que la app
+      // no controla.
+      //
+      // La MÁS RECIENTE y no la primera: volver a rendir y aprobar de nuevo
+      // reinicia el reloj de la vigencia, no lo conserva desde la primera vez.
+      if (!actual || sesion.createdAt > actual.aprobadaEn) {
+        porModulo.set(moduloId, {
+          aprobadaEn: sesion.createdAt,
+          vigenciaMeses: sesion.moduloVersion.modulo.vigenciaMeses,
+        });
+      }
+    }
+    return porModulo;
+  }
+
+  // Módulos CUBIERTOS por una aprobación HOY — ya no significa "aprobó
+  // alguna vez", significa "aprobó y esa aprobación TODAVÍA VALE" (Story 8:
+  // la vigencia caduca la cobertura, ver vigencia.ts). El Set es una foto
+  // del momento en que se llama, no el historial: para "¿aprobó este módulo
+  // alguna vez, aunque hoy esté vencido?" (el informe de usuario de la
+  // Story 10) hace falta otra consulta — este método NO sirve para eso,
+  // sólo para decidir si hoy sigue habiendo o no una obligación de rendir.
   //
-  // Se entra por moduloVersionId y se sale por moduloId: la obligación es "este
-  // módulo", así que aprobar CUALQUIER versión lo cubre. El join reemplaza a
-  // desnormalizar moduloId en Sesion.
+  // Consecuencia sobre recalcular(): deja de ser determinista respecto de la
+  // base sola. La MISMA base, consultada en dos fechas distintas, puede dar
+  // un resultado distinto (una aprobación que hoy cubre puede vencer mañana
+  // sin que nada más haya cambiado). Sigue siendo idempotente en el sentido
+  // que importa: correrlo dos veces seguidas EN LA MISMA fecha no duplica ni
+  // revoca de más.
   //
-  // Lo consume recalcular() en el paso de creación (no en el de revocación: un
-  // módulo aprobado que una regla sigue pidiendo no se revoca, sólo no se
-  // re-crea) y TabletService.pendientes() (excluir de la lista lo ya
-  // aprobado). Público por eso — misma lógica y misma firma de `client`. Ojo
-  // con el `client`: el default es this.prisma para el uso suelto, pero
+  // Se entra por moduloVersionId y se sale por moduloId: la obligación es
+  // "este módulo", así que aprobar CUALQUIER versión lo cubre (mientras esa
+  // aprobación no esté vencida).
+  //
+  // Lo consume recalcular() en el paso de creación (una aprobación vencida
+  // deja de tapar la creación — se beneficia solo, el paso de revocación no
+  // cambia) y TabletService.pendientes() (excluir de la lista lo cubierto
+  // hoy). Público por eso — misma lógica y misma firma de `client`. Ojo con
+  // el `client`: el default es this.prisma para el uso suelto, pero
   // recalcularEnTx le pasa SIEMPRE su `tx`.
+  //
+  // `ahora` es sólo para poder testear sin fake timers — nadie en producción
+  // lo pasa.
   async modulosAprobados(
     usuarioId: number,
     client: Prisma.TransactionClient | PrismaService = this.prisma,
+    ahora: Date = new Date(),
   ): Promise<Set<string>> {
-    const sesiones = await client.sesion.findMany({
-      where: { usuarioId, aprobada: true },
-      select: { moduloVersion: { select: { moduloId: true } } },
-    });
-    return new Set(sesiones.map((sesion) => sesion.moduloVersion.moduloId));
+    const aprobaciones = await this.aprobacionesPorModulo(usuarioId, client);
+
+    const cubiertos = new Set<string>();
+    for (const [moduloId, { aprobadaEn, vigenciaMeses }] of aprobaciones) {
+      // POR_VENCER cuenta como cubierto: todavía vale, es sólo el aviso
+      // previo. Únicamente VENCIDO deja de tapar la obligación.
+      const { estado } = calcularVencimiento(aprobadaEn, vigenciaMeses, ahora);
+      if (estado !== 'VENCIDO') cubiertos.add(moduloId);
+    }
+    return cubiertos;
   }
 
   private async assertUsuarioExiste(

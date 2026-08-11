@@ -17,10 +17,22 @@ const vigente = (
   origen: 'AUTOMATICA' | 'MANUAL',
 ) => ({ id, moduloId, origen });
 
-// Sesión aprobada como la lee modulosAprobados: entra por moduloVersionId y sale
-// por moduloId (aprobar CUALQUIER versión cubre el módulo).
-const sesionAprobadaDe = (moduloId: string) => ({
-  moduloVersion: { moduloId },
+// Sesión aprobada como la lee aprobacionesPorModulo/modulosAprobados: entra por
+// moduloVersionId y sale por moduloId (aprobar CUALQUIER versión cubre el
+// módulo), con el createdAt (reloj de servidor) y la vigencia del módulo en
+// ese momento. Default: aprobada hace mucho con vigenciaMeses null — no vence
+// nunca, así que sigue cubriendo pase lo que pase con `ahora`. Es el default
+// real de todos los módulos de hoy, y por eso la mayoría de los tests de este
+// archivo (escritos antes de Story 8) no necesitan tocar estos dos campos.
+const sesionAprobadaDe = (
+  moduloId: string,
+  {
+    createdAt = new Date(Date.UTC(2020, 0, 1)),
+    vigenciaMeses = null,
+  }: { createdAt?: Date; vigenciaMeses?: number | null } = {},
+) => ({
+  createdAt,
+  moduloVersion: { moduloId, modulo: { vigenciaMeses } },
 });
 
 describe('AsignacionesService.recalcular', () => {
@@ -291,6 +303,130 @@ describe('AsignacionesService.recalcular', () => {
     expect(prisma.sesion.findMany).not.toHaveBeenCalled();
     // Y el resultado es el del tx: m1 aprobado ⇒ no se crea.
     expect(res).toEqual({ creadas: 0, revocadas: 0 });
+  });
+
+  // --- Vigencia de la aprobación (Story 8) --------------------------------
+  // modulosAprobados()/aprobacionesPorModulo() se testean acá con `ahora`
+  // fijo (el tercer parámetro, sólo para tests) en vez de con fechas
+  // relativas a Date.now(): así el test no depende de correr antes de una
+  // fecha límite. Los dos casos que integran con recalcular() más abajo usan
+  // en cambio una `createdAt` fija en un pasado lejano — vencida para
+  // cualquier `ahora` real, presente o futuro, sin necesidad de fijarlo.
+
+  it('vigenciaMeses null: la aprobación tapa para siempre (comportamiento anterior a Story 8)', async () => {
+    prisma.sesion.findMany.mockResolvedValue([
+      sesionAprobadaDe('m1', { createdAt: new Date(Date.UTC(2000, 0, 1)) }),
+    ]);
+
+    const cubiertos = await service.modulosAprobados(
+      1,
+      prisma as unknown as PrismaService,
+      new Date(Date.UTC(2030, 0, 1)), // 30 años después: igual sigue cubriendo
+    );
+
+    expect(cubiertos.has('m1')).toBe(true);
+  });
+
+  it('vigencia de 12 meses, aprobado hace 6: sigue cubierto', async () => {
+    const aprobadaEn = new Date(Date.UTC(2025, 0, 1));
+    const ahora = new Date(Date.UTC(2025, 6, 1));
+    prisma.sesion.findMany.mockResolvedValue([
+      sesionAprobadaDe('m1', { createdAt: aprobadaEn, vigenciaMeses: 12 }),
+    ]);
+
+    const cubiertos = await service.modulosAprobados(
+      1,
+      prisma as unknown as PrismaService,
+      ahora,
+    );
+
+    expect(cubiertos.has('m1')).toBe(true);
+  });
+
+  it('vigencia de 12 meses, aprobado hace 18: VENCIDO, ya no cubre', async () => {
+    const aprobadaEn = new Date(Date.UTC(2024, 0, 1));
+    const ahora = new Date(Date.UTC(2025, 6, 1));
+    prisma.sesion.findMany.mockResolvedValue([
+      sesionAprobadaDe('m1', { createdAt: aprobadaEn, vigenciaMeses: 12 }),
+    ]);
+
+    const cubiertos = await service.modulosAprobados(
+      1,
+      prisma as unknown as PrismaService,
+      ahora,
+    );
+
+    expect(cubiertos.has('m1')).toBe(false);
+  });
+
+  it('dos sesiones aprobadas del mismo módulo: gana la MÁS RECIENTE, no la primera', async () => {
+    // Si agrupara mal (quedándose con la primera en vez de la última), esto
+    // daría VENCIDO por error: la vieja ya venció, la reciente no.
+    prisma.sesion.findMany.mockResolvedValue([
+      sesionAprobadaDe('m1', {
+        createdAt: new Date(Date.UTC(2020, 0, 1)),
+        vigenciaMeses: 12,
+      }),
+      sesionAprobadaDe('m1', {
+        createdAt: new Date(Date.UTC(2025, 0, 1)),
+        vigenciaMeses: 12,
+      }),
+    ]);
+    const ahora = new Date(Date.UTC(2025, 3, 1)); // 3 meses después de la reciente
+
+    const cubiertos = await service.modulosAprobados(
+      1,
+      prisma as unknown as PrismaService,
+      ahora,
+    );
+
+    expect(cubiertos.has('m1')).toBe(true);
+  });
+
+  it('una aprobación VENCIDA no tapa la creación: recalcular() la vuelve a asignar', async () => {
+    prisma.sesion.findMany.mockResolvedValue([
+      sesionAprobadaDe('m1', {
+        createdAt: new Date(Date.UTC(2000, 0, 1)),
+        vigenciaMeses: 12,
+      }),
+    ]);
+    prisma.vinculacionPuestoCentro.findMany.mockResolvedValue([
+      par('p-soldador', 'c-ypf'),
+    ]);
+    prisma.reglaAsignacion.findMany.mockResolvedValue([{ moduloId: 'm1' }]);
+    prisma.asignacion.createMany.mockResolvedValue({ count: 1 });
+
+    const res = await service.recalcular(1);
+
+    expect(res).toEqual({ creadas: 1, revocadas: 0 });
+    expect(prisma.asignacion.createMany).toHaveBeenCalledWith({
+      data: [expect.objectContaining({ moduloId: 'm1' })],
+    });
+  });
+
+  it('aprobación VENCIDA con una vigente ya creada: no la duplica ni la revoca', async () => {
+    // El módulo aprobado venció, pero ya hay una AUTOMATICA vigente que lo
+    // tapa (paso 5: `modulosCubiertos`, no `aprobados`) y la regla lo sigue
+    // pidiendo (paso 6 no la toca).
+    prisma.sesion.findMany.mockResolvedValue([
+      sesionAprobadaDe('m1', {
+        createdAt: new Date(Date.UTC(2000, 0, 1)),
+        vigenciaMeses: 12,
+      }),
+    ]);
+    prisma.vinculacionPuestoCentro.findMany.mockResolvedValue([
+      par('p-soldador', 'c-ypf'),
+    ]);
+    prisma.reglaAsignacion.findMany.mockResolvedValue([{ moduloId: 'm1' }]);
+    prisma.asignacion.findMany.mockResolvedValue([
+      vigente('a1', 'm1', 'AUTOMATICA'),
+    ]);
+
+    const res = await service.recalcular(1);
+
+    expect(res).toEqual({ creadas: 0, revocadas: 0 });
+    expect(prisma.asignacion.createMany).not.toHaveBeenCalled();
+    expect(prisma.asignacion.updateMany).not.toHaveBeenCalled();
   });
 
   it('sigue siendo idempotente con un módulo ya aprobado: dos corridas no tocan nada', async () => {
