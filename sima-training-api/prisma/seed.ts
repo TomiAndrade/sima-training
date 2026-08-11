@@ -57,6 +57,11 @@ const MODULOS = [
 // self-FK Organizacion.organizacionPadreId (SET NULL, verificado en el SQL de
 // 20260624033224_init/migration.sql:45 — el .prisma no lo dice).
 async function limpiar() {
+  // AuditLog no tiene ninguna FK saliente (es la tabla polimórfica, ver
+  // schema.prisma) — no cuelga de nada de lo de abajo, así que no le importa
+  // el orden. Va primera igual, para que el seed sea reproducible.
+  await prisma.auditLog.deleteMany();
+
   await prisma.respuesta.deleteMany();
   await prisma.sesion.deleteMany();
   await prisma.asignacion.deleteMany();

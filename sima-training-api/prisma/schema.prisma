@@ -711,3 +711,57 @@ model Respuesta {
   @@index([preguntaId])
   @@map("respuestas")
 }
+
+// Acción registrada en un AuditLog: alta, edición o baja de la fila auditada.
+enum AccionAudit {
+  CREATE
+  UPDATE
+  DELETE
+}
+
+// AuditLog: historial de cambios para ISO 9001 (Story 9). Registra qué cambió,
+// en qué fila, quién lo hizo y cuándo — pensado para reconstruir "por qué esta
+// persona tiene este par/rol/asignación hoy", no para operar sobre él.
+//
+// POLIMÓRFICA A PROPÓSITO: una misma tabla guarda cambios de Vinculacion,
+// VinculacionPuestoCentro, y lo que se sume después — por eso `entidad` +
+// `entidadId` en vez de una FK. `entidadId` es String aunque las PK reales
+// sean uuid (String) o autoincrement (Int): es una EXCEPCIÓN DELIBERADA a la
+// convención del resto del schema (todo lo demás usa FK tipada), no un
+// descuido — una tabla polimórfica no puede tener una FK a "la entidad que
+// corresponda". Consultar "el log de esta persona" es un filtro por
+// (entidad, entidadId), no un join.
+//
+// INMUTABLE y sin soft-delete — mismo tratamiento que Sesion y ModuloVersion:
+// es un hecho histórico, y borrar (aunque sea lógicamente) una fila de
+// auditoría le pega directo al propósito de la tabla. Por eso no hay
+// updatedAt/updatedBy/deletedAt, sólo createdAt.
+//
+// `actor` es String libre y no FK a Usuario: hoy los actores son los mismos
+// strings genéricos que ya usa createdBy ("backoffice", "import", "tablet")
+// porque no existen cuentas de sistema todavía (ver la matriz de roles en
+// README.md). El día que existan, se guarda el id de esa cuenta ahí mismo,
+// sin migrar nada.
+//
+// `diff` es jsonb con la forma `{ campo: { antes, despues } }`, SOLO los
+// campos que cambiaron — no una foto completa de la fila. La forma varía por
+// entidad y nunca se consulta por adentro (ni filtro ni índice sobre su
+// contenido), sólo se lee entera para mostrarla: no hay razón para forzarle
+// una columna tipada.
+model AuditLog {
+  id        String      @id @default(uuid())
+  entidad   String
+  entidadId String      @map("entidad_id")
+  accion    AccionAudit
+  diff      Json
+  actor     String
+  createdAt DateTime    @default(now()) @map("created_at")
+
+  // El compuesto sirve al caso de uso real (paso 4 de esta story): "el log de
+  // esta persona", filtrando por (entidad, entidadId). El de createdAt sirve
+  // a un log global ordenado por fecha — no existe todavía, pero es la
+  // lectura obvia siguiente y no cuesta nada adelantarlo.
+  @@index([entidad, entidadId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
