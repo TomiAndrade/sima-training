@@ -13,14 +13,6 @@ export function backendTypeBadge(tipo) {
   return <span className="px-2 py-0.5 rounded text-[11px] font-semibold font-mono border bg-violet-50 text-violet-600 border-violet-200">Múltiple</span>
 }
 
-// Número público AÑO.MAYOR.MENOR (ej. "2026.01.00"). Un borrador todavía no
-// publicado no tiene número (anio/mayor/menor en null).
-export function formatVersionNumero(v) {
-  if (!v || v.anio == null || v.mayor == null || v.menor == null) return 'Borrador'
-  const pad = (n) => String(n).padStart(2, '0')
-  return `${v.anio}.${pad(v.mayor)}.${pad(v.menor)}`
-}
-
 // Bucket de estado de un módulo (para chips de filtro y conteos). El toggle
 // manual `activo` pisa todo lo demás: un módulo desactivado a mano cae en
 // "inactivo" sin importar en qué estado esté su versión vigente.

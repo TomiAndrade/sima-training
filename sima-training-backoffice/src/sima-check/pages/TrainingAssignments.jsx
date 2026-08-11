@@ -6,18 +6,7 @@ import { usuariosApi } from '../../core/api/usuarios'
 import { asignacionesApi } from '../../core/api/asignaciones'
 import { reglasAsignacionApi } from '../../core/api/reglasAsignacion'
 import { modulosApi } from '../../core/api/modulos'
-
-const roleBadge = {
-  ADMINISTRADOR: 'bg-red-50 text-red-600',
-  COORDINADOR: 'bg-blue-50 text-blue-600',
-  AUDITOR: 'bg-violet-50 text-violet-600',
-  ALUMNO: 'bg-emerald-50 text-emerald-600',
-}
-
-const origenBadge = {
-  AUTOMATICA: 'bg-indigo-50 text-indigo-600',
-  MANUAL: 'bg-slate-100 text-slate-600',
-}
+import { roleBadge, origenBadge } from '../../core/format/badges'
 
 // Mismo criterio que ReglasAsignacion.jsx: un módulo sin versión ACTIVO
 // publicada no está disponible para rendir todavía.

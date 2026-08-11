@@ -8,13 +8,7 @@ import { puestosApi } from '../api/puestos'
 import { centrosCostoApi } from '../api/centrosCosto'
 import ImportUsuariosModal from '../components/ImportUsuariosModal'
 import ParesPuestoCentro from '../components/ParesPuestoCentro'
-
-const roleBadge = {
-  ADMINISTRADOR: 'bg-red-50 text-red-600',
-  COORDINADOR:   'bg-blue-50 text-blue-600',
-  AUDITOR:       'bg-violet-50 text-violet-600',
-  ALUMNO:        'bg-emerald-50 text-emerald-600',
-}
+import { roleBadge } from '../format/badges'
 
 // Decisión de producto: el backoffice solo da de alta ALUMNOS por ahora (la
 // abstracción de roles del sistema todavía no está definida). El backend
