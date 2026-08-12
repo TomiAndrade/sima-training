@@ -42,6 +42,24 @@ const matchTab = (u, t) => {
   return u.vinculacion?.organizacion?.tipo === tab?.tipo
 }
 
+const selectCls =
+  'bg-white border border-slate-300 rounded px-3 py-2 text-slate-900 text-sm focus:outline-none focus:border-red-600'
+
+// Los pares vienen de JSON, así que `parPrincipal` NO es el mismo objeto que su
+// entrada dentro de `pares`: comparar por identidad no sirve, se compara por clave.
+const clavePar = (par) => `${par.puesto.id}|${par.centroCosto.id}`
+
+// Los pares que la fila no muestra. `principal` es solo display — la persona
+// rinde los módulos de TODOS sus pares —, así que la tabla los tiene que poder
+// mostrar en vez de mentir por omisión.
+const paresAdicionales = (vinculacion) => {
+  const pares = vinculacion?.pares ?? []
+  const principal = vinculacion?.parPrincipal
+  if (!principal) return pares
+  const claveDelPrincipal = clavePar(principal)
+  return pares.filter((par) => clavePar(par) !== claveDelPrincipal)
+}
+
 const emptyForm = {
   nombre: '',
   apellido: '',
@@ -68,20 +86,37 @@ export default function Usuarios() {
   const [formError, setFormError] = useState(null)
   const [importOpen, setImportOpen] = useState(false)
   const [search, setSearch] = useState('')
+  // Estos tres los resuelve el BACKEND (?puestoId=/?centroCostoId=/?organizacionId=),
+  // no se filtran en memoria: acá solo tenemos el par principal, que es display,
+  // y el backend busca sobre TODOS los pares activos de cada persona. Puesto y
+  // centro juntos filtran por PAR EXACTO (ver UsuariosService.findAll).
+  const [filtroPuesto, setFiltroPuesto] = useState('')
+  const [filtroCentro, setFiltroCentro] = useState('')
+  const [filtroOrganizacion, setFiltroOrganizacion] = useState('')
+  // Filas con los pares adicionales desplegados (ids de usuario).
+  const [expandidos, setExpandidos] = useState(() => new Set())
+  // Se incrementa para forzar una recarga después de una mutación: el fetch de
+  // usuarios vive en un solo efecto, junto con su guarda de respuesta vieja.
+  const [reloadKey, setReloadKey] = useState(0)
   // Id de la persona cuyo historial se está viendo, o null para la lista.
   const [historialId, setHistorialId] = useState(null)
 
-  const fetchAll = async () => {
-    const [us, orgs, pue, centros] = await Promise.all([
-      usuariosApi.list(),
-      organizacionesApi.list(),
-      puestosApi.list(),
-      centrosCostoApi.list(),
-    ])
-    setUsuarios(us)
-    setOrganizaciones(orgs)
-    setPuestos(pue)
-    setCentrosCosto(centros)
+  const cargarCatalogos = () =>
+    Promise.all([organizacionesApi.list(), puestosApi.list(), centrosCostoApi.list()]).then(
+      ([orgs, pue, centros]) => {
+        setOrganizaciones(orgs)
+        setPuestos(pue)
+        setCentrosCosto(centros)
+      },
+    )
+
+  const recargarUsuarios = () => setReloadKey((k) => k + 1)
+
+  // El import de Excel es el único flujo que además crea puestos y centros
+  // nuevos, así que ahí hay que refrescar también los catálogos.
+  const recargarTodo = () => {
+    cargarCatalogos().catch((err) => setLoadError(err.message))
+    recargarUsuarios()
   }
 
   const handleParesChange = (newPares) => {
@@ -89,30 +124,79 @@ export default function Usuarios() {
     setParesTouched(true)
   }
 
-  const loadData = async () => {
-    setLoading(true)
+  const reintentar = () => {
     setLoadError(null)
-    try {
-      await fetchAll()
-    } catch (err) {
-      setLoadError(err.message)
-    } finally {
-      setLoading(false)
-    }
+    recargarTodo()
   }
 
+  // Los catálogos no dependen de los filtros: se traen una sola vez al montar.
+  useEffect(() => {
+    cargarCatalogos().catch((err) => setLoadError(err.message))
+  }, [])
+
+  // Los usuarios sí: cada cambio de filtro es un request nuevo. `active` evita
+  // que la respuesta lenta de un filtro viejo pise a la del filtro actual.
   useEffect(() => {
     let active = true
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    fetchAll()
+    setLoading(true)
+    usuariosApi
+      .list({
+        organizacionId: filtroOrganizacion || undefined,
+        puestoId: filtroPuesto || undefined,
+        centroCostoId: filtroCentro || undefined,
+      })
+      .then((data) => {
+        if (!active) return
+        setUsuarios(data)
+        setLoadError(null)
+      })
       .catch((err) => active && setLoadError(err.message))
       .finally(() => active && setLoading(false))
     return () => { active = false }
-  }, [])
+  }, [filtroOrganizacion, filtroPuesto, filtroCentro, reloadKey])
 
   const tiposOrgValidos = TIPOS_ORG_POR_ROL[form.rol] ?? []
   const organizacionesValidas = organizaciones.filter((o) => tiposOrgValidos.includes(o.tipo))
 
+  // El filtro de organización se acota al tipo de la tab activa: ofrecer una
+  // organización de otro tipo sería ofrecer una combinación que da cero.
+  const tipoTab = TABS.find((t) => t.id === tab)?.tipo ?? null
+  const organizacionesDelTab = tipoTab
+    ? organizaciones.filter((o) => o.tipo === tipoTab)
+    : organizaciones
+
+  // Por el mismo motivo, cambiar de tab descarta la organización elegida si no
+  // es del tipo nuevo. Puesto y centro no dependen de la tab: se conservan.
+  const cambiarTab = (id) => {
+    setTab(id)
+    const tipo = TABS.find((t) => t.id === id)?.tipo
+    if (!tipo || !filtroOrganizacion) return
+    const elegida = organizaciones.find((o) => String(o.id) === String(filtroOrganizacion))
+    if (elegida?.tipo !== tipo) setFiltroOrganizacion('')
+  }
+
+  const hayFiltrosServidor = !!(filtroPuesto || filtroCentro || filtroOrganizacion)
+  const hayAlgunFiltro = hayFiltrosServidor || !!search.trim()
+
+  const limpiarFiltros = () => {
+    setFiltroPuesto('')
+    setFiltroCentro('')
+    setFiltroOrganizacion('')
+    setSearch('')
+  }
+
+  const toggleExpandido = (id) => {
+    setExpandidos((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  // La tab y la búsqueda siguen en memoria: la tab filtra por TIPO de
+  // organización, y la API solo acepta un organizacionId concreto.
   const usuariosFiltrados = usuarios
     .filter((u) => matchTab(u, tab))
     .filter((u) => {
@@ -231,7 +315,7 @@ export default function Usuarios() {
         await usuariosApi.update(modal.data.id, payload)
       }
       setModal(null)
-      await loadData()
+      recargarUsuarios()
     } catch (err) {
       setFormError(err.message)
     } finally {
@@ -246,7 +330,7 @@ export default function Usuarios() {
     if (!ok) return
     try {
       await usuariosApi.remove(usuario.id)
-      await loadData()
+      recargarUsuarios()
     } catch (err) {
       window.alert(`No se pudo dar de baja: ${err.message}`)
     }
@@ -283,15 +367,51 @@ export default function Usuarios() {
       ),
     },
     {
-      key: 'parPrincipal',
-      label: 'Puesto / Centro de costo',
+      key: 'puesto',
+      label: 'Puesto',
       render: (_, row) => {
         const par = row.vinculacion?.parPrincipal
+        const otros = paresAdicionales(row.vinculacion)
+        const abierto = expandidos.has(row.id)
         return (
-          <span className="text-slate-500">
-            {par ? `${par.puesto.nombre} · ${par.centroCosto.nombre}` : '—'}
-          </span>
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <span className="text-slate-500">{par ? par.puesto.nombre : '—'}</span>
+              {otros.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => toggleExpandido(row.id)}
+                  title={abierto ? 'Ocultar los demás pares' : 'Ver los demás pares'}
+                  className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-500 hover:bg-slate-200 transition-colors"
+                >
+                  {abierto ? '−' : `+${otros.length}`}
+                </button>
+              )}
+            </div>
+            {/* Los pares adicionales van ENTEROS acá ("puesto · centro"), no
+                partidos entre las dos columnas: un nombre de centro largo que
+                envuelva a dos líneas desalinearía las filas y la tabla volvería
+                a mentir sobre qué va con qué. El principal es el único par que
+                ocupa las dos columnas. */}
+            {abierto &&
+              otros.map((p) => (
+                <div
+                  key={clavePar(p)}
+                  className={`text-xs ${p.activo ? 'text-slate-500' : 'text-slate-400 line-through'}`}
+                >
+                  {p.puesto.nombre} · {p.centroCosto.nombre}
+                </div>
+              ))}
+          </div>
         )
+      },
+    },
+    {
+      key: 'centroCosto',
+      label: 'Centro de costo',
+      render: (_, row) => {
+        const par = row.vinculacion?.parPrincipal
+        return <span className="text-slate-500">{par ? par.centroCosto.nombre : '—'}</span>
       },
     },
   ]
@@ -326,10 +446,15 @@ export default function Usuarios() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-slate-900 font-bold text-xl">Usuarios</h2>
+          {/* Con filtros de servidor activos `usuarios` ya es el resultado
+              filtrado, así que "en total" dejaría de ser el total real: se cae
+              el sufijo en vez de mostrar un número que miente. */}
           <p className="text-slate-400 text-sm">
             {loading
               ? 'Cargando…'
-              : `${usuariosFiltrados.length} usuario${usuariosFiltrados.length !== 1 ? 's' : ''} — ${usuarios.length} en total`}
+              : hayFiltrosServidor
+                ? `${usuariosFiltrados.length} usuario${usuariosFiltrados.length !== 1 ? 's' : ''} con los filtros aplicados`
+                : `${usuariosFiltrados.length} usuario${usuariosFiltrados.length !== 1 ? 's' : ''} — ${usuarios.length} en total`}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -353,7 +478,7 @@ export default function Usuarios() {
           return (
             <button
               key={t.id}
-              onClick={() => setTab(t.id)}
+              onClick={() => cambiarTab(t.id)}
               className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px ${
                 tab === t.id
                   ? 'border-red-600 text-red-600'
@@ -373,7 +498,8 @@ export default function Usuarios() {
         })}
       </div>
 
-      {/* Búsqueda */}
+      {/* Búsqueda y filtros. Los tres selects los resuelve el backend; la
+          búsqueda es en memoria. Todo combina con AND, también con la tab. */}
       <div className="flex flex-wrap items-center gap-3">
         <input
           type="text"
@@ -382,12 +508,55 @@ export default function Usuarios() {
           placeholder="Buscar por DNI, nombre o apellido…"
           className="w-full max-w-sm bg-white border border-slate-300 rounded px-3 py-2 text-slate-900 text-sm focus:outline-none focus:border-red-600"
         />
+        {/* Catálogo completo, no solo los activos: un puesto dado de baja puede
+            seguir teniendo gente asignada, y hay que poder encontrarla. */}
+        <select
+          className={selectCls}
+          value={filtroPuesto}
+          onChange={(e) => setFiltroPuesto(e.target.value)}
+        >
+          <option value="">Todos los puestos</option>
+          {puestos.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.nombre}{!p.activo ? ' (inactivo)' : ''}
+            </option>
+          ))}
+        </select>
+        <select
+          className={selectCls}
+          value={filtroCentro}
+          onChange={(e) => setFiltroCentro(e.target.value)}
+        >
+          <option value="">Todos los centros de costo</option>
+          {centrosCosto.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.nombre}{!c.activo ? ' (inactivo)' : ''}
+            </option>
+          ))}
+        </select>
+        <select
+          className={selectCls}
+          value={filtroOrganizacion}
+          onChange={(e) => setFiltroOrganizacion(e.target.value)}
+        >
+          <option value="">Todas las organizaciones</option>
+          {organizacionesDelTab.map((o) => (
+            <option key={o.id} value={o.id}>
+              {o.nombre}
+            </option>
+          ))}
+        </select>
+        {hayAlgunFiltro && (
+          <Button variant="ghost" size="sm" onClick={limpiarFiltros}>
+            Limpiar filtros
+          </Button>
+        )}
       </div>
 
       {loadError && (
         <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded px-4 py-3 flex items-center justify-between">
           <span>No se pudo conectar con la API: {loadError}</span>
-          <Button variant="secondary" size="sm" onClick={loadData}>
+          <Button variant="secondary" size="sm" onClick={reintentar}>
             Reintentar
           </Button>
         </div>
@@ -397,6 +566,9 @@ export default function Usuarios() {
         <Table
           columns={columns}
           data={usuariosFiltrados}
+          // La celda de Puesto crece al desplegar los pares adicionales; sin
+          // esto el resto de la fila se centraría contra esa altura.
+          alignTop
           actions={(row) => (
             <>
               <Button variant="ghost" size="sm" onClick={() => setHistorialId(row.id)}>
@@ -537,7 +709,7 @@ export default function Usuarios() {
       <ImportUsuariosModal
         open={importOpen}
         onClose={() => setImportOpen(false)}
-        onImported={loadData}
+        onImported={recargarTodo}
       />
     </div>
   )
