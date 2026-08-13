@@ -55,6 +55,14 @@ export default defineConfig({
     }),
   ],
   // para probar la PWA desde una tablet vía túnel HTTPS (cloudflared)
+  //
+  // Va en los DOS bloques a propósito: `preview` sirve el build de producción
+  // (que es donde la PWA existe de verdad) y `server` el dev server. Vite valida
+  // el header Host en los dos, así que con `allowedHosts` sólo en `preview` un
+  // `npm run dev` detrás del túnel se cae con "This host is not allowed".
+  server: {
+    allowedHosts: ['.trycloudflare.com'],
+  },
   preview: {
     allowedHosts: ['.trycloudflare.com'],
   },
