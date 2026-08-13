@@ -14,15 +14,22 @@ import { SesionesService } from '../sesiones/sesiones.service';
 import { resolverUrlImagen } from '../storage/url-imagen';
 import { LoginTabletDto } from './dto/login-tablet.dto';
 import { RegistrarSesionTabletDto } from './dto/registrar-sesion-tablet.dto';
+import {
+  evaluarReintentos,
+  mensajeReintentos,
+  SesionRendida,
+} from './reintentos';
 import { sortear } from './sorteo';
 
-// Cuántas preguntas sortea un examen. Hoy replica el 3 que hardcodea la app
-// tablet MOCKEADA (pickRandomQuestions en sima-check-app). Con
-// ModuloVersionCriterio el pool de una versión puede ser mucho más grande, y 3
-// puede quedar corto para certificar seguridad de verdad — queda anotado en
-// docs/pendientes.md como candidato a columna por módulo (o por criterio,
-// junto con la `cantidadPreguntas` que tampoco se resolvió). No se resuelve
-// acá: esta story es conectar la tablet, no rediseñar el sorteo.
+// Cuántas preguntas sortea un examen cuando la versión no declara nada. Dejó de
+// ser LA cantidad y pasó a ser el FALLBACK: quien crea el módulo elige la suya en
+// ModuloVersion.preguntasPorExamen, y este 3 sólo cubre las versiones publicadas
+// antes de que esa columna existiera (nullable y sin backfill a propósito, ver la
+// migración modulo_version_parametros_examen).
+//
+// Mismo rol que UMBRAL_APROBACION_DEFAULT en sesiones/corregir.ts, y por eso vive
+// exportado y no inline: los tests lo usan para afirmar el caso "versión sin
+// parámetros propios".
 export const PREGUNTAS_POR_EXAMEN = 3;
 
 @Injectable()
@@ -95,7 +102,14 @@ export class TabletService {
               // versionado): el filtro alcanza para "¿tiene algo publicado?".
               versiones: {
                 where: { estado: 'ACTIVO' },
-                select: { id: true, anio: true, mayor: true, menor: true },
+                select: {
+                  id: true,
+                  anio: true,
+                  mayor: true,
+                  menor: true,
+                  maxIntentos: true,
+                  esperaEntreIntentosMinutos: true,
+                },
               },
             },
           },
@@ -104,31 +118,82 @@ export class TabletService {
       this.asignaciones.modulosAprobados(usuarioId),
     ]);
 
-    return vigentes
+    const rendibles = vigentes
       .filter((a) => !aprobados.has(a.moduloId))
       .filter((a) => a.modulo.activo)
-      .filter((a) => a.modulo.versiones.length > 0)
-      .map((a) => {
-        const version = a.modulo.versiones[0];
-        return {
-          asignacionId: a.id,
-          moduloId: a.moduloId,
-          nombre: a.modulo.nombre,
-          descripcion: a.modulo.descripcion,
-          version: {
-            id: version.id,
-            anio: version.anio,
-            mayor: version.mayor,
-            menor: version.menor,
-          },
-        };
-      });
+      .filter((a) => a.modulo.versiones.length > 0);
+
+    // Una sola query para toda la tanda, no una por ítem. Va después del
+    // Promise.all y no adentro porque depende de qué módulos sobrevivieron a
+    // los filtros de arriba.
+    const sesiones = await this.sesionesPorModulo(
+      usuarioId,
+      rendibles.map((a) => a.moduloId),
+    );
+    const ahora = new Date();
+
+    return rendibles.map((a) => {
+      const version = a.modulo.versiones[0];
+      return {
+        asignacionId: a.id,
+        moduloId: a.moduloId,
+        nombre: a.modulo.nombre,
+        descripcion: a.modulo.descripcion,
+        version: {
+          id: version.id,
+          anio: version.anio,
+          mayor: version.mayor,
+          menor: version.menor,
+        },
+        // El pendiente viaja con su estado de reintentos para que la app pinte
+        // el botón deshabilitado con el motivo, en vez de dejar tocar y comerse
+        // un 409 recién ahí.
+        reintentos: evaluarReintentos({
+          sesiones: sesiones.get(a.moduloId) ?? [],
+          maxIntentos: version.maxIntentos,
+          esperaMinutos: version.esperaEntreIntentosMinutos,
+          ahora,
+        }),
+      };
+    });
   }
 
-  // El examen de un módulo: sortea PREGUNTAS_POR_EXAMEN preguntas de la
-  // versión ACTIVO y las serializa sin `respuestaCorrecta` — ver
-  // serializarPregunta().
-  async examen(moduloId: string) {
+  // Las sesiones que cuentan para el tope de reintentos, agrupadas por módulo.
+  // Se consulta por MÓDULO y no por versión (`moduloVersion: { moduloId }`):
+  // publicar una versión nueva no le devuelve intentos a nadie — ver
+  // reintentos.ts.
+  private async sesionesPorModulo(usuarioId: number, moduloIds: string[]) {
+    const porModulo = new Map<string, SesionRendida[]>();
+    if (moduloIds.length === 0) return porModulo;
+
+    const filas = await this.prisma.sesion.findMany({
+      where: { usuarioId, moduloVersion: { moduloId: { in: moduloIds } } },
+      select: {
+        finalizadaEn: true,
+        aprobada: true,
+        moduloVersion: { select: { moduloId: true } },
+      },
+    });
+
+    for (const fila of filas) {
+      const moduloId = fila.moduloVersion.moduloId;
+      const acumuladas = porModulo.get(moduloId) ?? [];
+      acumuladas.push({
+        finalizadaEn: fila.finalizadaEn,
+        aprobada: fila.aprobada,
+      });
+      porModulo.set(moduloId, acumuladas);
+    }
+    return porModulo;
+  }
+
+  // El examen de un módulo: sortea las preguntas que pide la versión ACTIVO y
+  // las serializa sin `respuestaCorrecta` — ver serializarPregunta().
+  //
+  // Recibe el usuarioId porque acá se aplica el tope de reintentos y la espera
+  // entre intentos: el CONTENIDO del examen sigue siendo el mismo para
+  // cualquiera que rinda esa versión, pero el derecho a pedirlo es personal.
+  async examen(usuarioId: number, moduloId: string) {
     const modulo = await this.prisma.modulo.findUnique({
       where: { id: moduloId },
       select: {
@@ -140,7 +205,15 @@ export class TabletService {
         // versionado, mismo criterio que pendientes()).
         versiones: {
           where: { estado: 'ACTIVO' },
-          select: { id: true, anio: true, mayor: true, menor: true },
+          select: {
+            id: true,
+            anio: true,
+            mayor: true,
+            menor: true,
+            preguntasPorExamen: true,
+            maxIntentos: true,
+            esperaEntreIntentosMinutos: true,
+          },
         },
       },
     });
@@ -155,6 +228,22 @@ export class TabletService {
       throw new ConflictException(
         `El módulo ${moduloId} no tiene ninguna versión publicada para rendir`,
       );
+    }
+
+    // Tope de intentos y espera. Es el ÚNICO punto donde se aplican: registrar
+    // una rendición ya hecha no se rechaza nunca (ver rendir() y
+    // docs/pendientes.md). Va antes de armar el pool para no gastar la query de
+    // pivots en alguien que no puede rendir.
+    const reintentos = evaluarReintentos({
+      sesiones:
+        (await this.sesionesPorModulo(usuarioId, [moduloId])).get(moduloId) ??
+        [],
+      maxIntentos: version.maxIntentos,
+      esperaMinutos: version.esperaEntreIntentosMinutos,
+      ahora: new Date(),
+    });
+    if (!reintentos.puedeRendir) {
+      throw new ConflictException(mensajeReintentos(reintentos));
     }
 
     // Filtra por `activa: true` en el PIVOT y en la PREGUNTA — a propósito
@@ -191,12 +280,16 @@ export class TabletService {
       );
     }
 
-    // Menos preguntas activas que PREGUNTAS_POR_EXAMEN no es un error: un
-    // módulo con 2 preguntas es raro pero rendible. sortear() ya devuelve
-    // "las que haya" cuando n supera el tamaño del pool.
+    // Cuántas sortear la decide la VERSIÓN. `null` significa "sin declarar" y
+    // cae al default global — no cero, que dejaría el examen vacío (ver la
+    // migración modulo_version_parametros_examen).
+    //
+    // Un pool más chico que ese número tampoco es un error: un módulo con 2
+    // preguntas es raro pero rendible, y sortear() ya devuelve "las que haya"
+    // cuando n supera el tamaño del pool.
     const elegidas = sortear(
       pivots.map((p) => p.pregunta),
-      PREGUNTAS_POR_EXAMEN,
+      version.preguntasPorExamen ?? PREGUNTAS_POR_EXAMEN,
     );
 
     return {
@@ -222,6 +315,7 @@ export class TabletService {
   // body que ve la tablet.
   async rendir(usuarioId: number, dto: RegistrarSesionTabletDto) {
     const sesion = await this.sesiones.registrar({ ...dto, usuarioId });
+
     return {
       duplicada: sesion.duplicada,
       resultado: {
@@ -231,8 +325,50 @@ export class TabletService {
         porcentaje: sesion.porcentaje,
         aprobada: sesion.aprobada,
         umbralAprobacion: sesion.umbralAprobacion,
+        // Recalculado DESPUÉS de registrar, así la pantalla de Resultado sabe si
+        // ofrecer "Reintentar" o decir por qué no. Si aprobó, el contador ya se
+        // reseteó y esto vuelve en OK — correcto: lo que la saca de pendientes
+        // es la aprobación, no el tope.
+        reintentos: await this.reintentosDe(usuarioId, dto.moduloVersionId),
       },
     };
+  }
+
+  // Estado de reintentos a partir de la versión que se acaba de rendir. Los
+  // parámetros se leen de la versión ACTIVO del módulo y no de la rendida: son
+  // las reglas del PRÓXIMO intento, y el próximo se rinde contra lo publicado
+  // hoy. Si el módulo quedó sin ACTIVO (se archivó), no hay reglas que aplicar.
+  private async reintentosDe(usuarioId: number, moduloVersionId: string) {
+    const version = await this.prisma.moduloVersion.findUnique({
+      where: { id: moduloVersionId },
+      select: {
+        moduloId: true,
+        modulo: {
+          select: {
+            versiones: {
+              where: { estado: 'ACTIVO' },
+              select: {
+                maxIntentos: true,
+                esperaEntreIntentosMinutos: true,
+              },
+            },
+          },
+        },
+      },
+    });
+    if (!version) return null;
+
+    const activa = version.modulo.versiones[0];
+    const sesiones = await this.sesionesPorModulo(usuarioId, [
+      version.moduloId,
+    ]);
+
+    return evaluarReintentos({
+      sesiones: sesiones.get(version.moduloId) ?? [],
+      maxIntentos: activa?.maxIntentos ?? null,
+      esperaMinutos: activa?.esperaEntreIntentosMinutos ?? null,
+      ahora: new Date(),
+    });
   }
 }
 

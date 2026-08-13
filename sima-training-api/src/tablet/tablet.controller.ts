@@ -33,14 +33,17 @@ export class TabletController {
     return this.tablet.pendientes(usuarioId);
   }
 
-  // TabletAuthGuard exige un alumno autenticado, pero el usuarioId no se usa
-  // para personalizar la respuesta: el contenido del examen es el mismo para
-  // cualquiera que rinda esa versión del módulo. El guard acá es sólo "hace
-  // falta estar logueado en la tablet", no "es tuyo".
+  // El CONTENIDO del examen sigue siendo el mismo para cualquiera que rinda esa
+  // versión del módulo — el guard no verifica que la asignación sea suya. Pero
+  // el usuarioId sí se usa ahora: es contra él que se cuentan los intentos ya
+  // gastados y la espera entre uno y otro (409 si no puede rendir).
   @Get('modulos/:moduloId/examen')
   @UseGuards(TabletAuthGuard)
-  examen(@Param('moduloId') moduloId: string) {
-    return this.tablet.examen(moduloId);
+  examen(
+    @UsuarioTablet() usuarioId: number,
+    @Param('moduloId') moduloId: string,
+  ) {
+    return this.tablet.examen(usuarioId, moduloId);
   }
 
   // El usuarioId sale del token — NUNCA del body, ver RegistrarSesionTabletDto

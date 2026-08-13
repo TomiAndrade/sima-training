@@ -10,7 +10,11 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { AsignacionesService } from '../asignaciones/asignaciones.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { SesionesService } from '../sesiones/sesiones.service';
-import { TabletService } from './tablet.service';
+import { PREGUNTAS_POR_EXAMEN, TabletService } from './tablet.service';
+
+// El alumno logueado en la tablet. Importa porque examen() ya no es impersonal:
+// los intentos gastados se cuentan contra esta persona.
+const ALUMNO = 7;
 
 describe('TabletService', () => {
   let service: TabletService;
@@ -18,7 +22,9 @@ describe('TabletService', () => {
     usuario: { findFirst: jest.Mock };
     asignacion: { findMany: jest.Mock };
     modulo: { findUnique: jest.Mock };
+    moduloVersion: { findUnique: jest.Mock };
     moduloVersionPregunta: { findMany: jest.Mock };
+    sesion: { findMany: jest.Mock };
   };
   let jwt: { sign: jest.Mock };
   let config: { get: jest.Mock };
@@ -30,7 +36,10 @@ describe('TabletService', () => {
       usuario: { findFirst: jest.fn() },
       asignacion: { findMany: jest.fn() },
       modulo: { findUnique: jest.fn() },
+      moduloVersion: { findUnique: jest.fn() },
       moduloVersionPregunta: { findMany: jest.fn() },
+      // Sin intentos previos por defecto: los tests de reintentos lo pisan.
+      sesion: { findMany: jest.fn().mockResolvedValue([]) },
     };
     jwt = { sign: jest.fn().mockReturnValue('fake.jwt.token') };
     // Sin TABLET_LOGIN_SIN_PIN configurada = default 'true' (login sin PIN
@@ -131,8 +140,57 @@ describe('TabletService', () => {
         nombre: 'SIMA Básico',
         descripcion: 'Módulo base',
         version: { id: 'v1', anio: 2026, mayor: 1, menor: 0 },
+        // Cada pendiente viaja con su estado de reintentos para que la app
+        // pueda deshabilitar el botón con el motivo, en vez de dejar tocar y
+        // comerse un 409 recién ahí.
+        reintentos: {
+          puedeRendir: true,
+          motivo: 'OK',
+          intentosUsados: 0,
+          intentosRestantes: null,
+          proximoIntentoEn: null,
+        },
       },
     ]);
+  });
+
+  it('el pendiente informa la espera pendiente sin sacarlo de la lista', async () => {
+    prisma.asignacion.findMany.mockResolvedValue([
+      asignacionRow({
+        modulo: {
+          nombre: 'SIMA Básico',
+          descripcion: 'Módulo base',
+          activo: true,
+          versiones: [
+            {
+              id: 'v1',
+              anio: 2026,
+              mayor: 1,
+              menor: 0,
+              esperaEntreIntentosMinutos: 60,
+            },
+          ],
+        },
+      }),
+    ]);
+    prisma.sesion.findMany.mockResolvedValue([
+      {
+        // Recién rendida: la espera todavía corre.
+        finalizadaEn: new Date(Date.now() - 10 * 60_000),
+        aprobada: false,
+        moduloVersion: { moduloId: 'mod-1' },
+      },
+    ]);
+
+    const [pendiente] = await service.pendientes(7);
+
+    // Sigue listado (la obligación no desapareció), pero con el motivo.
+    expect(pendiente.reintentos).toMatchObject({
+      puedeRendir: false,
+      motivo: 'EN_ESPERA',
+      intentosUsados: 1,
+    });
+    expect(pendiente.reintentos.proximoIntentoEn).toBeInstanceOf(Date);
   });
 
   it('excluye módulos ya aprobados', async () => {
@@ -204,21 +262,21 @@ describe('TabletService', () => {
 
   it('rechaza un módulo inexistente', async () => {
     prisma.modulo.findUnique.mockResolvedValue(null);
-    await expect(service.examen('mod-x')).rejects.toBeInstanceOf(
+    await expect(service.examen(ALUMNO, 'mod-x')).rejects.toBeInstanceOf(
       NotFoundException,
     );
   });
 
   it('rechaza un módulo dado de baja (activo: false)', async () => {
     prisma.modulo.findUnique.mockResolvedValue(moduloRow({ activo: false }));
-    await expect(service.examen('mod-1')).rejects.toBeInstanceOf(
+    await expect(service.examen(ALUMNO, 'mod-1')).rejects.toBeInstanceOf(
       NotFoundException,
     );
   });
 
   it('rechaza un módulo sin versión ACTIVO', async () => {
     prisma.modulo.findUnique.mockResolvedValue(moduloRow({ versiones: [] }));
-    await expect(service.examen('mod-1')).rejects.toBeInstanceOf(
+    await expect(service.examen(ALUMNO, 'mod-1')).rejects.toBeInstanceOf(
       ConflictException,
     );
     expect(prisma.moduloVersionPregunta.findMany).not.toHaveBeenCalled();
@@ -234,7 +292,7 @@ describe('TabletService', () => {
       preguntaRow({ id: 'p5' }),
     ]);
 
-    const res = await service.examen('mod-1');
+    const res = await service.examen(ALUMNO, 'mod-1');
 
     expect(res.preguntas).toHaveLength(3);
   });
@@ -243,16 +301,155 @@ describe('TabletService', () => {
     prisma.modulo.findUnique.mockResolvedValue(moduloRow());
     mockPivots([preguntaRow({ id: 'p1' }), preguntaRow({ id: 'p2' })]);
 
-    const res = await service.examen('mod-1');
+    const res = await service.examen(ALUMNO, 'mod-1');
 
     expect(res.preguntas).toHaveLength(2);
+  });
+
+  it('sortea la cantidad que declara la versión, no el default', async () => {
+    prisma.modulo.findUnique.mockResolvedValue(
+      moduloRow({
+        versiones: [
+          { id: 'v1', anio: 2026, mayor: 1, menor: 0, preguntasPorExamen: 5 },
+        ],
+      }),
+    );
+    mockPivots(
+      Array.from({ length: 8 }, (_, i) => preguntaRow({ id: `p${i + 1}` })),
+    );
+
+    const res = await service.examen(ALUMNO, 'mod-1');
+
+    expect(res.preguntas).toHaveLength(5);
+  });
+
+  it('cae al default cuando la versión no declara cantidad (null)', async () => {
+    // `null` es "sin declarar", NO cero: una versión publicada antes de que la
+    // columna existiera tiene que seguir sirviendo un examen de 3, no uno vacío.
+    prisma.modulo.findUnique.mockResolvedValue(
+      moduloRow({
+        versiones: [
+          {
+            id: 'v1',
+            anio: 2026,
+            mayor: 1,
+            menor: 0,
+            preguntasPorExamen: null,
+          },
+        ],
+      }),
+    );
+    mockPivots(
+      Array.from({ length: 8 }, (_, i) => preguntaRow({ id: `p${i + 1}` })),
+    );
+
+    const res = await service.examen(ALUMNO, 'mod-1');
+
+    expect(res.preguntas).toHaveLength(PREGUNTAS_POR_EXAMEN);
+  });
+
+  it('rechaza el examen si la persona agotó sus intentos', async () => {
+    prisma.modulo.findUnique.mockResolvedValue(
+      moduloRow({
+        versiones: [
+          { id: 'v1', anio: 2026, mayor: 1, menor: 0, maxIntentos: 2 },
+        ],
+      }),
+    );
+    prisma.sesion.findMany.mockResolvedValue([
+      {
+        finalizadaEn: new Date('2026-08-01T10:00:00Z'),
+        aprobada: false,
+        moduloVersion: { moduloId: 'mod-1' },
+      },
+      {
+        finalizadaEn: new Date('2026-08-02T10:00:00Z'),
+        aprobada: false,
+        moduloVersion: { moduloId: 'mod-1' },
+      },
+    ]);
+
+    await expect(service.examen(ALUMNO, 'mod-1')).rejects.toBeInstanceOf(
+      ConflictException,
+    );
+    // El corte va ANTES de armar el pool: no se gasta la query de pivots en
+    // alguien que no puede rendir.
+    expect(prisma.moduloVersionPregunta.findMany).not.toHaveBeenCalled();
+  });
+
+  it('los intentos se cuentan por MÓDULO, no por versión', async () => {
+    prisma.modulo.findUnique.mockResolvedValue(moduloRow());
+    mockPivots([preguntaRow()]);
+
+    await service.examen(ALUMNO, 'mod-1');
+
+    // Publicar una versión nueva no le devuelve intentos a nadie: el where
+    // atraviesa la versión hasta el módulo.
+    expect(prisma.sesion.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          usuarioId: ALUMNO,
+          moduloVersion: { moduloId: { in: ['mod-1'] } },
+        },
+      }),
+    );
+  });
+
+  it('una aprobación previa devuelve los intentos: la recertificación arranca limpia', async () => {
+    prisma.modulo.findUnique.mockResolvedValue(
+      moduloRow({
+        versiones: [
+          { id: 'v1', anio: 2026, mayor: 1, menor: 0, maxIntentos: 2 },
+        ],
+      }),
+    );
+    prisma.sesion.findMany.mockResolvedValue([
+      {
+        finalizadaEn: new Date('2026-01-01T10:00:00Z'),
+        aprobada: false,
+        moduloVersion: { moduloId: 'mod-1' },
+      },
+      {
+        finalizadaEn: new Date('2026-01-02T10:00:00Z'),
+        aprobada: false,
+        moduloVersion: { moduloId: 'mod-1' },
+      },
+      // Aprobó después de gastar los dos: el contador vuelve a cero.
+      {
+        finalizadaEn: new Date('2026-01-03T10:00:00Z'),
+        aprobada: true,
+        moduloVersion: { moduloId: 'mod-1' },
+      },
+    ]);
+    mockPivots([preguntaRow()]);
+
+    await expect(service.examen(ALUMNO, 'mod-1')).resolves.toMatchObject({
+      moduloId: 'mod-1',
+    });
+  });
+
+  it('sin parámetros declarados el examen se sirve como siempre', async () => {
+    prisma.modulo.findUnique.mockResolvedValue(moduloRow());
+    prisma.sesion.findMany.mockResolvedValue(
+      // 5 intentos previos, ninguno aprobado: sin tope, no bloquea nada.
+      Array.from({ length: 5 }, (_, i) => ({
+        finalizadaEn: new Date(`2026-08-0${i + 1}T10:00:00Z`),
+        aprobada: false,
+        moduloVersion: { moduloId: 'mod-1' },
+      })),
+    );
+    mockPivots([preguntaRow()]);
+
+    await expect(service.examen(ALUMNO, 'mod-1')).resolves.toMatchObject({
+      moduloId: 'mod-1',
+    });
   });
 
   it('rechaza con Conflict un módulo sin ninguna pregunta activa', async () => {
     prisma.modulo.findUnique.mockResolvedValue(moduloRow());
     mockPivots([]);
 
-    await expect(service.examen('mod-1')).rejects.toBeInstanceOf(
+    await expect(service.examen(ALUMNO, 'mod-1')).rejects.toBeInstanceOf(
       ConflictException,
     );
   });
@@ -261,7 +458,7 @@ describe('TabletService', () => {
     prisma.modulo.findUnique.mockResolvedValue(moduloRow());
     mockPivots([preguntaRow()]);
 
-    await service.examen('mod-1');
+    await service.examen(ALUMNO, 'mod-1');
 
     expect(prisma.moduloVersionPregunta.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -282,7 +479,7 @@ describe('TabletService', () => {
       preguntaRow({ respuestaCorrecta: 'SECRETO-QUE-NO-DEBE-VIAJAR' }),
     ]);
 
-    const res = await service.examen('mod-1');
+    const res = await service.examen(ALUMNO, 'mod-1');
 
     expect(JSON.stringify(res)).not.toContain('SECRETO-QUE-NO-DEBE-VIAJAR');
   });
@@ -297,7 +494,7 @@ describe('TabletService', () => {
       }),
     ]);
 
-    const res = await service.examen('mod-1');
+    const res = await service.examen(ALUMNO, 'mod-1');
 
     expect(res.preguntas[0].imagen).toEqual({
       clave: 'preguntas/enunciado.png',
@@ -313,7 +510,7 @@ describe('TabletService', () => {
     prisma.modulo.findUnique.mockResolvedValue(moduloRow());
     mockPivots([preguntaRow({ imagen: '/images/cartel.png' })]);
 
-    const res = await service.examen('mod-1');
+    const res = await service.examen(ALUMNO, 'mod-1');
 
     expect(res.preguntas[0].imagen).toEqual({
       clave: '/images/cartel.png',
@@ -356,6 +553,17 @@ describe('TabletService', () => {
 
   it('el happy path no reenvía `respuestas` ni ningún campo de más', async () => {
     sesiones.registrar.mockResolvedValue(sesionRow());
+    prisma.moduloVersion.findUnique.mockResolvedValue({
+      moduloId: 'mod-1',
+      modulo: { versiones: [{ maxIntentos: 3 }] },
+    });
+    prisma.sesion.findMany.mockResolvedValue([
+      {
+        finalizadaEn: new Date('2026-08-13T10:00:00Z'),
+        aprobada: true,
+        moduloVersion: { moduloId: 'mod-1' },
+      },
+    ]);
 
     const res = await service.rendir(7, dtoRendicion as never);
 
@@ -366,8 +574,48 @@ describe('TabletService', () => {
       porcentaje: 100,
       aprobada: true,
       umbralAprobacion: 70,
+      // Aprobó: el contador se reseteó y vuelve con los 3 intentos enteros.
+      // Lo que la saca de pendientes es la aprobación, no el tope.
+      reintentos: {
+        puedeRendir: true,
+        motivo: 'OK',
+        intentosUsados: 0,
+        intentosRestantes: 3,
+        proximoIntentoEn: null,
+      },
     });
     expect(res.resultado).not.toHaveProperty('respuestas');
+  });
+
+  it('el resultado dice que ya no quedan intentos tras desaprobar el último', async () => {
+    sesiones.registrar.mockResolvedValue(
+      sesionRow({ aprobada: false, porcentaje: 33, correctas: 1 }),
+    );
+    prisma.moduloVersion.findUnique.mockResolvedValue({
+      moduloId: 'mod-1',
+      modulo: { versiones: [{ maxIntentos: 2 }] },
+    });
+    prisma.sesion.findMany.mockResolvedValue([
+      {
+        finalizadaEn: new Date('2026-08-12T10:00:00Z'),
+        aprobada: false,
+        moduloVersion: { moduloId: 'mod-1' },
+      },
+      {
+        finalizadaEn: new Date('2026-08-13T10:00:00Z'),
+        aprobada: false,
+        moduloVersion: { moduloId: 'mod-1' },
+      },
+    ]);
+
+    const res = await service.rendir(7, dtoRendicion as never);
+
+    // La pantalla de Resultado usa esto para no ofrecer "Reintentar".
+    expect(res.resultado.reintentos).toMatchObject({
+      puedeRendir: false,
+      motivo: 'SIN_INTENTOS',
+      intentosRestantes: 0,
+    });
   });
 
   it('propaga `duplicada` tal cual lo devuelve SesionesService.registrar', async () => {
