@@ -138,7 +138,12 @@ export class SesionesService {
 
     const version = await tx.moduloVersion.findUnique({
       where: { id: dto.moduloVersionId },
-      select: { id: true, moduloId: true, estado: true },
+      select: {
+        id: true,
+        moduloId: true,
+        estado: true,
+        umbralAprobacion: true,
+      },
     });
     if (!version) {
       throw new NotFoundException(
@@ -224,7 +229,16 @@ export class SesionesService {
       ),
     }));
 
-    const umbralAprobacion = UMBRAL_APROBACION_DEFAULT;
+    // El umbral lo declara la VERSIÓN que se rindió, y `null` cae al default
+    // global (las versiones publicadas antes de que la columna existiera). Se
+    // lee de la versión y no del módulo a propósito: es el umbral con el que se
+    // publicó ESTE examen, así que una sesión sincronizada tarde contra una
+    // versión ya archivada se corrige con la regla que tenía cuando se rindió.
+    //
+    // Igual que siempre, el valor se congela abajo en Sesion.umbralAprobacion:
+    // subirlo mañana no reescribe los certificados ya emitidos.
+    const umbralAprobacion =
+      version.umbralAprobacion ?? UMBRAL_APROBACION_DEFAULT;
     const resultado = calcularResultado(
       correcciones.map((c) => c.correcta),
       umbralAprobacion,

@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { PrismaService } from '../prisma/prisma.service';
+import { UMBRAL_APROBACION_DEFAULT } from './corregir';
 import { RegistrarSesionDto } from './dto/registrar-sesion.dto';
 import { SesionesService } from './sesiones.service';
 
@@ -113,6 +114,56 @@ describe('SesionesService.registrar', () => {
       aprobada: true,
       // Congelado: mostrar el resultado no vuelve a leer la constante.
       umbralAprobacion: 70,
+    });
+  });
+
+  it('usa el umbral que declara la versión, no la constante global', async () => {
+    prisma.moduloVersion.findUnique.mockResolvedValue({
+      id: VERSION,
+      moduloId: MODULO,
+      estado: 'ACTIVO',
+      umbralAprobacion: 90,
+    });
+
+    // 2 de 3 = 67%: aprobaría con el 70 global, no con el 90 de esta versión.
+    await service.registrar(
+      dto([
+        { preguntaId: P1, respuestaDada: 'V' },
+        { preguntaId: P2, respuestaDada: 'V' },
+        { preguntaId: P3, respuestaDada: 'F' },
+      ]),
+    );
+
+    expect(dataCreada()).toMatchObject({
+      correctas: 2,
+      porcentaje: 67,
+      aprobada: false,
+      umbralAprobacion: 90,
+    });
+  });
+
+  it('cae al default global cuando la versión no declara umbral (null)', async () => {
+    prisma.moduloVersion.findUnique.mockResolvedValue({
+      id: VERSION,
+      moduloId: MODULO,
+      estado: 'ACTIVO',
+      umbralAprobacion: null,
+    });
+
+    // `null` es "sin declarar", no "hace falta 0%": una versión publicada antes
+    // de que la columna existiera se sigue corrigiendo contra el 70 de siempre.
+    await service.registrar(
+      dto([
+        { preguntaId: P1, respuestaDada: 'V' },
+        { preguntaId: P2, respuestaDada: 'F' },
+        { preguntaId: P3, respuestaDada: 'F' },
+      ]),
+    );
+
+    expect(dataCreada()).toMatchObject({
+      porcentaje: 33,
+      aprobada: false,
+      umbralAprobacion: UMBRAL_APROBACION_DEFAULT,
     });
   });
 
