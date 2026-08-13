@@ -8,6 +8,7 @@ import { ModuloVersion, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AsignarPreguntaItemDto } from './dto/asignar-preguntas.dto';
 import { CreateModuloDto } from './dto/create-modulo.dto';
+import { ParametrosExamenDto } from './dto/parametros-examen.dto';
 import { SetCriteriosDto } from './dto/set-criterios.dto';
 import { UpdateModuloDto } from './dto/update-modulo.dto';
 
@@ -30,11 +31,31 @@ export class ModulosService {
   constructor(private readonly prisma: PrismaService) {}
 
   // Crea el módulo y su ModuloVersion v1 en BORRADOR (una sola operación atómica).
+  //
+  // Los parámetros de examen se destructuran aparte y NO entran en el spread: son
+  // columnas de la versión, no del módulo. Un `...dto` a secas los mandaría a
+  // modulo.create y Prisma rechazaría el campo desconocido.
   create(dto: CreateModuloDto) {
+    const {
+      preguntasPorExamen,
+      umbralAprobacion,
+      maxIntentos,
+      esperaEntreIntentosMinutos,
+      ...modulo
+    } = dto;
+
     return this.prisma.modulo.create({
       data: {
-        ...dto,
-        versiones: { create: { numeroVersion: 1 } },
+        ...modulo,
+        versiones: {
+          create: {
+            numeroVersion: 1,
+            preguntasPorExamen,
+            umbralAprobacion,
+            maxIntentos,
+            esperaEntreIntentosMinutos,
+          },
+        },
       },
       include: { versiones: true },
     });
@@ -84,6 +105,12 @@ export class ModulosService {
               anio: vigente.anio,
               mayor: vigente.mayor,
               menor: vigente.menor,
+              // Aditivo: es lo que le permite al modal "Ver detalles" resumir
+              // cómo se rinde el módulo sin entrar a la vista de contenido.
+              preguntasPorExamen: vigente.preguntasPorExamen,
+              umbralAprobacion: vigente.umbralAprobacion,
+              maxIntentos: vigente.maxIntentos,
+              esperaEntreIntentosMinutos: vigente.esperaEntreIntentosMinutos,
             }
           : null,
         borradorId: borrador?.id ?? null,
@@ -234,6 +261,15 @@ export class ModulosService {
         numeroVersion,
         estado: 'BORRADOR',
         createdBy: 'backoffice',
+        // Los parámetros de examen se HEREDAN del ACTIVO, igual que las preguntas
+        // y los criterios: un borrador es la foto de lo publicado. Sin esto,
+        // editar un módulo le resetearía el umbral (y el tope de intentos) al
+        // default global en silencio, que es lo último que uno quiere descubrir
+        // después de publicar.
+        preguntasPorExamen: base.preguntasPorExamen,
+        umbralAprobacion: base.umbralAprobacion,
+        maxIntentos: base.maxIntentos,
+        esperaEntreIntentosMinutos: base.esperaEntreIntentosMinutos,
         preguntas: {
           create: pivots.map((p) => ({
             preguntaId: p.preguntaId,
@@ -465,6 +501,42 @@ export class ModulosService {
           moduloVersionId: version.id,
           preguntaId,
         },
+      },
+    });
+  }
+
+  // Cómo se rinde la versión que se está editando: cuántas preguntas sortea el
+  // examen, con qué porcentaje se aprueba, cuántos reintentos hay y cuánto se
+  // espera entre uno y otro.
+  //
+  // Mismo guard que setCriterios/unassignPregunta y por el mismo motivo: son
+  // parámetros CONGELADOS con la versión. Cambiarle el umbral a un ACTIVO haría
+  // que dos personas que rindieron el mismo examen publicado se aprueben con
+  // reglas distintas sin que nada lo registre. Se cambia creando una versión
+  // nueva (POST /:id/versiones), que los hereda y deja editarlos en el borrador.
+  //
+  // Es un reemplazo COMPLETO, no un PATCH: lo que no viene se normaliza a null
+  // (= volver al default global), igual que PUT /:id/criterios con un array
+  // vacío. Sin el `?? null`, Prisma dropea los undefined y un campo borrado
+  // desde el backoffice se quedaría con el valor viejo.
+  async setParametrosExamen(moduloId: string, dto: ParametrosExamenDto) {
+    const version = await this.versionParaEditar(moduloId);
+    if (!version) {
+      throw new NotFoundException(`El módulo ${moduloId} no tiene versiones`);
+    }
+    if (version.estado !== 'BORRADOR') {
+      throw new ConflictException(
+        'Solo se pueden editar los parámetros de examen de un borrador; las versiones publicadas son inmutables. Creá una versión nueva para cambiar cómo se rinde el módulo.',
+      );
+    }
+
+    return this.prisma.moduloVersion.update({
+      where: { id: version.id },
+      data: {
+        preguntasPorExamen: dto.preguntasPorExamen ?? null,
+        umbralAprobacion: dto.umbralAprobacion ?? null,
+        maxIntentos: dto.maxIntentos ?? null,
+        esperaEntreIntentosMinutos: dto.esperaEntreIntentosMinutos ?? null,
       },
     });
   }

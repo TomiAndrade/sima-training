@@ -291,6 +291,24 @@ model ModuloVersion {
   // (sube MENOR). null para v1 / primera publicación (no hay de qué derivar).
   esNuevaLinea Boolean?  @map("es_nueva_linea")
 
+  // CÓMO SE RINDE esta versión. Los cuatro son nullable y `null` significa "usar
+  // el default global" (3 preguntas / 70% / sin tope de intentos / sin espera),
+  // NUNCA cero: es lo que deja convivir las versiones ya publicadas sin backfill
+  // y sin reinterpretar lo que en su momento eran constantes del backend.
+  //
+  // Viven acá y no en Modulo (donde está vigenciaMeses) porque se congelan con la
+  // versión: sólo se editan en BORRADOR y crearVersion() los copia del ACTIVO.
+  // Cambiar el umbral de un módulo publicado es publicar una versión nueva.
+  preguntasPorExamen         Int? @map("preguntas_por_examen")
+  // En PORCENTAJE (1-100). El fallback es UMBRAL_APROBACION_DEFAULT (corregir.ts)
+  // y se congela por intento en Sesion.umbralAprobacion, así que subirlo mañana no
+  // reescribe los certificados ya emitidos.
+  umbralAprobacion           Int? @map("umbral_aprobacion")
+  // Tope de intentos y espera mínima entre uno y otro. Se cuentan por MÓDULO
+  // (todas sus versiones) y el contador se resetea al aprobar — ver reintentos.ts.
+  maxIntentos                Int? @map("max_intentos")
+  esperaEntreIntentosMinutos Int? @map("espera_entre_intentos_minutos")
+
   modulo       Modulo                  @relation(fields: [moduloId], references: [id])
   preguntas    ModuloVersionPregunta[]
   criterios    ModuloVersionCriterio[]

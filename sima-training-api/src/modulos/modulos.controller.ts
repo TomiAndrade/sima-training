@@ -15,6 +15,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { ActivarModuloDto } from './dto/activar-modulo.dto';
 import { AsignarPreguntaItemDto } from './dto/asignar-preguntas.dto';
 import { CreateModuloDto } from './dto/create-modulo.dto';
+import { ParametrosExamenDto } from './dto/parametros-examen.dto';
 import { SetCriteriosDto } from './dto/set-criterios.dto';
 import { TogglePreguntaDto } from './dto/toggle-pregunta.dto';
 import { UpdateModuloDto } from './dto/update-modulo.dto';
@@ -95,6 +96,19 @@ export class ModulosController {
     @Body() dto: SetCriteriosDto,
   ) {
     return this.modulos.setCriterios(id, dto);
+  }
+
+  // Cómo se rinde la versión en edición (cuántas preguntas, umbral, reintentos,
+  // espera). PUT y no PATCH por el mismo motivo que los criterios: es el set
+  // completo, y omitir un campo lo devuelve a su default global. El service
+  // rechaza si la versión no es un BORRADOR.
+  @Put(':id/parametros')
+  @UseGuards(JwtAuthGuard)
+  setParametrosExamen(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ParametrosExamenDto,
+  ) {
+    return this.modulos.setParametrosExamen(id, dto);
   }
 
   @Post(':id/preguntas')

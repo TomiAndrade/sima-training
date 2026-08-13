@@ -636,6 +636,86 @@ describe('ModulosService', () => {
     expect(resultado).toEqual({ moduloEliminado: false });
   });
 
+  describe('parámetros de examen', () => {
+    const PARAMETROS = {
+      preguntasPorExamen: 5,
+      umbralAprobacion: 80,
+      maxIntentos: 2,
+      esperaEntreIntentosMinutos: 60,
+    };
+
+    it('create los manda a la v1, no al módulo', async () => {
+      prisma.modulo.create.mockResolvedValue({ id: 'm1' });
+
+      await service.create({ nombre: 'Altura', ...PARAMETROS });
+
+      const { data } = prisma.modulo.create.mock.calls[0][0];
+      expect(data.versiones.create).toEqual({
+        numeroVersion: 1,
+        ...PARAMETROS,
+      });
+      // Son columnas de modulo_versiones: si se colaran en el spread del módulo,
+      // Prisma rechazaría el campo desconocido.
+      expect(data).not.toHaveProperty('umbralAprobacion');
+      expect(data).not.toHaveProperty('preguntasPorExamen');
+    });
+
+    it('crearVersion los hereda del ACTIVO', async () => {
+      prisma.modulo.findUnique.mockResolvedValue({ id: 'm1' });
+      prisma.moduloVersion.findFirst.mockImplementation(({ where }) =>
+        where.estado === 'BORRADOR' ? null : { id: 'v-activo', ...PARAMETROS },
+      );
+      prisma.moduloVersion.aggregate.mockResolvedValue({
+        _max: { numeroVersion: 1 },
+      });
+      prisma.moduloVersionPregunta.findMany.mockResolvedValue([]);
+      prisma.moduloVersion.create.mockResolvedValue({ id: 'v-nueva' });
+
+      await service.crearVersion('m1');
+
+      // Sin esto, editar un módulo publicado le resetea el umbral al default
+      // global en silencio — el borrador tiene que ser la foto de lo publicado
+      // también en cómo se rinde, no sólo en qué preguntas tiene.
+      expect(prisma.moduloVersion.create.mock.calls[0][0].data).toMatchObject(
+        PARAMETROS,
+      );
+    });
+
+    it('setParametrosExamen rechaza sobre una versión publicada', async () => {
+      prisma.moduloVersion.findFirst.mockImplementation(({ where }) =>
+        where.estado === 'BORRADOR' ? null : { id: 'v1', estado: 'ACTIVO' },
+      );
+
+      await expect(
+        service.setParametrosExamen('m1', PARAMETROS),
+      ).rejects.toBeInstanceOf(ConflictException);
+      expect(prisma.moduloVersion.update).not.toHaveBeenCalled();
+    });
+
+    it('setParametrosExamen normaliza a null lo que no viene', async () => {
+      prisma.moduloVersion.findFirst.mockImplementation(({ where }) =>
+        where.estado === 'BORRADOR'
+          ? { id: 'v-borrador', estado: 'BORRADOR' }
+          : null,
+      );
+      prisma.moduloVersion.update.mockResolvedValue({ id: 'v-borrador' });
+
+      await service.setParametrosExamen('m1', { umbralAprobacion: 90 });
+
+      // Es un PUT: lo omitido vuelve al default global. Con undefined Prisma
+      // dropea el campo y el valor viejo sobreviviría a un "borrar" del backoffice.
+      expect(prisma.moduloVersion.update).toHaveBeenCalledWith({
+        where: { id: 'v-borrador' },
+        data: {
+          preguntasPorExamen: null,
+          umbralAprobacion: 90,
+          maxIntentos: null,
+          esperaEntreIntentosMinutos: null,
+        },
+      });
+    });
+  });
+
   describe('setCriterios', () => {
     const BASE = 'base-seguridad';
     const NIVEL = 'nivel-basico';
