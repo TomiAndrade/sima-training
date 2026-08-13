@@ -46,6 +46,22 @@ Es un DTO propio y no un campo ignorado a propósito: con `forbidNonWhitelisted`
 
 Son momentos distintos: servir un examen nuevo con una pregunta que un admin ya desactivó no tiene sentido, pero una baja posterior no puede invalidar una rendición que ya se hizo. **No se "arregla" ninguno de los dos para que coincidan.**
 
+### El tope de reintentos y la espera se aplican al SERVIR, no al registrar
+
+Misma asimetría que la de arriba, y por el mismo motivo. `GET /tablet/modulos/:id/examen` cuenta los intentos ya gastados de esa persona en ese módulo (`tablet/reintentos.ts`, funciones puras) y responde **409** con el motivo — sin intentos, o con la fecha desde la que puede reintentar. `SesionesService.registrar()` no valida nada de eso: una rendición ya hecha se registra siempre.
+
+Es lo que mantiene viable el modo offline: una sesión que se sincroniza tres días tarde no puede caerse por una ventana de espera que ya venció. El costo —alguien con un token de alumno y `curl` puede saltarse el tope— está aceptado y anotado en [`../pendientes.md`](../pendientes.md).
+
+Por eso `examen()` pasó a recibir el `usuarioId`: el **contenido** del examen sigue siendo el mismo para cualquiera que rinda esa versión (el guard nunca verificó que la asignación fuera tuya), pero el derecho a pedirlo es personal.
+
+### `pendientes` informa el bloqueo en vez de esconderlo
+
+Cada ítem viaja con su `reintentos` (`puedeRendir`, `motivo`, `intentosUsados`, `intentosRestantes`, `proximoIntentoEn`). Un módulo bloqueado **sigue listado**, con el botón deshabilitado y el motivo debajo: la obligación no desapareció, sólo no se puede rendir todavía, y sacarlo de la lista haría creer que ya no hay que hacerlo — que es exactamente lo contrario.
+
+Sin eso la única señal sería el 409 al tocar el botón, o sea descubrir el bloqueo después de haberlo intentado. El estado se recalcula también **después** de registrar una sesión y viaja en el resultado, para que la pantalla de Resultado sepa si ofrecer "Reintentar evaluación".
+
+La regla la decide siempre el backend: `sima-check-app/src/core/reintentos.js` sólo traduce ese objeto a texto.
+
 ### Imágenes como `{ clave, url }`, con `url` relativa
 
 La app muestra `url` y manda `clave` de vuelta como respuesta; `corregir.ts` compara esa clave cruda, nunca la URL armada (hay un spec que lo fija).

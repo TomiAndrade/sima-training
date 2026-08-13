@@ -78,17 +78,58 @@ Queda anotado acá porque la forma ya está pensada, pero el estado y el bloqueo
 
 ---
 
+## Parámetros de examen (cómo se rinde)
+
+Cuántas preguntas toma la app, con qué porcentaje se aprueba, cuántos reintentos hay y cuánto se espera entre uno y otro. Hasta acá los dos primeros eran constantes del backend (`PREGUNTAS_POR_EXAMEN = 3`, `UMBRAL_APROBACION_DEFAULT = 70`) y los otros dos no existían: los reintentos no tenían tope.
+
+### Van en `ModuloVersion`, no en `Modulo`
+
+`Modulo` ya tiene un parámetro de este estilo (`vigenciaMeses`) y era el lugar más simple, pero es el lugar equivocado: **el examen es contenido, y el contenido se versiona**. Un score sólo significa algo contra el set de preguntas *y las reglas* con las que se rindió — es el mismo argumento por el que `Sesion` apunta a la versión y no al módulo.
+
+Con los parámetros en `Modulo` (leídos vivos), bajar el umbral de 80 a 60 haría que dos personas que rindieron el mismo examen publicado queden aprobadas con reglas distintas y nada lo registre. En la versión, cambiar el umbral es publicar una versión nueva, que es un acto explícito y numerado.
+
+Corolarios:
+
+- **Sólo se editan en `BORRADOR`** (409 sobre lo publicado), mismo guard que los criterios y el unassign duro.
+- **`crearVersion()` los copia del ACTIVO.** Sin esto, editar un módulo publicado le resetearía el umbral al default global en silencio — es el bug más probable de todo el cambio y tiene un spec dedicado.
+- `vigenciaMeses` **se queda en `Modulo`**: no es cómo se rinde el examen, es cada cuánto hay que recertificarse, y se lee vivo a propósito (ver [asignaciones.md](asignaciones.md)).
+
+### `null` significa "usar el default", nunca cero
+
+Los cuatro son nullable y sin backfill. Escribirles 3 y 70 a las versiones existentes las haría **declarar** unos valores que en su momento eran globales, y entonces un cambio futuro del default no las alcanzaría — exactamente lo contrario de lo que se quiere para lo ya publicado.
+
+Es también por qué `PUT /:id/parametros` es un PUT y no un PATCH: el campo omitido vuelve a `null`. Con `undefined` Prisma dropea el campo y "borrar el umbral" desde el backoffice dejaría el valor viejo intacto.
+
+### La aprobación sigue siendo un PORCENTAJE, no un conteo de correctas
+
+El pedido original era "con cuántas correctas se aprueba". Se implementó como porcentaje igual, y no es un capricho: el conteo se rompe cuando el pool tiene menos preguntas que `preguntasPorExamen` (el sorteo devuelve las que haya), y ahí "4 correctas" sobre un examen de 3 es inaprobable. El porcentaje se adapta solo.
+
+El costo es la cuenta mental, y se paga en la UI: el formulario muestra en vivo *"hay que responder bien 4 de 5 para aprobar (70%)"*. Se descartó derivar el porcentaje de un par (correctas, total) cargado por el usuario: el redondeo no cierra —7 preguntas con 5 correctas da un umbral de 72% que un score de 71% no alcanza, y la persona reprueba habiendo acertado justo las 5 que se le pedían.
+
+### Los reintentos se cuentan por MÓDULO y el contador se resetea al aprobar
+
+Dos decisiones que van juntas y viven en `tablet/reintentos.ts` como funciones puras:
+
+- **Por módulo, no por versión.** Publicar una versión nueva no le devuelve intentos a nadie: el tope existe para que no se apruebe a fuerza de repetir hasta que salga el sorteo fácil, y eso no cambia porque se reordenen las preguntas.
+- **Reset al aprobar**: sólo cuentan las sesiones posteriores a la última aprobación. Sin esto, alguien que aprobó raspando hace tres años llegaría con el tope agotado a la recertificación que le pide `vigenciaMeses` — quedaría trabado sin ninguna vía de salida desde la app.
+
+El tope se evalúa **antes** que la espera y es terminal: sin intentos no tiene sentido prometer una fecha a partir de la cual igual no va a poder rendir.
+
+**Dónde se aplican**: sólo al *servir* el examen (`TabletService.examen()`, 409), nunca al *registrar* una rendición. Registrar lo que ya se rindió no se rechaza — misma doctrina que el filtro `activa` y el `ARCHIVADO` aceptado, y lo que mantiene viable el modo offline. El costo aceptado está en [`../pendientes.md`](../pendientes.md).
+
+---
+
 ## Composición por criterio
 
 Hasta acá una `ModuloVersion` se armaba enumerando preguntas una por una. Ahora puede además declarar **qué evalúa** (`ModuloVersionCriterio`: base + nivel opcional) y dejar que el backend materialice el pool.
 
 Los dos caminos **conviven**: el pivot lleva `origen` (`CRITERIO` / `MANUAL`), y eso es exactamente lo que permite que la resolución sepa qué filas le pertenecen.
 
-### `cantidadPreguntas` se sacó del diseño
+### La cantidad de preguntas es de la VERSIÓN, no del criterio
 
-Iba a ser cuántas preguntas sortear por examen de cada criterio, pero **no tiene consumidor**: el sorteo toma una cantidad fija y no lee nada del criterio. Guardarlo ahora lo dejaba como un campo que se persiste, aparece en formularios y no gobierna ninguna regla — la situación exacta que tuvo `Modulo.vigenciaMeses` hasta que la vigencia lo usó de verdad.
+El diseño original la ponía en `ModuloVersionCriterio` (cuántas sortear **de cada criterio**) y se descartó por falta de consumidor: el sorteo tomaba una cantidad fija. Cuando la cantidad se volvió configurable, quedó en `ModuloVersion.preguntasPorExamen` — a nivel de la versión entera.
 
-Se agrega como columna nullable, sin backfill, cuando exista el sorteo real. Lo que se pierde mientras tanto es la **garantía de cobertura por criterio** (tomar N del pozo unificado puede dar 3 de residuos y 0 de altura), que es un problema **del sorteo** y no de la composición: la clasificación de cada `Pregunta` alcanza para reintroducir la cuota sin remodelar nada. Ver [`../pendientes.md`](../pendientes.md).
+Es una decisión distinta y no la misma pospuesta. Una cantidad **por criterio** es una cuota ("3 de altura y 2 de residuos"); una **por versión** es el tamaño del examen. La segunda es lo que se pidió y lo que la app necesita; la primera resuelve otra cosa: la **garantía de cobertura**, que sigue sin resolverse — sortear N del pozo unificado puede dar 3 de residuos y 0 de altura. Es un problema **del sorteo** y no de la composición: la clasificación de cada `Pregunta` alcanza para reintroducir la cuota sin remodelar nada. Ver [`../pendientes.md`](../pendientes.md).
 
 ### El pool materializa TODAS las preguntas que matchean, no una muestra
 

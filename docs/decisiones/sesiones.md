@@ -18,7 +18,9 @@ Hoy `Pregunta` no tiene endpoint de edición, así que es defensa en profundidad
 
 ## El umbral se congela en la fila
 
-`umbralAprobacion` se persiste por sesión. Hoy sale de `UMBRAL_APROBACION_DEFAULT = 70` en `sesiones/corregir.ts`, pero no se vuelve a leer al mostrar un resultado viejo: subirlo a 80 mañana **no puede reescribir lo que decían los certificados ya emitidos**. El día que el umbral sea por módulo, la columna ya lo soporta sin migrar.
+`umbralAprobacion` se persiste por sesión. Sale de `ModuloVersion.umbralAprobacion` —el umbral con el que se publicó ese examen— y cae a `UMBRAL_APROBACION_DEFAULT = 70` (`sesiones/corregir.ts`) cuando la versión no declara ninguno. No se vuelve a leer al mostrar un resultado viejo: subirlo a 80 mañana **no puede reescribir lo que decían los certificados ya emitidos**. La columna venía preparada para esto y el cambio no necesitó migrarla.
+
+Se lee de la **versión rendida** y no del módulo ni de la versión ACTIVO de hoy: una sesión sincronizada tarde (modo offline) contra una versión ya archivada se corrige con la regla que tenía cuando se rindió, no con la vigente. `corregir.ts` no cambió una línea — `calcularResultado(correcciones, umbral)` ya recibía el umbral por parámetro.
 
 Es la decisión **opuesta** a la de `vigenciaMeses`, que se lee viva, y las dos son a propósito: ver [asignaciones.md](./asignaciones.md#vigenciameses-se-lee-vivo-de-modulo-no-se-congela-en-la-sesion).
 
@@ -44,6 +46,8 @@ Es la diferencia con `Asignacion`, donde el índice parcial deja a lo sumo una v
 - *"¿Cuál fue el último intento?"* se ordena por `finalizadaEn`.
 
 Un intento fallido **no des-aprueba**: volver a rendir y desaprobar no invalida la aprobación anterior. Lo único que la caduca es el tiempo, y eso lo decide la vigencia ([asignaciones.md](./asignaciones.md#vigencia-de-las-aprobaciones)).
+
+Que un reintento sea una fila más sigue siendo cierto **con el tope de intentos**: el tope no cambió el modelo, se calcula contando esas filas (`ModuloVersion.maxIntentos`, ver [modulos.md](./modulos.md)). Y no se aplica acá: `crearSesion()` no rechaza una rendición por tope ni por espera — eso vive en `TabletService.examen()`, al servir el examen. Registrar lo que ya se rindió no se rechaza nunca, misma doctrina que el `ARCHIVADO` aceptado dos párrafos más arriba.
 
 ## `Sesion` es inmutable y no lleva soft-delete
 
