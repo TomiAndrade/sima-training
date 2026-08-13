@@ -40,7 +40,7 @@ npm install
 cp .env.example .env
 docker compose up -d db          # PostgreSQL local
 npx prisma migrate dev           # crea las tablas
-npx prisma db seed               # organización interna + módulos base
+npx prisma db seed               # organización interna (nada más)
 npm run start:dev                # → http://localhost:3000
 
 # 2. Backoffice
@@ -57,7 +57,9 @@ npm run dev                      # → http://localhost:5174
 
 ### Escenario de demo (`SEED_DEMO=true`)
 
-`prisma/seed.ts` tiene dos modos. El **seed base** (el `npx prisma db seed` de arriba) siembra sólo la estructura mínima que necesita cualquier entorno: la organización interna "Ingeniería SIMA" y los 4 módulos con su `ModuloVersion` v1 en BORRADOR, sin ningún dato de prueba. Detrás de la variable de entorno `SEED_DEMO=true` se suma un **escenario navegable de punta a punta** (`sembrarDemo()`), apagado por defecto a propósito porque son datos de demostración.
+`prisma/seed.ts` tiene dos modos. El **seed base** (el `npx prisma db seed` de arriba) siembra sólo la estructura mínima que necesita cualquier entorno: la organización interna "Ingeniería SIMA", y nada más. Detrás de la variable de entorno `SEED_DEMO=true` se suma un **escenario navegable de punta a punta** (`sembrarDemo()`), apagado por defecto a propósito porque son datos de demostración.
+
+**El seed base ya no siembra módulos.** Sembraba cuatro (`SIMA Básico`/`Intermedio`/`Avanzado`/`Reglas de Oro`) con **uuid fijo**, que eran la contraparte real del mock `sima-check/data/training-modules.js` de cuando el backoffice lo referenciaba por `backendId`. Ese campo ya no existe —la pantalla Módulos es 100% backend— así que los cuatro quedaron como filas vacías apareciendo al lado de cualquier módulo creado de verdad. **Un módulo es contenido, no estructura**: lo crea quien lo necesita. Con eso se fue también el acoplamiento por uuid entre los dos modos del seed: `sembrarDemo()` ahora crea sus dos módulos con `modulos.create()` y usa los ids devueltos.
 
 ```powershell
 # PowerShell

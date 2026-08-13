@@ -70,6 +70,16 @@ Las rutas legacy que dejó el import de Excel (`/images/x.png`) se devuelven tal
 
 ## Seed
 
+### El seed base siembra estructura, no contenido — y un módulo es contenido
+
+El seed base quedó en **una sola cosa**: la organización interna "Ingeniería SIMA". Es la única fila que cualquier entorno necesita sí o sí, porque sin una organización no se puede dar de alta a nadie.
+
+Sembraba además **cuatro módulos con uuid hardcodeado** (`SIMA Básico`/`Intermedio`/`Avanzado`/`Reglas de Oro`). No eran arbitrarios: eran la contraparte real de los cuatro del mock `sima-check/data/training-modules.js`, con id fijo porque el backoffice los referenciaba por `backendId` mientras la pantalla de módulos seguía mockeada. Ese campo **ya no existe** — la pantalla es 100% backend desde hace varios sprints — así que lo único que quedó de esa deuda fueron cuatro módulos vacíos apareciendo al lado de cualquier módulo creado de verdad, en cualquier base recién sembrada.
+
+La línea es: **estructura la siembra el seed, contenido lo crea quien lo necesita.** Un módulo es una decisión de negocio (qué se capacita, con qué preguntas, cada cuánto se recertifica), no un prerrequisito técnico.
+
+El beneficio de fondo es que se fue el **acoplamiento por uuid entre los dos modos del seed**, que estaba marcado con una advertencia en el propio código: `sembrarDemo()` poblaba el `SIMA Básico` del seed base por su uuid literal, así que tocar la lista de módulos de un modo rompía el otro con un `NotFoundException` a distancia. Ahora `sembrarDemo()` crea sus dos módulos con `modulos.create()` (que ya deja la `ModuloVersion` v1 en BORRADOR) y usa los ids devueltos: la rama demo es autocontenida.
+
 ### Toda entidad nueva con FK RESTRICT tiene que entrar a `limpiar()`, en orden
 
 Casi todas las FK del schema son `ON DELETE RESTRICT`, así que una tabla nueva que no se agregue a la cadena de borrado **bloquea el `deleteMany()` de su padre** y rompe el seed.

@@ -40,7 +40,7 @@ npm run start:dev
 
 ### Escenario de demo (`SEED_DEMO`)
 
-El seed base deja la estructura mínima: Ingeniería SIMA y los 4 módulos en BORRADOR vacío. Para tener una base **navegable de punta a punta** (organización cliente → subcontratista, alumnos con pares puesto/centro, banco clasificado por base y nivel, un módulo publicado con su número `AÑO.MAYOR.MENOR` y asignaciones automáticas derivadas de reglas):
+El seed base deja la estructura mínima: la organización Ingeniería SIMA, y nada más (ya no siembra módulos — ver `CLAUDE.md`). Para tener una base **navegable de punta a punta** (organización cliente → subcontratista, alumnos con pares puesto/centro, banco clasificado por base y nivel, un módulo publicado con su número `AÑO.MAYOR.MENOR` y asignaciones automáticas derivadas de reglas):
 
 ```powershell
 $env:SEED_DEMO='true'; npx prisma db seed   # PowerShell
@@ -234,7 +234,7 @@ prisma/
 │                    Puesto, CentroCosto, Pregunta, BaseConocimiento, NivelBase,
 │                    Modulo, ModuloVersion, ModuloVersionCriterio,
 │                    ReglaAsignacion, Asignacion, Sesion, Respuesta + pivots
-├── seed.ts          Organización interna (Ingeniería SIMA) + módulos base, y el
+├── seed.ts          Organización interna (Ingeniería SIMA) y nada más, más el
 │                    escenario de demo detrás de SEED_DEMO=true.
 │                    Limpia en orden de dependencia (las FK son ON DELETE RESTRICT)
 └── migrations/      Migraciones versionadas

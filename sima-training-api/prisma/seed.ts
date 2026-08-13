@@ -20,19 +20,14 @@ const prisma = new PrismaClient();
 // módulo publicado y asignaciones) NO va acá: vive detrás de SEED_DEMO=true.
 // Ver sembrarDemo() al final del archivo.
 
-// sima-check/data/training-modules.js (mock del backoffice) → Modulo real.
-// Ids fijos: el backoffice los usa como `backendId` para poder llamar a
-// /preguntas y /modulos/:id/preguntas mientras el Paso 1 (grid de módulos)
-// sigue mockeado (se migra en un sprint futuro).
-const MODULO_SIMA_BASICO = '15e3d3b9-858c-44d2-8f8e-10b9be3b2c3a';
-const MODULO_REGLAS_DE_ORO = '2d902814-e83a-4c8d-9f1e-5b1239ec8d76';
-
-const MODULOS = [
-  { id: MODULO_SIMA_BASICO, nombre: 'SIMA Básico' },
-  { id: '0372fc38-1092-4f3c-87d2-ae1be3bb2981', nombre: 'SIMA Intermedio' },
-  { id: 'ca6d4904-af84-4691-bea9-692cc8e22084', nombre: 'SIMA Avanzado' },
-  { id: MODULO_REGLAS_DE_ORO, nombre: 'Reglas de Oro Industria Petrolera' },
-];
+// El seed base NO siembra módulos. Sembraba cuatro (`SIMA Básico`/`Intermedio`/
+// `Avanzado`/`Reglas de Oro`) con uuid fijo, que eran la contraparte real del
+// mock `sima-check/data/training-modules.js` cuando el backoffice lo
+// referenciaba por `backendId`. Ese campo ya no existe (la pantalla Módulos es
+// 100% backend), así que los cuatro quedaron como filas vacías que aparecen al
+// lado de cualquier módulo que se cree de verdad. El módulo es contenido, no
+// estructura: lo crea quien lo necesita — el escenario de demo el suyo
+// (`sembrarDemo`), y el admin los de producción desde el backoffice.
 
 // Limpieza en orden de dependencia. TODAS las FK del schema son ON DELETE
 // RESTRICT salvo dos (ver abajo), así que hay que ir siempre de las hijas a las
@@ -113,26 +108,10 @@ async function main() {
     },
   });
 
-  // 2) Módulos reales (uno por módulo mockeado del backoffice), con su
-  // ModuloVersion v1 en BORRADOR para poder asignarles preguntas.
-  for (const m of MODULOS) {
-    await prisma.modulo.create({
-      data: {
-        id: m.id,
-        nombre: m.nombre,
-        createdBy: 'seed',
-        versiones: { create: { numeroVersion: 1, createdBy: 'seed' } },
-      },
-    });
-  }
-
   const orgs = await prisma.organizacion.count();
   const usuarios = await prisma.usuario.count();
-  const modulos = await prisma.modulo.count();
 
-  console.log(
-    `Seed completo: ${orgs} organizaciones, ${usuarios} usuarios, ${modulos} módulos.`,
-  );
+  console.log(`Seed completo: ${orgs} organizaciones, ${usuarios} usuarios.`);
 
   if (demoActivado()) {
     await sembrarDemo();
@@ -384,18 +363,19 @@ async function sembrarDemo() {
       },
     ]);
 
-    // 5) Módulo publicado. Se pobla el "SIMA Básico" que crea el seed base más
-    // arriba, en vez de crear uno nuevo: así el walkthrough no muestra cuatro
-    // módulos vacíos al lado de uno poblado.
+    // 5) Módulo publicado. El demo crea sus propios módulos con
+    // `modulos.create()` (que ya deja la ModuloVersion v1 en BORRADOR) en vez
+    // de poblar uno que sembrara el seed base: así esta rama es autocontenida y
+    // no depende de ningún uuid fijo compartido entre las dos.
     //
-    // ⚠️ ACOPLAMIENTO AL SEED BASE. Esta rama depende del uuid hardcodeado
-    // MODULO_SIMA_BASICO, que es un id fijo porque el mock del backoffice
-    // (sima-check/data/training-modules.js) lo referencia como `backendId`.
-    // Si alguien cambia ese id en MODULOS, o le saca a ese módulo su
-    // ModuloVersion v1 en BORRADOR, esto NO falla en silencio: asignarPreguntas
-    // tira NotFoundException. Pero el que lo toque tiene que saber que además
-    // de MODULOS hay que actualizar la constante de acá arriba.
-    //
+    // "Reglas de Oro" se crea y NO se publica a propósito: es el módulo al que
+    // apunta la regla de centro del paso 7, y es lo que ejercita el sufijo
+    // "(sin versión publicada)" del backoffice.
+    const moduloBasico = await modulos.create({ nombre: 'SIMA Básico' });
+    const moduloReglasDeOro = await modulos.create({
+      nombre: 'Reglas de Oro Industria Petrolera',
+    });
+
     // El contenido se arma por los DOS caminos que conviven (Sprint 7), para que
     // el módulo publicado ejercite los dos `origen` de pivot en vez de quedar
     // 100% MANUAL como estaba antes:
@@ -416,12 +396,12 @@ async function sembrarDemo() {
     // en BORRADOR, así que van antes de activar(). Sobre un ACTIVO, setCriterios
     // tira ConflictException (resolver criterios borra pivots y rompería la
     // inmutabilidad del historial).
-    await modulos.setCriterios(MODULO_SIMA_BASICO, {
+    await modulos.setCriterios(moduloBasico.id, {
       criterios: [{ baseConocimientoId: base.id, nivelId: nivelBasico.id }],
     });
     const manuales = intermedias.slice(0, 2);
     await modulos.asignarPreguntas(
-      MODULO_SIMA_BASICO,
+      moduloBasico.id,
       // Sin `orden`: se appendean después de las que trajo el criterio
       // (siguienteOrden = max + 1).
       manuales.map((pregunta) => ({ preguntaId: pregunta.id })),
@@ -430,7 +410,7 @@ async function sembrarDemo() {
     // del cual derivar el número, así que calcularNumero cae en siguienteMayor
     // y queda AÑO.01.00. Publica el snapshot tal cual: activar() NO vuelve a
     // resolver los criterios.
-    const versionPublicada = await modulos.activar(MODULO_SIMA_BASICO);
+    const versionPublicada = await modulos.activar(moduloBasico.id);
 
     // 6) Alumnos del subcontratista. UsuariosService.create valida la matriz
     // (SUBCONTRATISTA sólo admite ALUMNO) y recalcula en la misma transacción.
@@ -492,7 +472,7 @@ async function sembrarDemo() {
       {
         puestoId: puestoPorNombre['Soldador'],
         centroCostoId: centroPorNombre['Taller'],
-        moduloId: MODULO_SIMA_BASICO,
+        moduloId: moduloBasico.id,
       },
       'seed',
     );
@@ -502,7 +482,7 @@ async function sembrarDemo() {
     await reglas.create(
       {
         centroCostoId: centroPorNombre['Depósito'],
-        moduloId: MODULO_REGLAS_DE_ORO,
+        moduloId: moduloReglasDeOro.id,
       },
       'seed',
     );
@@ -518,6 +498,7 @@ async function sembrarDemo() {
       subcontratista,
       base,
       niveles: [nivelBasico, nivelIntermedio, nivelAvanzado],
+      moduloBasico,
       criterio: { base: base.nombre, nivel: nivelBasico.nombre },
       versionPublicada,
       usuariosDemo: [carlos, andrea, hernan],
@@ -570,6 +551,7 @@ async function imprimirResumenDemo(datos: {
   subcontratista: { id: number; nombre: string };
   base: { id: string; nombre: string; codigo: string | null };
   niveles: { id: string; nombre: string; orden: number }[];
+  moduloBasico: { id: string; nombre: string };
   criterio: { base: string; nivel: string };
   versionPublicada: {
     id: string;
@@ -584,6 +566,7 @@ async function imprimirResumenDemo(datos: {
     subcontratista,
     base,
     niveles,
+    moduloBasico,
     criterio,
     versionPublicada,
     usuariosDemo,
@@ -624,8 +607,8 @@ async function imprimirResumenDemo(datos: {
       (n) => `    nivel ${n.orden} ${n.nombre.padEnd(10)} ${n.id}`,
     ),
     '',
-    'Módulo publicado — SIMA Básico:',
-    `  modulo   ${MODULO_SIMA_BASICO}`,
+    `Módulo publicado — ${moduloBasico.nombre}:`,
+    `  modulo   ${moduloBasico.id}`,
     `  version  ${versionPublicada.id}  (${numero})`,
     `  criterio ${criterio.base} / ${criterio.nivel}`,
     `  contenido: ${preguntasPorCriterio} por criterio + ${preguntasManuales} manuales`,
