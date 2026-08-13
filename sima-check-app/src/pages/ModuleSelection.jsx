@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { tabletApi } from '../core/api/tablet'
+import { avisoIntentos, motivoBloqueo } from '../core/reintentos'
 
 export default function ModuleSelection({ usuario, onSelect, onBack, cargandoExamen = false, errorExamen = '' }) {
   const [pendientes, setPendientes] = useState([])
@@ -73,17 +74,39 @@ export default function ModuleSelection({ usuario, onSelect, onBack, cargandoExa
                 <p className="text-red-600 text-sm leading-relaxed">{errorExamen}</p>
               </div>
             )}
-            {pendientes.map((item) => (
-              <button
-                key={item.asignacionId}
-                onClick={() => onSelect(item)}
-                disabled={cargandoExamen}
-                className="group w-full flex items-center gap-4 bg-red-600 hover:bg-red-700 active:bg-red-800 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl px-5 py-4 transition-all duration-150 touch-manipulation"
-              >
-                <span className="flex-1 text-left text-white text-lg font-bold leading-tight">{item.nombre}</span>
-                <span className="text-white text-2xl font-bold flex-shrink-0 group-hover:translate-x-1 transition-transform">›</span>
-              </button>
-            ))}
+            {pendientes.map((item) => {
+              // El módulo bloqueado SIGUE listado: la obligación no desapareció,
+              // lo que cambia es que todavía no se puede rendir. Ocultarlo haría
+              // creer que ya no hay que hacerlo.
+              const bloqueo = motivoBloqueo(item.reintentos)
+              const aviso = avisoIntentos(item.reintentos)
+              return (
+                <div key={item.asignacionId}>
+                  <button
+                    onClick={() => onSelect(item)}
+                    disabled={cargandoExamen || !!bloqueo}
+                    className={`group w-full flex items-center gap-4 rounded-xl px-5 py-4 transition-all duration-150 touch-manipulation ${
+                      bloqueo
+                        ? 'bg-slate-200 cursor-not-allowed'
+                        : 'bg-red-600 hover:bg-red-700 active:bg-red-800 disabled:opacity-50 disabled:cursor-not-allowed'
+                    }`}
+                  >
+                    <span className={`flex-1 text-left text-lg font-bold leading-tight ${bloqueo ? 'text-slate-500' : 'text-white'}`}>
+                      {item.nombre}
+                    </span>
+                    {!bloqueo && (
+                      <span className="text-white text-2xl font-bold flex-shrink-0 group-hover:translate-x-1 transition-transform">›</span>
+                    )}
+                  </button>
+                  {bloqueo && (
+                    <p className="text-slate-500 text-sm leading-relaxed mt-1.5 px-1">{bloqueo}</p>
+                  )}
+                  {aviso && (
+                    <p className="text-slate-400 text-xs leading-relaxed mt-1.5 px-1">{aviso}</p>
+                  )}
+                </div>
+              )
+            })}
           </div>
         )}
 

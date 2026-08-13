@@ -1,10 +1,12 @@
 import Button from '../components/Button'
+import { motivoBloqueo } from '../core/reintentos'
 
 export default function Results({ usuario, module: mod, result, enviando, errorEnvio, onReintentarEnvio, onRetry, onGoToModules, onHome }) {
   // El aprobado/desaprobado sale de `aprobada` (el backend congela el umbral
   // por sesión, ver Sesion.umbralAprobacion) — nunca se recalcula contra un
   // 70 hardcodeado del lado del cliente.
   const aprobada = result?.aprobada
+  const bloqueoReintento = motivoBloqueo(result?.reintentos)
 
   const feedbackMsg = result
     ? aprobada
@@ -71,9 +73,16 @@ export default function Results({ usuario, module: mod, result, enviando, errorE
           <Button variant="primary" onClick={onGoToModules} fullWidth>
             Mis capacitaciones
           </Button>
-          <Button variant="secondary" onClick={onRetry} fullWidth>
-            Reintentar evaluación
-          </Button>
+          {/* El estado de reintentos lo recalcula el backend DESPUÉS de
+              registrar esta sesión. Si ya no se puede, se dice por qué en vez de
+              ofrecer un botón que devuelve 409. */}
+          {bloqueoReintento ? (
+            <p className="text-slate-500 text-sm leading-relaxed text-center px-2">{bloqueoReintento}</p>
+          ) : (
+            <Button variant="secondary" onClick={onRetry} fullWidth>
+              Reintentar evaluación
+            </Button>
+          )}
           <Button variant="secondary" onClick={onHome} fullWidth>
             Volver al inicio
           </Button>
