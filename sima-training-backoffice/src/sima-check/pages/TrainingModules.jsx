@@ -7,6 +7,13 @@ import { useBancoModulo, estadoVersionBadge, estadoModulo, claveCriterio } from 
 import { formatVersionNumero } from '../../core/format/version'
 import { BancoAcciones, PreguntasAsignadasPanel, PreguntaBancoPicker } from '../components/BancoPreguntas'
 import CriteriosPanel from '../components/CriteriosPanel'
+import ParametrosExamenPanel from '../components/ParametrosExamenPanel'
+import {
+  PARAMETROS_VACIOS,
+  parametrosAPayload,
+  parametrosDesdeVersion,
+  parametrosDistintos,
+} from '../components/parametrosExamen'
 
 const EMPTY_MODULE_FORM = { nombre: '', descripcion: '', vigenciaMeses: '' }
 
@@ -73,7 +80,17 @@ export default function TrainingModules() {
   const [moduleModal, setModuleModal] = useState(null)
   const [moduleForm, setModuleForm] = useState(EMPTY_MODULE_FORM)
   const [modulePreguntaIds, setModulePreguntaIds] = useState(new Set())
+  // Qué evalúa y cómo se rinde, elegidos ya en el alta. Los dos van a la v1
+  // BORRADOR que nace con el módulo: los criterios por un PUT posterior (el
+  // módulo tiene que existir primero) y los parámetros dentro del propio POST.
+  const [moduleCriterios, setModuleCriterios] = useState([])
+  const [moduleParametros, setModuleParametros] = useState(PARAMETROS_VACIOS)
   const [saving, setSaving] = useState(false)
+  // El error del alta se pinta DENTRO del modal y no en el banner global de la
+  // página: el modal tapa el banner, así que el mensaje quedaba invisible justo
+  // cuando importa. Más ahora, que el submit son tres llamadas y puede fallar
+  // cualquiera.
+  const [moduleError, setModuleError] = useState(null)
 
   // Modal de solo lectura "Ver detalles" de un módulo existente.
   const [detalleModal, setDetalleModal] = useState(null)
@@ -143,6 +160,14 @@ export default function TrainingModules() {
   // pega al backend al toque (ver handleGuardarCriterios). `localCriterios` es
   // sólo el estado del formulario mientras se editan las filas.
   const [localCriterios, setLocalCriterios] = useState([])
+  // Mismo modelo que los criterios: no son staged, tienen su propio botón que
+  // pega al backend (ver handleGuardarParametros). `localParametros` es el
+  // formulario y `parametrosGuardados` la foto del servidor contra la que se
+  // compara para habilitar el guardado.
+  const [localParametros, setLocalParametros] = useState(PARAMETROS_VACIOS)
+  const [parametrosGuardados, setParametrosGuardados] = useState(PARAMETROS_VACIOS)
+  const [guardandoParametros, setGuardandoParametros] = useState(false)
+  const [parametrosError, setParametrosError] = useState(null)
   const sessionKeyRef = useRef(null)
   useEffect(() => {
     if (!questionsView || questionsView.readOnly || !banco.version) return
@@ -156,6 +181,10 @@ export default function TrainingModules() {
           nivelId: c.nivelId,
         })),
       )
+      const desdeServidor = parametrosDesdeVersion(banco.version)
+      setLocalParametros(desdeServidor)
+      setParametrosGuardados(desdeServidor)
+      setParametrosError(null)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [questionsView?.moduleId, questionsView?.versionId, questionsView?.readOnly, banco.version])
@@ -227,6 +256,9 @@ export default function TrainingModules() {
   const openCreateModule = () => {
     setModuleForm(EMPTY_MODULE_FORM)
     setModulePreguntaIds(new Set())
+    setModuleCriterios([])
+    setModuleParametros(PARAMETROS_VACIOS)
+    setModuleError(null)
     setModuleModal({ mode: 'create' })
   }
 
@@ -243,26 +275,58 @@ export default function TrainingModules() {
     setDetalleModal(mod)
   }
 
+  // Criterios listos para mandar: los completos (una fila recién agregada
+  // arranca sin base elegida) y sin repetidos.
+  const moduleCriteriosValidos = moduleCriterios.filter((c) => c.baseConocimientoId)
+  const moduleCriteriosRepetidos =
+    new Set(moduleCriteriosValidos.map(claveCriterio)).size !== moduleCriteriosValidos.length
+
   const handleSaveModule = async () => {
-    if (!moduleForm.nombre.trim()) return
+    if (!moduleForm.nombre.trim()) {
+      setModuleError('Poné un nombre para el módulo.')
+      return
+    }
+    if (moduleCriteriosRepetidos) {
+      setModuleError('Hay criterios repetidos: la misma base con el mismo nivel aparece más de una vez.')
+      return
+    }
     setSaving(true)
-    setError(null)
+    setModuleError(null)
     try {
       const vigenciaMeses = moduleForm.vigenciaMeses.trim() ? Number(moduleForm.vigenciaMeses) : undefined
       const payload = {
         nombre: moduleForm.nombre.trim(),
         descripcion: moduleForm.descripcion.trim() || undefined,
         vigenciaMeses,
+        // Los parámetros de examen viajan en el propio POST: el backend los
+        // desvía a la v1 BORRADOR que crea junto con el módulo.
+        ...parametrosAPayload(moduleParametros),
       }
       const modulo = await modulosApi.create(payload)
+
+      // El ORDEN de los dos pasos siguientes importa. Las preguntas elegidas a
+      // mano van PRIMERO (quedan como pivots MANUAL) y los criterios después:
+      // resolverCriterios() nunca toca las MANUAL, así que una pregunta que
+      // además matchea un criterio no se duplica. Al revés, ya tendría pivot
+      // CRITERIO y asignarPreguntas moriría con un 409 "ya está asignada".
       if (modulePreguntaIds.size > 0) {
         const items = [...modulePreguntaIds].map((preguntaId) => ({ preguntaId, obligatoria: true }))
         await modulosApi.asignarPreguntas(modulo.id, items)
       }
+      if (moduleCriteriosValidos.length > 0) {
+        await modulosApi.setCriterios(modulo.id, moduleCriteriosValidos)
+      }
+
       loadModules()
       setModuleModal(null)
     } catch (err) {
-      setError(err.message)
+      // El módulo puede haber quedado creado con alguno de los pasos siguientes
+      // sin aplicar. No se borra solo: queda como BORRADOR y se termina de armar
+      // desde "Editar contenido", que es exactamente para lo que existe esa vista.
+      setModuleError(
+        `${err.message} — si el módulo llegó a crearse, va a aparecer en la lista como borrador; terminá de configurarlo desde "Editar contenido".`,
+      )
+      loadModules()
     } finally {
       setSaving(false)
     }
@@ -468,6 +532,25 @@ export default function TrainingModules() {
     }
   }
 
+  // Los parámetros de examen se guardan solos, sin flushCambios: a diferencia de
+  // los criterios, el PUT no toca los pivots, así que no puede pisar ni pelearse
+  // con el staging de preguntas.
+  const handleGuardarParametros = async () => {
+    setGuardandoParametros(true)
+    setParametrosError(null)
+    try {
+      await modulosApi.setParametros(
+        questionsView.moduleId,
+        parametrosAPayload(localParametros),
+      )
+      setParametrosGuardados(localParametros)
+    } catch (err) {
+      setParametrosError(err.message)
+    } finally {
+      setGuardandoParametros(false)
+    }
+  }
+
   // --- Guardar los cambios pendientes y volver a la lista ---
   const handleGuardarYVolver = async (irAtras) => {
     setGuardando(true)
@@ -521,6 +604,13 @@ export default function TrainingModules() {
       .sort()
       .join('|')
     const criteriosDirty = criteriosGuardadosClave !== criteriosLocalesClave
+    // En solo lectura los valores salen del servidor y no del formulario: la
+    // vista de una versión publicada nunca pasó por el efecto que llena
+    // localParametros (sólo corre sobre borradores editables).
+    const parametrosVista = view.readOnly
+      ? parametrosDesdeVersion(banco.version)
+      : localParametros
+    const parametrosDirty = parametrosDistintos(localParametros, parametrosGuardados)
     const pendientesPreguntas = contarPendientes()
 
     const irAtras = () => setView(
@@ -584,6 +674,16 @@ export default function TrainingModules() {
               : 'Estás viendo la versión publicada (solo lectura). Para modificarla, volvé y usá "Editar contenido".'}
           </div>
         )}
+
+        <ParametrosExamenPanel
+          valores={parametrosVista}
+          readOnly={view.readOnly}
+          onChange={setLocalParametros}
+          onGuardar={handleGuardarParametros}
+          guardando={guardandoParametros}
+          error={parametrosError}
+          dirty={parametrosDirty}
+        />
 
         <CriteriosPanel
           criterios={criteriosVista}
@@ -970,16 +1070,26 @@ export default function TrainingModules() {
         footer={
           <>
             <span className="text-slate-500 text-xs font-mono mr-auto">
+              {moduleCriteriosValidos.length > 0 && (
+                <>{moduleCriteriosValidos.length} criterio{moduleCriteriosValidos.length !== 1 ? 's' : ''} · </>
+              )}
               {modulePreguntaIds.size} pregunta{modulePreguntaIds.size !== 1 ? 's' : ''} seleccionada{modulePreguntaIds.size !== 1 ? 's' : ''}
             </span>
             <Button variant="secondary" onClick={() => setModuleModal(null)}>Cancelar</Button>
             <Button onClick={handleSaveModule} disabled={saving}>
-              {saving ? 'Guardando...' : modulePreguntaIds.size > 0 ? 'Crear y asignar' : 'Crear'}
+              {saving
+                ? 'Guardando...'
+                : modulePreguntaIds.size > 0 || moduleCriteriosValidos.length > 0
+                  ? 'Crear y configurar'
+                  : 'Crear'}
             </Button>
           </>
         }
       >
         <div className="space-y-4">
+          {moduleError && (
+            <div className="bg-red-50 border border-red-200 text-red-700 text-xs rounded px-3 py-2">{moduleError}</div>
+          )}
           <div>
             <label className="block text-slate-700 text-sm font-medium mb-1">Nombre</label>
             <input
@@ -1014,9 +1124,35 @@ export default function TrainingModules() {
               placeholder="Cada cuántos meses debe recertificarse un alumno"
             />
           </div>
-          <div>
+          <div className="pt-2 border-t border-slate-200">
+            <label className="block text-slate-700 text-sm font-medium mb-2">
+              Cómo se rinde <span className="text-slate-400 font-normal">(opcional — se puede cambiar mientras sea borrador)</span>
+            </label>
+            {/* Sin marco propio ni botón de guardar: acá se persisten como parte
+                del POST del módulo, no por su endpoint. */}
+            <ParametrosExamenPanel
+              valores={moduleParametros}
+              onChange={setModuleParametros}
+              desnudo
+            />
+          </div>
+
+          <div className="pt-2 border-t border-slate-200">
+            <label className="block text-slate-700 text-sm font-medium mb-2">
+              Qué evalúa <span className="text-slate-400 font-normal">(opcional — las preguntas de las bases elegidas entran solas)</span>
+            </label>
+            {/* Controlado y sin su botón: el módulo todavía no existe cuando se
+                eligen los criterios, así que el PUT sale recién en el submit. */}
+            <CriteriosPanel
+              criterios={moduleCriterios}
+              onChange={setModuleCriterios}
+              mostrarGuardar={false}
+            />
+          </div>
+
+          <div className="pt-2 border-t border-slate-200">
             <label className="block text-slate-700 text-sm font-medium mb-1">
-              Preguntas <span className="text-slate-400 font-normal">(opcional — el módulo queda como borrador igual)</span>
+              Preguntas sueltas <span className="text-slate-400 font-normal">(opcional — el módulo queda como borrador igual)</span>
             </label>
             <PreguntaBancoPicker selectedIds={modulePreguntaIds} onToggle={toggleModulePregunta} />
           </div>
@@ -1051,6 +1187,21 @@ export default function TrainingModules() {
               <div className="text-slate-400 text-xs font-medium mb-1">Estado</div>
               <div className="text-slate-900 text-sm">{detalleModal.activo === false ? 'Inactivo' : 'Activo'}</div>
             </div>
+            {/* Cómo se rinde sale de la versión vigente, no del módulo: son
+                parámetros congelados por versión. Un módulo sin ninguna versión
+                todavía no tiene nada que mostrar acá. */}
+            {detalleModal.vigente && (
+              <div className="pt-3 border-t border-slate-200">
+                <div className="text-slate-400 text-xs font-medium mb-2">
+                  Cómo se rinde <span className="font-normal">({formatVersionNumero(detalleModal.vigente)})</span>
+                </div>
+                <ParametrosExamenPanel
+                  valores={parametrosDesdeVersion(detalleModal.vigente)}
+                  readOnly
+                  desnudo
+                />
+              </div>
+            )}
           </div>
         )}
       </Modal>

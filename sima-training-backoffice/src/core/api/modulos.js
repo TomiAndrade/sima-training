@@ -22,6 +22,12 @@ export const modulosApi = {
   // conservadas, porCriterio } }. Solo vale sobre un BORRADOR (el backend
   // responde 409 si la versión ya está publicada).
   setCriterios: (id, criterios) => api.put(`/modulos/${id}/criterios`, { criterios }),
+  // Cómo se rinde la versión en edición: preguntasPorExamen, umbralAprobacion,
+  // maxIntentos y esperaEntreIntentosMinutos. PUT por el mismo motivo que los
+  // criterios: reemplaza el set completo, y el campo que va en `null` vuelve al
+  // default global del backend (3 preguntas / 70% / sin tope / sin espera). Solo
+  // vale sobre un BORRADOR — 409 si la versión ya está publicada.
+  setParametros: (id, data) => api.put(`/modulos/${id}/parametros`, data),
   // Crea un BORRADOR nuevo copiando las preguntas del ACTIVO, sin preguntar
   // actualización/versión nueva todavía — esa elección se hace recién al activar.
   crearVersion: (id) => api.post(`/modulos/${id}/versiones`, {}),

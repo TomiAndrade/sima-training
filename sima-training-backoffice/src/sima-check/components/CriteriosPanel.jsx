@@ -83,6 +83,7 @@ export default function CriteriosPanel({
   guardando,
   error,
   dirty,
+  mostrarGuardar = true,
 }) {
   const [bases, setBases] = useState([])
 
@@ -208,9 +209,14 @@ export default function CriteriosPanel({
             <Button variant="secondary" size="sm" onClick={agregarFila}>
               + Agregar criterio
             </Button>
-            <Button size="sm" onClick={onGuardar} disabled={!puedeGuardar}>
-              {guardando ? 'Guardando...' : 'Guardar criterios'}
-            </Button>
+            {/* En el modal de "Nuevo módulo" el guardado es parte del submit
+                (el módulo todavía no existe cuando se eligen los criterios),
+                así que ahí el panel va sin su propio botón. */}
+            {mostrarGuardar && (
+              <Button size="sm" onClick={onGuardar} disabled={!puedeGuardar}>
+                {guardando ? 'Guardando...' : 'Guardar criterios'}
+              </Button>
+            )}
           </div>
         )}
       </div>
