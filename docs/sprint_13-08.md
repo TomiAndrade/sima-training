@@ -149,10 +149,18 @@ Hoy la columna muestra todos los badges y se desborda cuando una pregunta está 
 Con 88 puestos y 16 centros, un select plano es inusable. `MultiSelectFilter` ya tiene buscador; los que faltan son los selects simples.
 
 **Tareas:**
-- [ ] Inventariar qué filtros tienen buscador y cuáles no
-- [ ] Decidir si se extiende `MultiSelectFilter` a selección única o se hace un componente aparte
-- [ ] Aplicarlo en Usuarios (puesto, centro, organización)
-- [ ] Aplicarlo en Bases y en donde haya quedado alguno suelto
+- [x] Inventariar qué filtros tienen buscador y cuáles no
+- [x] Decidir si se extiende `MultiSelectFilter` a selección única o se hace un componente aparte
+- [x] Aplicarlo en Usuarios (puesto, centro, ~~organización~~)
+- [x] ~~Aplicarlo en Bases~~ y en donde haya quedado alguno suelto
+
+**Resultado:** componente nuevo `SearchableSelect` (selección única con buscador), aparte de `MultiSelectFilter` — casi todo lo que los diferencia son comportamientos opuestos (seleccionar todos vs opción vacía, quedarse abierto vs cerrar al elegir), así que un prop `single` dejaba la mitad del componente detrás de condicionales.
+
+Aplicado **sólo donde la lista es larga**: Puesto (88) y Centro de costo (16), en los cuatro lugares donde aparecen — filtros de Usuarios, `ParesPuestoCentro`, el resolver de `ImportUsuariosModal` y el modal de Reglas. Los dos últimos **no estaban en la story** y son los mismos 88 puestos en el flujo de carga de nómina.
+
+**Dos cosas de la story que el inventario contradijo.** `BasesConocimiento.jsx` **no tiene ningún `<select>`** — "aplicarlo en Bases" sólo podía referirse a los selects de base/nivel de Preguntas y los modales, que son listas cortas. Y organización tampoco entró: hoy hay una sola. En los cortos abrir un panel con un buscador que no filtra nada agrega un paso en vez de sacarlo; el criterio es el largo de la lista, no la consistencia visual.
+
+**El panel va en portal.** El cuerpo de `Modal` es `overflow-y-auto` y recorta cualquier cosa flotante, y la mitad de los consumidores viven dentro de un modal. Ver [decisiones/usuarios.md](decisiones/usuarios.md#searchableselect-es-un-componente-aparte-de-multiselectfilter-no-un-prop).
 
 ---
 

@@ -353,6 +353,7 @@ sima-training-backoffice/src/
 │   ├── data/          clients.js · users.js · usuarios-mock.js (mock; solo Dashboard)
 │   ├── format/        ← helpers compartidos ENTRE CAPAS: version.js (formatVersionNumero,
 │   │                    el número AÑO.MAYOR.MENOR) · badges.js (roleBadge, origenBadge).
+│   │                    catalogo.js (opcionesCatalogo: fila de catálogo → {id,label}).
 │   │                    Viven acá y no en sima-check/ porque core/ no puede importar
 │   │                    de sima-check/ y los usan las dos capas
 │   ├── components/    ImportUsuariosModal.jsx · ImportPreguntasModal.jsx · ParesPuestoCentro.jsx ·
@@ -368,7 +369,7 @@ sima-training-backoffice/src/
 │                      BasesConocimiento.jsx ·
 │                      ReglasAsignacion.jsx · TrainingAssignments.jsx
 ├── pages/             BackofficeLayout.jsx · Dashboard.jsx
-├── components/        Button · Modal · Table · StatCard · MultiSelectFilter
+├── components/        Button · Modal · Table · StatCard · MultiSelectFilter · SearchableSelect
 │                      (Table tiene un prop `alignTop` opt-in, default false:
 │                       alinea las celdas arriba en vez de al medio, el default
 │                       de un <td>. Lo pasa sólo Usuarios.jsx, cuya celda de
@@ -385,6 +386,16 @@ sima-check-app/src/
 ├── pages/             UsuarioSelection · ModuleSelection · Evaluation · Results
 └── App.jsx            eleva el estado del flujo y registra el service worker
 ```
+
+## Buscador en los desplegables largos (`SearchableSelect`)
+
+Con el catálogo real —**88 puestos**, 16 centros de costo— un `<select>` nativo se elige scrolleando con el ojo. `SearchableSelect` (`components/SearchableSelect.jsx`) es el desplegable de selección **única** con buscador arriba; `MultiSelectFilter` sigue siendo el de selección múltiple, y son componentes **separados** a propósito (ver [decisiones/usuarios.md](docs/decisiones/usuarios.md)).
+
+Se aplicó **sólo donde la lista es larga** — Puesto y Centro de costo, en los cuatro lugares donde aparecen: los filtros de Usuarios, `ParesPuestoCentro` (el form de carga de una persona), el resolver de `ImportUsuariosModal` y el modal de Reglas. Los desplegables cortos (base, nivel, organización, tipo de pregunta, respuesta correcta, la acción del import) **siguen siendo `<select>` nativos**: abrir un panel con buscador para elegir entre tres opciones agrega un paso en vez de sacarlo.
+
+**El panel se renderiza en un portal a `document.body` con `position: fixed`**, y eso no es decoración: la mitad de los consumidores viven dentro de un `Modal`, cuyo cuerpo es `overflow-y-auto` — un panel `absolute` ahí adentro queda **recortado** por ese contenedor. El costo es que el panel se cierra ante cualquier scroll (listener en fase de captura, porque los eventos de scroll no burbujean y el que importa es el del cuerpo del modal).
+
+`opcionesCatalogo()` (`core/format/catalogo.js`) adapta una fila de catálogo a `{ id, label }` y estampa el sufijo `" (inactivo)"` que Usuarios y `ParesPuestoCentro` ya venían repitiendo a mano.
 
 ## Decisiones de arquitectura
 

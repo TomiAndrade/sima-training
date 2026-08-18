@@ -112,6 +112,34 @@ El formulario no tiene `<select>` de rol: al crear manda siempre `rol: 'ALUMNO'`
 
 El frontend tiene una **copia chica de la matriz** (`TIPOS_ORG_POR_ROL`, comentada como espejo de `matriz-rol-organizacion.ts`) para filtrar el `<select>` de Organización según el rol efectivo y no ofrecer una combinación que el backend vaya a rechazar con 400. Si el filtro deja el select sin ninguna organización válida, se muestra un mensaje en vez de un `<select>` vacío y se deshabilita Guardar.
 
+## `SearchableSelect` es un componente aparte de `MultiSelectFilter`, no un prop
+
+Los dos son "desplegable con buscador arriba" y comparten el lenguaje visual, pero casi todo lo que los diferencia son comportamientos **opuestos**:
+
+| | `MultiSelectFilter` | `SearchableSelect` |
+|---|---|---|
+| Valor | `Set` de ids | un id (o `''`) |
+| Fila | checkbox | botón |
+| Extra arriba | "Seleccionar todos" | opción vacía ("Todos los puestos") |
+| Al elegir | queda abierto | cierra |
+
+Un prop `single` en el existente dejaba la mitad del componente detrás de condicionales, y las dos mitades no comparten ni el contrato de datos. También se descartó extraer primero un primitivo común (dropdown + click-afuera + input): habría que tocar un componente que hoy anda para ahorrar ~30 líneas de shell, y el único consumidor del primitivo serían esos dos.
+
+### El panel va en un portal porque si no el `Modal` lo recorta
+
+`Modal` renderiza su cuerpo como `<div className="p-5 overflow-y-auto">`. Un panel `absolute` dentro de ese contenedor queda **recortado por él**: las opciones que caen fuera del alto del modal se vuelven inalcanzables. Y la mitad de los consumidores de `SearchableSelect` viven adentro de un modal — `ParesPuestoCentro`, el resolver del import y el alta de Reglas.
+
+Por eso el panel se renderiza con `createPortal` en `document.body` y `position: fixed`, con las coordenadas calculadas del `getBoundingClientRect()` del disparador (y abriendo hacia arriba si abajo no entra). Las dos consecuencias, las dos resueltas en el componente:
+
+- **Click-afuera tiene que mirar dos nodos.** El panel ya no está dentro del disparador en el DOM, así que chequear sólo `triggerRef` cerraría el panel al tocar sus propias opciones.
+- **Hay que cerrarlo ante cualquier scroll**, o el panel queda flotando en la pantalla mientras el disparador se va. El listener va en **fase de captura**: los eventos de scroll no burbujean, y el que importa acá es el del cuerpo del modal, no el de `window`.
+
+### Sólo donde la lista es larga
+
+Se aplicó a Puesto (88) y Centro de costo (16), en los cuatro lugares donde aparecen. Los desplegables cortos —base, nivel, organización, tipo de pregunta, respuesta correcta, la acción del resolver del import— **quedaron como `<select>` nativos**: con tres opciones, abrir un panel y ofrecer un buscador que no filtra nada agrega un paso en vez de sacarlo. La contra aceptada es que conviven dos tipos de desplegable con aspecto distinto; el criterio para elegir es el tamaño de la lista, no la consistencia visual.
+
+Ojo con el ancho: el disparador **no** trae clase de ancho propia (`triggerCls`), lo pone el consumidor por `className` (default `w-full`). Si la base trajera `w-full`, pasarle `w-auto` no lo pisaría — entre dos utilidades de Tailwind del mismo grupo gana la que aparece después en el CSS generado, no en el string.
+
 ## Frontend: el ABM de pares es 100% en memoria
 
 `ParesPuestoCentro.jsx` no pega al backend fila por fila: arma la lista en memoria y se manda entera al guardar, coherente con que el PATCH reemplace el set completo.
