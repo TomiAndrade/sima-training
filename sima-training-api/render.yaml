@@ -3,7 +3,15 @@
 #   1. Crear cuenta en Render y conectar el repo de GitHub.
 #   2. Render detecta este render.yaml y provisiona el servicio web + la base Postgres.
 #   3. La variable DATABASE_URL se inyecta automáticamente desde la base gestionada.
-#   4. Setear JWT_SECRET como secreto en el dashboard de Render.
+#   4. Setear JWT_SECRET y las 4 variables R2_* como secretos en el dashboard
+#      de Render (ver .env.example para de dónde sale cada una).
+#
+# STORAGE_DRIVER=r2 va FIJO acá, no como default en el código: el contenedor
+# de Render es efímero (sin disco persistente en el plan free), así que un
+# deploy que caiga al default `local` de storage.module.ts pierde todas las
+# imágenes en el primer redeploy siguiente, en silencio — sin este valor
+# explícito, un typo o un olvido en el dashboard no se notaría hasta que ya
+# fuera tarde.
 #
 # Mientras tanto el desarrollo es 100% local (docker-compose + npm run start:dev).
 
@@ -26,6 +34,16 @@ services:
         value: 'http://localhost:5173,http://localhost:5174'
       - key: PORT
         value: '3000'
+      - key: STORAGE_DRIVER
+        value: 'r2'
+      - key: R2_ACCOUNT_ID
+        sync: false
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: R2_BUCKET
+        value: 'sima-training'
 
 databases:
   - name: sima-training-db

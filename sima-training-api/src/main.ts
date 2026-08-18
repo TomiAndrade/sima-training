@@ -3,15 +3,15 @@ import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
-import { UPLOADS_PREFIX, uploadsDir } from './storage/storage.service';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
   const config = app.get(ConfigService);
 
-  // Archivos subidos (imágenes de preguntas). Lectura pública: son contenido de
-  // la evaluación, y la app del alumno los pide sin token.
-  app.useStaticAssets(uploadsDir(config), { prefix: UPLOADS_PREFIX });
+  // Los archivos subidos (imágenes de preguntas) ya NO se sirven acá con
+  // useStaticAssets: eso sólo sabía leer del disco local, y con R2 el byte no
+  // está en esta máquina. Ahora los sirve UploadsController pidiéndoselos a
+  // StorageService, así la URL /uploads/* es la misma con cualquier driver.
 
   app.useGlobalPipes(
     new ValidationPipe({
