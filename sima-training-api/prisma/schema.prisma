@@ -65,10 +65,6 @@ model Usuario {
   asignaciones Asignacion[]
   sesiones     Sesion[]
 
-  // Datos flexibles de nómina (jsonb). Dato de tránsito: los campos que se
-  // estabilicen cuando llegue el Excel real se promueven a columnas (§3.4-a).
-  datos Json @default("{}")
-
   // Trazabilidad
   createdAt DateTime  @default(now()) @map("created_at")
   updatedAt DateTime  @updatedAt @map("updated_at")

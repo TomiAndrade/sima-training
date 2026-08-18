@@ -6,7 +6,6 @@ import {
   IsEnum,
   IsInt,
   IsNotEmpty,
-  IsObject,
   IsOptional,
   IsString,
   IsUUID,
@@ -65,9 +64,4 @@ export class CreateUsuarioDto {
   @ValidateNested()
   @Type(() => CreateVinculacionDto)
   vinculacion!: CreateVinculacionDto;
-
-  // Datos flexibles de nómina (jsonb). Estructura abierta a propósito (§3.4-a).
-  @IsOptional()
-  @IsObject()
-  datos?: Record<string, unknown>;
 }

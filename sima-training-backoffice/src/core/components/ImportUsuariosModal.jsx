@@ -225,7 +225,6 @@ export default function ImportUsuariosModal({ open, onClose, onImported }) {
           dni: f.data.dni,
           nombre: f.data.nombre,
           apellido: f.data.apellido,
-          ...(f.data.legajo ? { legajo: f.data.legajo } : {}),
           puestoId,
           centroCostoId,
           filaIndex: f.index,

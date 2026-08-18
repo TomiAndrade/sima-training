@@ -111,11 +111,10 @@ export class UsuariosService {
   // `actor` va a created_by/updated_by: 'backoffice' en el ABM, 'import' cuando
   // la llama ImportService.
   async create(dto: CreateUsuarioDto, actor = 'backoffice') {
-    const { datos, vinculacion, ...identidad } = dto;
+    const { vinculacion, ...identidad } = dto;
     const pares = await this.paresValidados(vinculacion.pares);
     await this.assertRolPermitido(vinculacion.organizacionId, vinculacion.rol);
 
-    const datosJson = (datos ?? {}) as Prisma.InputJsonValue;
     const puestosCentros = this.paresACrear(pares, actor);
 
     // Si existe una fila dada de baja con el mismo DNI, se reactiva (revive)
@@ -137,7 +136,6 @@ export class UsuariosService {
           where: { id: dadoDeBaja.id },
           data: {
             ...identidad,
-            datos: datosJson,
             deletedAt: null,
             updatedBy: actor,
             vinculacion: {
@@ -182,7 +180,6 @@ export class UsuariosService {
     await this.assertDniDisponible(dto.dni);
     const data = {
       ...identidad,
-      datos: datosJson,
       createdBy: actor,
       vinculacion: {
         create: {
@@ -340,7 +337,7 @@ export class UsuariosService {
       throw new NotFoundException(`Usuario ${id} no encontrado`);
     }
 
-    const { datos, vinculacion, ...identidad } = dto;
+    const { vinculacion, ...identidad } = dto;
     if (identidad.dni !== undefined) {
       await this.assertDniDisponible(identidad.dni, id);
     }
@@ -393,9 +390,6 @@ export class UsuariosService {
         where: { id },
         data: {
           ...identidad,
-          ...(datos !== undefined
-            ? { datos: datos as Prisma.InputJsonValue }
-            : {}),
           updatedBy: actor,
           ...(vinculacion && organizacionId !== undefined && rol !== undefined
             ? {

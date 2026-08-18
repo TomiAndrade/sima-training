@@ -221,19 +221,22 @@ describe('ImportService — usuarios', () => {
       expect(preview.filas[1].errores).toContain('DNI duplicado en el archivo');
     });
 
-    it('legajo va a data; ya no existe un campo de puesto en el jsonb', async () => {
+    // La columna `legajo` se sacó del mapa junto con el jsonb `Usuario.datos`
+    // (sprint 13-08, Story 1). Un Excel viejo que todavía la traiga se importa
+    // igual: un header no mapeado se ignora, no es un error de fila.
+    it('ignora la columna legajo y cualquier otra que no esté en el mapa', async () => {
       const file = await nomina(
-        [...headers, 'legajo'],
-        [['30111222', 'Ana', 'Paz', 'Soldador', 'Taller', 'A-42']],
+        [...headers, 'legajo', 'columna inventada'],
+        [['30111222', 'Ana', 'Paz', 'Soldador', 'Taller', 'A-42', 'xyz']],
       );
 
       const preview = await service.previewUsuarios(file);
 
+      expect(preview.filas[0].estado).toBe('ok');
       expect(preview.filas[0].data).toEqual({
         dni: '30111222',
         nombre: 'Ana',
         apellido: 'Paz',
-        legajo: 'A-42',
       });
     });
 

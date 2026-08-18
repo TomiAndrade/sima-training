@@ -34,10 +34,6 @@ export class FilaConfirmarUsuarioDto {
   @IsUUID('4')
   centroCostoId!: string;
 
-  @IsOptional()
-  @IsString()
-  legajo?: string;
-
   // Fila del Excel original (preview.filas[].index), solo para que los
   // errores del resultado referencien el mismo número de fila que vio el
   // admin en el preview, en vez de la posición dentro de este array.

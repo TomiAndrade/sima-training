@@ -9,10 +9,14 @@ import { ConfirmarImportPreguntasDto } from './dto/confirmar-import-preguntas.dt
 import { ConfirmarImportUsuariosDto } from './dto/confirmar-import-usuarios.dto';
 import { clasificar, normalizar, RefSimilitud, toRef } from './similitud';
 
-// Columnas del Excel → campo del modelo / datos jsonb. Header normalizado
-// (sin acentos, espacios colapsados) → campo, igual criterio que
-// COLUMN_MAP_PREGUNTAS. `puesto` y "centro de costo" ya NO van al jsonb: son
-// insumo puro para resolver contra el catálogo real (ver previewUsuarios).
+// Columnas del Excel → campo del modelo. Header normalizado (sin acentos,
+// espacios colapsados) → campo, igual criterio que COLUMN_MAP_PREGUNTAS.
+// `puesto` y "centro de costo" son insumo puro para resolver contra el
+// catálogo real (ver previewUsuarios).
+// Ya no hay columna "legajo": era lo único que quedaba escribiendo el jsonb
+// `Usuario.datos`, que se eliminó del modelo porque ningún frontend lo leía.
+// Un Excel que todavía traiga esa columna se importa igual — un header que
+// no está en este mapa se ignora en silencio (ver el `if (key)` de abajo).
 // Sin columnas "rol"/"empresa"/"email": todo usuario importado se crea como
 // ALUMNO en la organización que se elige una sola vez para todo el import
 // (un Excel es siempre de una sola empresa), no por fila.
@@ -25,7 +29,6 @@ const COLUMN_MAP_USUARIOS: Record<string, string> = {
   nombre: 'nombre',
   apellido: 'apellido',
   'apellido y nombre': 'apellidoNombreTexto',
-  legajo: 'datos_legajo',
   puesto: 'puestoTexto',
   'puesto de trabajo': 'puestoTexto',
   'centro de costo': 'centroCostoTexto',
@@ -38,7 +41,6 @@ export interface UsuarioImportData {
   dni: string;
   nombre: string;
   apellido: string;
-  legajo?: string;
 }
 
 // Mismo vocabulario que similitud.ts: duplicada = match exacto en el catálogo
@@ -250,7 +252,6 @@ export class ImportService {
           apellido = apellidoNombreTexto.trim();
         }
       }
-      const legajo = getCol(row, 'datos_legajo') || undefined;
       const puestoTexto = getCol(row, 'puestoTexto');
       const centroCostoTexto = getCol(row, 'centroCostoTexto');
 
@@ -292,7 +293,7 @@ export class ImportService {
 
       filas.push({
         index: r,
-        data: { dni, nombre, apellido, legajo },
+        data: { dni, nombre, apellido },
         puesto,
         centroCosto,
         estado: errores.length ? 'error' : 'ok',
@@ -344,9 +345,6 @@ export class ImportService {
       }
       dnisVistos.add(fila.dni);
 
-      const datos: Record<string, string> = {};
-      if (fila.legajo) datos['legajo'] = fila.legajo;
-
       // El alta pasa por UsuariosService: así el import comparte con el ABM
       // manual la validación de la matriz tipo-de-organización ↔ rol, la
       // validación de que puestoId/centroCostoId existan de verdad, el
@@ -358,7 +356,6 @@ export class ImportService {
             nombre: fila.nombre,
             apellido: fila.apellido,
             dni: fila.dni,
-            datos,
             vinculacion: {
               organizacionId: dto.organizacionId,
               rol: RolUsuario.ALUMNO,
