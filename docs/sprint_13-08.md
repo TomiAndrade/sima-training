@@ -50,11 +50,19 @@ Spike. Aparecen dos identificadores distintos y no está claro cuál se muestra 
 Bloqueante de producción. `LocalDiskStorage` escribe en disco efímero: el primer redeploy borra todas las imágenes de preguntas y la base queda con claves que apuntan a nada.
 
 **Tareas:**
-- [ ] Elegir proveedor (R2 vs S3) verificando precios actuales
-- [ ] Crear la cuenta y el bucket, con las credenciales en el `.env`
-- [ ] Escribir la implementación nueva de `StorageService` (la interfaz no cambia)
-- [ ] Verificar que subir, servir y borrar una imagen funcionan de punta a punta
-- [ ] Probar que un reinicio del servidor no pierde nada
+- [x] Elegir proveedor (R2 vs S3) verificando precios actuales
+- [x] Crear la cuenta y el bucket, con las credenciales en el `.env`
+- [x] Escribir la implementación nueva de `StorageService` (~~la interfaz no cambia~~)
+- [x] Verificar que subir, servir y borrar una imagen funcionan de punta a punta
+- [x] Probar que un reinicio del servidor no pierde nada
+
+**Resultado:** R2 sobre S3 por el egreso —R2 no lo cobra, S3 sí—, precios verificados contra las páginas oficiales el mismo día ($0 en las dos para almacenamiento a esta escala; la diferencia real está en servir imágenes a las tablets). `R2Storage` nueva, elegida por `STORAGE_DRIVER` en `StorageModule` (factory, no una constante de build — permite probar R2 real desde development).
+
+**La premisa "la interfaz no cambia" era falsa.** Sirvió para estimar los 2 pts de una implementación nueva, pero `StorageService` sólo tenía `guardar`/`borrar` — nada podía **leer**. Hacía falta porque `main.ts` servía `/uploads` con `useStaticAssets`, que sólo sabe leer del disco local. Se agregó `leer(clave) → ArchivoLeido` (stream, no Buffer — no bufferear 2MB en RAM por cada tablet pidiendo a la vez) y un `UploadsController` nuevo que reemplaza al estático. La URL no cambió (`/uploads/preguntas/<uuid>.png` sigue igual con los dos drivers), así que ni el schema ni los frontends se tocaron — sólo se corrigió el tamaño real de la story.
+
+**Decisión de scope que no estaba en la story: el backend sigue siendo intermediario, el bucket queda privado.** La alternativa (bucket público, la tablet baja directo de R2) era más rápida y liberaba banda del servidor, pero son fotos de instalaciones de clientes de Oil & Gas — se prefirió dejar el control de acceso en un solo lugar por si hace falta restringirlo. El costo medido es despreciable a esta escala y ese tráfico ya existía con `useStaticAssets`. Detalle completo en [decisiones/infraestructura.md](decisiones/infraestructura.md#storage-de-archivos).
+
+**Verificación real, no simulada.** Primero un script descartable habló directo con el SDK de R2 (subir/leer/borrar) para validar las credenciales antes de escribir la implementación. Después, con la API real levantada (`STORAGE_DRIVER=r2`) y contra los endpoints HTTP de verdad: `POST /preguntas/imagen` → `GET /uploads/...` (bytes idénticos, headers correctos) → **se mató el proceso y se levantó uno nuevo** (simulando el redeploy que motivó la story) → la imagen subida antes seguía ahí → `DELETE /preguntas/imagen/:clave` → 404. Se repitió el mismo ciclo con `STORAGE_DRIVER=local` para confirmar que no se rompió el flujo de desarrollo. Se probó además path traversal contra `/uploads/*` (`../../.env`, variantes encoded) — todo 404 sin tocar el storage.
 
 ---
 
@@ -64,12 +72,14 @@ Bloqueante de producción. `LocalDiskStorage` escribe en disco efímero: el prim
 Hoy son 3 preguntas y 70% para todos los módulos, hardcodeado. Pasa a decidirlo quien crea el módulo. Las cuatro columnas entran en la misma migración aunque los reintentos se apliquen en la story siguiente.
 
 **Tareas:**
-- [ ] Migración: `cantidadPreguntas`, `umbralAprobacion`, `cantidadReintentos` y `esperaEntreIntentos` en `Modulo`
-- [ ] Sumar los campos al form de creación de módulo, con los valores de hoy como default
-- [ ] Que el sorteo del examen use `cantidadPreguntas` del módulo en vez de la constante
-- [ ] Que la corrección use el umbral del módulo, con la constante como fallback
-- [ ] Verificar que las sesiones viejas siguen mostrando el umbral con el que se rindieron
-- [ ] Specs del sorteo y de la corrección con umbral por módulo
+- [x] ~~Migración: `cantidadPreguntas`, `umbralAprobacion`, `cantidadReintentos` y `esperaEntreIntentos` en `Modulo`~~
+- [x] Sumar los campos al form de creación de módulo, con los valores de hoy como default
+- [x] Que el sorteo del examen use `cantidadPreguntas` del módulo en vez de la constante
+- [x] Que la corrección use el umbral del módulo, con la constante como fallback
+- [x] Verificar que las sesiones viejas siguen mostrando el umbral con el que se rindieron
+- [x] Specs del sorteo y de la corrección con umbral por módulo
+
+**Resultado:** hecha antes de esta sesión (commits `9efdd38`/`93f134d`/`05a0cde`/`42de642`, previos al 13-08). **La primera tarea tenía la premisa incorrecta**: los cuatro campos son `Int?` en `ModuloVersion`, no en `Modulo` — se congelan con la versión (sólo editables en BORRADOR, `PUT /modulos/:id/parametros`) en vez de vivir en el contenedor estable, porque un parámetro de examen es algo que se publica y versiona, no metadata del módulo. `null` = default global (3 / 70% / sin tope / sin espera), nunca cero. `Sesion.umbralAprobacion` se congela por fila, así que las sesiones viejas no necesitaron migrarse. Detalle en `CLAUDE.md` (entidad `ModuloVersion`).
 
 ---
 
@@ -79,11 +89,13 @@ Hoy son 3 preguntas y 70% para todos los módulos, hardcodeado. Pasa a decidirlo
 Usa las dos columnas de la story anterior. Es la primera regla que puede impedir que alguien arranque una evaluación, así que el mensaje de rechazo importa tanto como la validación.
 
 **Tareas:**
-- [ ] Decidir desde cuándo cuenta la espera (fin del intento anterior)
-- [ ] Validar en el endpoint del examen: sin intentos disponibles o dentro de la espera, no se entrega
-- [ ] Mensaje claro en la tablet: cuántos intentos quedan y desde cuándo puede volver
-- [ ] Decidir qué pasa con una sesión offline que llega y ya no tenía intentos
-- [ ] Specs de los dos límites
+- [x] Decidir desde cuándo cuenta la espera (fin del intento anterior)
+- [x] Validar en el endpoint del examen: sin intentos disponibles o dentro de la espera, no se entrega
+- [x] Mensaje claro en la tablet: cuántos intentos quedan y desde cuándo puede volver
+- [x] Decidir qué pasa con una sesión offline que llega y ya no tenía intentos
+- [x] Specs de los dos límites
+
+**Resultado:** hecha antes de esta sesión (commits `05a0cde`/`64c3d7a`). `tablet/reintentos.ts` (funciones puras) + 409 en `TabletService.examen()`. La decisión sobre offline: **el tope se valida sólo al servir el examen, no al registrar la sesión** — `SesionesService.crearSesion()` no revalida nada, para que una rendición offline sincronizada tarde no se caiga por una ventana de espera ya vencida. El costo aceptado (alguien con el token y `curl` puede saltear el tope) queda anotado en `pendientes.md`.
 
 ---
 
@@ -93,10 +105,12 @@ Usa las dos columnas de la story anterior. Es la primera regla que puede impedir
 Hoy el módulo se crea y recién después, entrando a editar contenido, se le pueden poner criterios. Se agrega el selector al modal de creación. El endpoint ya existe.
 
 **Tareas:**
-- [ ] Sumar el selector de base y nivel al modal de creación de módulo
-- [ ] Llamar a `PUT /modulos/:id/criterios` después de crear, si se eligió alguna
-- [ ] Mostrar cuántas preguntas materializa cada criterio antes de confirmar
-- [ ] Que crear sin criterios siga siendo válido
+- [x] Sumar el selector de base y nivel al modal de creación de módulo
+- [x] Llamar a `PUT /modulos/:id/criterios` después de crear, si se eligió alguna
+- [x] Mostrar cuántas preguntas materializa cada criterio antes de confirmar
+- [x] Que crear sin criterios siga siendo válido
+
+**Resultado:** hecha antes de esta sesión (commit `42de642`). El modal de creación quedó armando el módulo entero de una pasada — metadata + `ParametrosExamenPanel` (Story 3) + `CriteriosPanel` + picker de preguntas del banco, los tres opcionales. El submit son tres llamadas secuenciales (`POST /modulos` → preguntas manuales → criterios) y si falla un paso intermedio el módulo queda como borrador en vez de perderse, con el error dentro del modal. Detalle en `CLAUDE.md` (pantalla Módulos, "+ Nuevo módulo").
 
 ---
 
@@ -239,11 +253,11 @@ El formulario ya está armado. Falta generar el QR, imprimirlo y probarlo. No to
 ## Notas / dudas
 
 - **"Y mostrar fecha en…" quedó cortado.** La nota de F5 termina ahí. ¿Fecha en el header del backoffice, en la fila de cada usuario, en el historial? Sin eso no se puede estimar.
-- **Reintentos y espera chocan con el modo offline.** Si la tablet rinde sin conexión, no puede saber cuántos intentos previos hay ni cuándo fue el último. El backend puede rechazar la sesión al sincronizar, pero ahí la persona ya rindió. Depende de lo que haya respondido Eduardo.
+- ~~**Reintentos y espera chocan con el modo offline.**~~ Resuelto en la Story 4: el tope se valida sólo al servir el examen, no al registrar la sesión — una rendición offline sincronizada tarde no se cae por una ventana de espera ya vencida. El costo aceptado (se puede saltear con `curl` y el token) queda en `pendientes.md`. Lo que sigue sin responder Eduardo es otra cosa: qué score mostrarle a alguien que rindió sin conexión (ver `pendientes.md` → Producto/negocio).
 - **El umbral por módulo ya estaba previsto.** `Sesion.umbralAprobacion` se congela por fila desde la Story 4, y el comentario de `corregir.ts` dice que `UMBRAL_APROBACION_DEFAULT` pasa a ser el fallback el día que sea por módulo. No hay que migrar sesiones viejas.
 - **"Dashboard en tiempo real" necesita definición.** Refrescar al entrar es una cosa; polling cada N segundos es otra; websockets es otra escala de trabajo. Se asumió polling simple.
 - **Feedback en SIMA CHECK: falta el qué.** ¿Feedback sobre una pregunta puntual, sobre la evaluación entera, o un campo libre? Se asumió reporte por pregunta + comentario libre al final.
-- **El buscador en filtros es menos trabajo del que parece.** `MultiSelectFilter` ya tiene buscador; los que no lo tienen son los `<select>` simples que entraron con la Story 11 y los de Bases.
+- ~~**El buscador en filtros es menos trabajo del que parece.**~~ El inventario de la Story 9 corrigió esta nota: `BasesConocimiento.jsx` **no tiene ningún `<select>`** (la nota original estaba equivocada), y `MultiSelectFilter` ya tenía buscador. Terminó siendo `SearchableSelect`, componente nuevo, aplicado a Puesto y Centro de costo en los 4 lugares donde aparecen.
 - **El Dashboard real cubre parte de la deuda de mocks.** Quedan afuera Clientes y el Resumen de SIMA CHECK.
-- **Object storage sigue sin proveedor decidido.** R2 no cobra egreso y suele salir más barato que S3 para este caso, pero hay que verificar precios actuales.
+- ~~**Object storage sigue sin proveedor decidido.**~~ R2, resuelto en la Story 2 — precios verificados contra las páginas oficiales el mismo día, no de memoria.
 - **Faltan las respuestas de Eduardo.** Las de PIN, offline y catálogo de puestos no están registradas en el repo. Varias stories dependen de eso.

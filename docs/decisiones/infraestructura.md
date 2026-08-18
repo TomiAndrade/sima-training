@@ -42,13 +42,30 @@ El estado y lo que bloquea (una implementación de object storage, ver abajo) vi
 
 ## Storage de archivos
 
-### `StorageService` detrás de una interfaz chica
+### `StorageService` detrás de una interfaz chica, con dos implementaciones
 
-La clase abstracta expone sólo `guardar(buffer, carpeta, extension) → clave` y `borrar(clave)`. `LocalDiskStorage` escribe en `UPLOADS_DIR` (default `./uploads`, gitignoreado) y `main.ts` lo sirve con `useStaticAssets` bajo `/uploads` — se eligió sobre `ServeStaticModule` para no sumar una dependencia: son dos líneas y `platform-express` ya estaba.
+La clase abstracta expone `guardar(buffer, carpeta, extension) → clave`, `borrar(clave)` y `leer(clave) → ArchivoLeido` (stream + content-type + length + etag). Dos implementaciones, elegidas por `STORAGE_DRIVER` en `StorageModule` (factory con `ConfigService` inyectado, no una var de compilación — así se puede probar R2 de verdad desde development sin deployar):
 
-**La base guarda una clave opaca, nunca una ruta de filesystem ni una URL absoluta.** Eso es exactamente lo que hace que migrar a S3 sea escribir otra implementación de la clase, sin tocar schema, controllers ni frontend.
+- **`local`** (default): `LocalDiskStorage` escribe en `UPLOADS_DIR` (default `./uploads`, gitignoreado). Alcanza para desarrollar sin credenciales de nadie.
+- **`r2`**: `R2Storage`, contra Cloudflare R2 vía el SDK de S3 (`@aws-sdk/client-s3` — R2 expone una API compatible). Es la que va en cualquier deploy: el plan free de Render no tiene disco persistente y el contenedor es efímero, así que con `local` el primer redeploy pierde todas las imágenes y la base queda con claves apuntando a la nada. `render.yaml` fija `STORAGE_DRIVER=r2` explícitamente — no confiar en que nadie se olvide de setearlo en el dashboard.
 
-Está decidido que al deployar va **object storage** (S3 o Cloudflare R2) y no disco persistente: el plan free de Render no ofrece discos y el contenedor es efímero, así que cada redeploy borraría los archivos y dejaría las claves apuntando a la nada. La implementación falta escribirla.
+**La base guarda una clave opaca** (`preguntas/<uuid>.png`), nunca una ruta de filesystem ni una URL absoluta — es lo que hace que migrar de driver no toque el schema, ni el único consumidor (`PreguntasService`), ni los frontends.
+
+**Se eligió R2 y no S3 por el egreso: R2 no lo cobra, S3 sí.** Es el único rubro que podía escalar con el uso real (imágenes servidas a tablets en campo), y a la escala del proyecto (~264 personas, imágenes ≤2MB) los dos son centavos en almacenamiento — verificado contra las páginas de precios oficiales antes de decidir, no de memoria. Como la API de R2 es la misma de S3, la decisión no encierra: mudarse es cambiar variables de entorno, no código.
+
+### El backend sigue siendo el intermediario, no el bucket
+
+`UploadsController` (`src/storage/uploads.controller.ts`) reemplazó al `useStaticAssets` que había en `main.ts` — ese sólo sabía leer del disco local. Ahora `GET /uploads/*` le pide el archivo a `StorageService` y lo streamea, así que **la URL no cambió** con ninguno de los dos drivers: sigue siendo `/uploads/preguntas/<uuid>.png`, y ni `resolverUrlImagen()` (`url-imagen.ts`) ni los frontends se tocaron.
+
+La alternativa —bucket público, la tablet baja directo de Cloudflare— era más rápida y no consumía ancho de banda del servidor, y **se descartó a propósito**: son fotos de instalaciones de clientes de Oil & Gas, y el backend de intermediario deja el control de acceso en **un solo lugar** el día que haga falta pedir un token para verlas. Al revés (público → privado) obliga a migrar las URLs ya guardadas. El costo medido —Render free da 100 GB/mes de banda, la estimación generosa da ~2.6 GB/mes— es despreciable a esta escala, y ese tráfico **ya existía** con `useStaticAssets`: no es un costo nuevo.
+
+Dos detalles de la implementación:
+
+- **`leer()` devuelve un stream, no un `Buffer`**: con varias tablets pidiendo imágenes de hasta 2MB a la vez, bufferear el archivo entero en memoria antes de responder sería RAM gastada sin necesidad.
+- **La clave se valida con lista blanca** (`carpeta/uuid.ext`) en el controller, no buscando `..`: cualquier cosa que no matchee ese formato no es una clave que este backend haya podido emitir. Verificado con curl contra varias formas de path traversal (`../../.env`, encoded, etc.) — todas dan 404 sin tocar el storage.
+- **Cache-Control agresivo** (`public, max-age=31536000, immutable`): la clave lleva un uuid y el contenido de una clave es inmutable (`Pregunta.imagen` no se reemplaza, ver `preguntas.md`), así que una tablet no necesita volver a pedir la misma imagen entre intentos.
+
+Hoy la lectura sigue siendo **pública**, igual que con `useStaticAssets`: la app del alumno pide las imágenes sin token. Eso no cambió — lo que cambió es que ahora hay un solo lugar donde restringirlo el día que haga falta.
 
 ### El formato se detecta por magic bytes, no por `originalname` ni `mimetype`
 
