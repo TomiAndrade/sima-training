@@ -14,6 +14,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { PuestosModule } from './puestos/puestos.module';
 import { SesionesModule } from './sesiones/sesiones.module';
 import { TabletModule } from './tablet/tablet.module';
+import { ResumenModule } from './resumen/resumen.module';
 import { UsuariosModule } from './usuarios/usuarios.module';
 
 @Module({
@@ -35,6 +36,7 @@ import { UsuariosModule } from './usuarios/usuarios.module';
     AsignacionesModule,
     SesionesModule,
     TabletModule,
+    ResumenModule,
   ],
   controllers: [HealthController],
   providers: [],
