@@ -139,6 +139,15 @@ export default function HistorialUsuario({
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
+  // Refresco manual, con estado PROPIO y separado del de la carga inicial.
+  // `loading` y `error` son early returns que reemplazan la pantalla entera
+  // (ver más abajo), y eso está bien para la primera carga: todavía no hay
+  // nada que perder. Para un refresco no: dejarían en blanco un informe que
+  // ya se estaba leyendo. Así que refrescar no toca ninguno de los dos —
+  // los datos viejos quedan en pantalla y el fallo se avisa en un banner.
+  const [refrescando, setRefrescando] = useState(false)
+  const [errorRefresco, setErrorRefresco] = useState(null)
+
   const [showRevocadas, setShowRevocadas] = useState(false)
   const [showSesiones, setShowSesiones] = useState(false)
   const [showAudit, setShowAudit] = useState(false)
@@ -157,6 +166,22 @@ export default function HistorialUsuario({
       setError(err.message)
     } finally {
       setLoading(false)
+    }
+  }
+
+  // El caso que motiva la story: alguien rinde en la tablet y el resultado
+  // no aparece acá hasta salir y volver a entrar. Vuelve a pedir el informe
+  // completo (`GET /usuarios/:id/informe` ya trae asignaciones, sesiones y
+  // audit log juntos, así que no hay nada más que refrescar).
+  const refrescar = async () => {
+    setRefrescando(true)
+    setErrorRefresco(null)
+    try {
+      await fetchInforme()
+    } catch (err) {
+      setErrorRefresco(err.message)
+    } finally {
+      setRefrescando(false)
     }
   }
 
@@ -372,7 +397,29 @@ export default function HistorialUsuario({
 
   return (
     <div className="space-y-5">
-      {volver}
+      {/* "Actualizar" sólo acá y no en los early returns de arriba: con la
+          pantalla en "Cargando…" o en error no hay informe que refrescar,
+          y ese caso ya lo cubre el botón "Reintentar" del banner. */}
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        {volver}
+        <Button variant="secondary" size="sm" onClick={refrescar} disabled={refrescando}>
+          {refrescando ? 'Actualizando…' : '↻ Actualizar'}
+        </Button>
+      </div>
+
+      {/* Un refresco fallido no se lleva puesto el informe que ya está en
+          pantalla: se avisa acá arriba y los datos de abajo siguen siendo
+          los últimos que sí llegaron. */}
+      {errorRefresco && (
+        <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
+          <span>
+            No se pudo actualizar: {errorRefresco}. Seguís viendo los datos de la última carga.
+          </span>
+          <Button variant="secondary" size="sm" onClick={refrescar} disabled={refrescando}>
+            Reintentar
+          </Button>
+        </div>
+      )}
 
       {/* Cabecera — identidad y pertenencia. Deliberadamente compacta: el
           protagonista de la pantalla es el veredicto de abajo. */}
