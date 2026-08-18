@@ -356,8 +356,11 @@ sima-training-backoffice/src/
 │   │                    reglasAsignacion.js · asignaciones.js · resumen.js
 │   ├── data/          clients.js · users.js · usuarios-mock.js (mock; solo Dashboard)
 │   ├── format/        ← helpers compartidos ENTRE CAPAS: version.js (formatVersionNumero,
-│   │                    el número AÑO.MAYOR.MENOR) · badges.js (roleBadge, origenBadge).
-│   │                    catalogo.js (opcionesCatalogo: fila de catálogo → {id,label}).
+│   │                    el número AÑO.MAYOR.MENOR) · badges.js (roleBadge, origenBadge:
+│   │                    objetos planos de clases, NO JSX, a propósito) ·
+│   │                    catalogo.js (opcionesCatalogo: fila de catálogo → {id,label}) ·
+│   │                    tipoPregunta.jsx (backendTypeBadge; archivo aparte de badges.js
+│   │                    porque devuelve JSX, y .jsx por lo mismo).
 │   │                    Viven acá y no en sima-check/ porque core/ no puede importar
 │   │                    de sima-check/ y los usan las dos capas
 │   ├── components/    ImportUsuariosModal.jsx · ImportPreguntasModal.jsx · ParesPuestoCentro.jsx ·
@@ -407,7 +410,7 @@ Se aplicó **sólo donde la lista es larga** — Puesto y Centro de costo, en lo
 
 - No se usa react-router intencionalmente. **La navegación sí vive en el hash de la URL** (`#usuarios`, `#usuarios/historial/42`), vía `hooks/useNavigation.js` — pero eso no es un router: no hay rutas anidadas, ni params, ni `<Link>`, ni matching, ni dependencia nueva. Es el hash partido por `/`: el primer segmento es la página y el resto lo interpreta la pantalla (ver [decisiones/navegacion.md](docs/decisiones/navegacion.md)).
 - No existe persistencia entre sesiones — todo es estado local en React, **salvo la página y el historial de una persona**, que viven en la URL. Los filtros y búsquedas de cada pantalla **sí** se pierden con un F5, a propósito. El editor de contenido de un módulo tampoco se restaura, y eso es deliberado: tiene cambios sin guardar en memoria, así que restaurar la vista sin ellos mentiría sobre lo que quedó.
-- **Regla de dependencia**: `sima-check/` puede importar de `core/`. `core/` nunca importa de `sima-check/`. `Dashboard` puede importar de ambos.
+- **Regla de dependencia**: `sima-check/` puede importar de `core/`. `core/` nunca importa de `sima-check/`. `Dashboard` puede importar de ambos. **Se cumple sin excepciones** — la última violación (`ImportPreguntasModal.jsx` importando `backendTypeBadge`) se cerró moviendo el helper a `core/format/`, sin dejar re-export puente. Cuando un helper lo necesitan las dos capas, la salida es siempre esa: **subirlo a `core/format/`**, no importar hacia abajo.
 - El estado del flujo de la app tablet (persona, pendiente elegido, examen, respuestas, resultado) se eleva a `App.jsx`: las pantallas son de presentación y no piden datos por su cuenta. Es también el motivo por el que una recarga a mitad de rendir pierde la evaluación, y por el que el banner de actualización no se muestra durante la evaluación (ver [decisiones/tablet.md](docs/decisiones/tablet.md)).
 - Los modales manejan estado local.
 - Los gráficos son SVG puro (sin librerías).

@@ -259,9 +259,17 @@ El Resumen es casi todo mock: KPIs, gráfico de aprobación y últimas evaluacio
 `core/components/ImportPreguntasModal.jsx` importa de `sima-check/`, violando la regla de dependencia. Es anterior al sprint pasado y el arreglo es el mismo que se le hizo a `formatVersionNumero`.
 
 **Tareas:**
-- [ ] Mover el helper a `core/format/` (ojo: devuelve JSX, así que el archivo tiene que ser `.jsx`)
-- [ ] Actualizar los imports y verificar que no queda ningún puente
-- [ ] Correr el build
+- [x] Mover el helper a `core/format/` (ojo: devuelve JSX, así que el archivo tiene que ser `.jsx`)
+- [x] Actualizar los imports y verificar que no queda ningún puente
+- [x] Correr el build
+
+**Resultado:** `backendTypeBadge` pasó a `core/format/tipoPregunta.jsx`. **Archivo aparte y no dentro de `badges.js`**, que era la otra opción que contemplaba `CLAUDE.md`: ese archivo declara en su cabecera que son *objetos planos de clases, no JSX, a propósito* — cada pantalla decide el tamaño y la forma del `<span>` y ahí sólo vive el color. Meterle una función que devuelve JSX habría contradicho su propio criterio.
+
+**Sin re-export puente**, como pedía la tarea: un puente entre capas que sobrevive es el que después nadie se anima a borrar. En el lugar viejo quedó un comentario explicando adónde se fue y por qué.
+
+**Verificado con tres greps, no de palabra**: una sola definición en todo el proyecto, cuatro consumidores apuntando al lugar nuevo, y `core/` sin **ningún** import hacia `sima-check/`. El bundle quedó en el mismo tamaño (397.60 kB antes y después), que es lo que se espera de un movimiento puro.
+
+De paso: `CLAUDE.md` decía que la regla de dependencia no tenía excepciones, y tenía una. Ahora es cierto — y la nota explicita que cuando un helper lo necesitan las dos capas, la salida es subirlo a `core/format/`, nunca importar hacia abajo.
 
 ---
 
