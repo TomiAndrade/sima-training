@@ -5,13 +5,14 @@ import MultiSelectFilter from '../../components/MultiSelectFilter'
 import { imagenUrl, IMAGEN_MAX_BYTES, IMAGEN_MIME_TYPES, preguntasApi } from '../../core/api/preguntas'
 import { modulosApi } from '../../core/api/modulos'
 import { basesConocimientoApi } from '../../core/api/basesConocimiento'
-import { backendTypeBadge } from './bancoModulo'
+import { backendTypeBadge } from '../../core/format/tipoPregunta'
 
 // Componentes compartidos para gestionar el banco de preguntas de un módulo
 // (versión BORRADOR) contra la API real. Los usan tanto la tab "Preguntas"
 // (Questions.jsx) como la vista de preguntas dentro de "Capacitaciones"
 // (TrainingModules.jsx), para no duplicar el flujo.
-// El hook `useBancoModulo` y `backendTypeBadge` viven en ./bancoModulo.
+// El hook `useBancoModulo` vive en ./bancoModulo; `backendTypeBadge`, en
+// core/format/tipoPregunta.jsx (lo comparten las dos capas).
 
 const inputCls = 'w-full bg-white border border-slate-300 rounded px-3 py-2 text-slate-900 text-sm focus:outline-none focus:border-red-600'
 

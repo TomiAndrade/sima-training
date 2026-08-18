@@ -4,7 +4,7 @@ import Button from '../../components/Button'
 import { importApi } from '../api/import'
 import { modulosApi } from '../api/modulos'
 import { basesConocimientoApi } from '../api/basesConocimiento'
-import { backendTypeBadge } from '../../sima-check/components/bancoModulo'
+import { backendTypeBadge } from '../format/tipoPregunta'
 import EstadoSimilitudBadge from './estadoSimilitudBadge'
 
 // step: 'select' | 'preview' | 'result'

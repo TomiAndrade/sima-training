@@ -3,7 +3,8 @@ import Button from '../../components/Button'
 import Modal from '../../components/Modal'
 import { basesConocimientoApi } from '../../core/api/basesConocimiento'
 import { preguntasApi } from '../../core/api/preguntas'
-import { backendTypeBadge, claveCriterio } from './bancoModulo'
+import { claveCriterio } from './bancoModulo'
+import { backendTypeBadge } from '../../core/format/tipoPregunta'
 
 // Sección "Qué evalúa este módulo": los ModuloVersionCriterio de la versión en
 // edición. Un criterio es (base de conocimiento, nivel opcional) y declara el
