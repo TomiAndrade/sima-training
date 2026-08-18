@@ -188,10 +188,20 @@ Aplicado **sólo donde la lista es larga**: Puesto (88) y Centro de costo (16), 
 El backoffice no usa router a propósito y la navegación vive en `useState`, así que F5 pierde dónde estabas. Hay que persistir la página actual sin meter react-router.
 
 **Tareas:**
-- [ ] Decidir el mecanismo: hash en la URL o `sessionStorage`
-- [ ] Persistir la página y la tab de SIMA CHECK
-- [ ] Definir qué pasa con el estado interno de una pantalla (filtros, historial abierto): se pierde y está bien, o se persiste también
-- [ ] Verificar que no rompe el early return de Ver historial
+- [x] Decidir el mecanismo: hash en la URL o `sessionStorage`
+- [x] Persistir la página ~~y la tab de SIMA CHECK~~
+- [x] Definir qué pasa con el estado interno de una pantalla (filtros, historial abierto): se pierde y está bien, o se persiste también
+- [x] Verificar que no rompe el early return de Ver historial
+
+**Resultado:** hash (`#usuarios`), no `sessionStorage`. Se eligió por dos cosas que el usuario ve y `sessionStorage` no da: la dirección **se puede compartir**, y el **botón "atrás" del navegador funciona** (antes no hacía nada). Encima `sessionStorage` muere al abrir una pestaña nueva, así que ni siquiera cubría bien el caso. **No es react-router**: no hay rutas anidadas, params, `<Link>` ni matching — es una variable que pasó de la memoria a la barra de direcciones.
+
+**La segunda tarea eran dos cosas y es una sola.** La tab de SIMA CHECK **no es un estado aparte**: las tabs *son* páginas y `BackofficeLayout` no tiene ningún `useState` — deriva la tab activa de `page`. Persistir la página persiste la tab sola, sin código extra.
+
+**Alcance decidido: sobrevive la pantalla, no lo que estabas haciendo adentro.** Los filtros, las búsquedas y las **sub-vistas** (el historial de una persona, el editor de contenido de un módulo) se pierden con el F5. Persistir el resto obliga a tocar cada pantalla una por una serializando su estado, y el valor cae rápido — perder un filtro molesta mucho menos que perder la pantalla entera, que era el problema real.
+
+**El early return del historial sigue intacto, y por el mismo motivo que antes**: ver un historial no toca el hash, así que `page` sigue en `'usuarios'` y `Usuarios.jsx` nunca se desmonta — que es exactamente lo que ese early return existe para lograr.
+
+⚠️ **Contracara anotada en `pendientes.md`**: "atrás" no sale de una sub-vista, y ahora eso se nota. Antes el botón no hacía nada en ningún lado; ahora que funciona para las pantallas, es razonable esperar que funcione también ahí. Ver [decisiones/navegacion.md](decisiones/navegacion.md).
 
 ---
 

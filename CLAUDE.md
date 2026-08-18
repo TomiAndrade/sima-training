@@ -380,7 +380,8 @@ sima-training-backoffice/src/
 │                       de la fila se centra y el par principal se desalinea.
 │                       Con filas de una línea no cambia nada, por eso es opt-in
 │                       y los otros 7 consumidores no lo pasan)
-└── hooks/             useNavigation.js
+└── hooks/             useNavigation.js (la página vive en el hash de la URL,
+                       no en memoria: un F5 no vuelve al Panel Principal)
 
 sima-check-app/src/
 ├── core/api/          client.js · tablet.js (login, pendientes, examen,
@@ -402,8 +403,8 @@ Se aplicó **sólo donde la lista es larga** — Puesto y Centro de costo, en lo
 
 ## Decisiones de arquitectura
 
-- No se usa react-router intencionalmente.
-- No existe persistencia entre sesiones — todo es estado local en React.
+- No se usa react-router intencionalmente. **La página actual sí vive en el hash de la URL** (`#usuarios`), vía `hooks/useNavigation.js` — pero eso no es un router: no hay rutas anidadas, ni params, ni `<Link>`, ni matching. Es una variable que en vez de vivir en memoria vive en la barra de direcciones, para que un F5 no devuelva al Panel Principal (ver [decisiones/navegacion.md](docs/decisiones/navegacion.md)).
+- No existe persistencia entre sesiones — todo es estado local en React, **salvo la página actual** (ver el punto anterior). Los filtros, búsquedas y sub-vistas de cada pantalla **sí** se pierden con un F5, a propósito.
 - **Regla de dependencia**: `sima-check/` puede importar de `core/`. `core/` nunca importa de `sima-check/`. `Dashboard` puede importar de ambos.
 - El estado del flujo de la app tablet (persona, pendiente elegido, examen, respuestas, resultado) se eleva a `App.jsx`: las pantallas son de presentación y no piden datos por su cuenta. Es también el motivo por el que una recarga a mitad de rendir pierde la evaluación, y por el que el banner de actualización no se muestra durante la evaluación (ver [decisiones/tablet.md](docs/decisiones/tablet.md)).
 - Los modales manejan estado local.
@@ -431,6 +432,7 @@ Están organizadas **por dominio y no por sprint**: el orden cronológico sólo 
 | [tablet.md](docs/decisiones/tablet.md) | El namespace HTTP `/tablet`, la autenticación de alumno y la PWA de `sima-check-app` |
 | [auditoria.md](docs/decisiones/auditoria.md) | `AuditLog`: qué se audita, por qué un diff y no un snapshot, y por qué la tabla es polimórfica |
 | [infraestructura.md](docs/decisiones/infraestructura.md) | Storage, deploy, el seed con su orden de borrado, y las constraints que Prisma no conoce |
+| [navegacion.md](docs/decisiones/navegacion.md) | Cómo se decide qué pantalla se ve en el backoffice: el hash de la URL, y qué sobrevive a un F5 y qué no |
 
 Al agregar una decisión nueva va en el archivo de su dominio, **no acá**; si toca dos, va en el principal y el otro la referencia con un link. Al cambiar una, se reescribe la sección: esos archivos documentan el diseño vigente, no un changelog.
 
