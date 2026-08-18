@@ -14,6 +14,31 @@ Y es **identidad pura**: nombre, apellido, DNI, email, `datos`. Todo lo que es p
 
 No hay endpoints `/vinculaciones`, y el ABM sigue siendo uno solo (`/usuarios`): la vinculación se crea y se edita **anidada** en el mismo request, porque no tiene ciclo de vida propio.
 
+## El identificador que ve la gente es el DNI, y es el único
+
+`Usuario.id` y `Vinculacion.id` son los dos `Int @default(autoincrement())` del modelo, y **ninguno de los dos es un identificador de negocio**: existen para que las FK tengan a qué apuntar. Se listan acá porque los dos se filtraron a pantalla y hubo que rastrear qué eran.
+
+| Identificador | Qué es | Dónde se usa |
+|---|---|---|
+| `dni` | El identificador **de la gente**. Único en `Usuario` | Columna de la tabla de Usuarios, y **la llave de entrada de la tablet** (`POST /tablet/login`) |
+| `Usuario.id` | PK interna | Path de los endpoints por persona (`/usuarios/:id/informe`), FK de `Asignacion`/`Sesion`, `key` de React |
+| `Vinculacion.id` | PK interna | **Sólo el AuditLog**: es el `entidadId` de las filas de `Vinculacion` y el primer componente de la clave compuesta de los pares (`vinculacionId:puestoId:centroCostoId`, ver [auditoria.md](./auditoria.md)) |
+| `datos.legajo` | El número de nómina de la empresa. Lo único parecido a un "número de usuario" con significado real | **Se escribe y no se lee**: lo carga el import de Excel y ningún frontend lo muestra |
+
+**Dónde se filtraron los dos primeros:** en el "Historial de cambios" de `HistorialUsuario.jsx`, que renderiza el diff del AuditLog **completo, sin esconder campos** — decisión deliberada de la Story 9 ("para eso es auditoría"). Como `vinculacionEscalar()` incluye `id` y `usuarioId` en el snapshot, el alta de una vinculación se lee así:
+
+```
+Alta · Vinculación · 13/08/2026 10:22 · por backoffice
+  ID: — → 7          ← Vinculacion.id
+  Usuario: — → 42    ← Usuario.id
+  Organización: — → Ingeniería SIMA
+  Rol: — → Alumno
+```
+
+Las otras FK del diff **sí** se traducen a nombre (`puestoId`/`centroCostoId`/`organizacionId`, con los catálogos que `Usuarios.jsx` pasa por props). `id` y `usuarioId` no, porque no hay a qué traducirlos: son la fila misma y la persona cuyo historial ya se está mirando. De ahí que aparezcan como números crudos y que no se entienda qué son.
+
+**La decisión:** el DNI es el identificador visible, y las dos PK no aparecen en ninguna pantalla. `HistorialUsuario.jsx` las descarta con `CAMPOS_OCULTOS` antes de renderizar el diff. Se esconden en el **render** y no en el backend: `vinculacionEscalar()` tiene que seguir guardando las dos columnas, que para eso es auditoría. Y no se generalizó a "ocultar todo lo que termine en `Id`" a propósito — `organizacionId`, `puestoId` y `centroCostoId` siguen mostrándose, traducidos a nombre.
+
 ## El campo `datos` (jsonb)
 
 Está en `Usuario` para datos de nómina flexibles. Hoy lo escribe **únicamente** el import de Excel y, desde que puesto y centro de costo se resuelven contra el catálogo real (ver más abajo), guarda sólo `legajo`: ya no hay mapeo abierto de columnas no reconocidas ni el viejo `puesto`/`sector` de texto libre.
