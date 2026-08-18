@@ -96,11 +96,19 @@ const ENTIDAD = {
   VinculacionPuestoCentro: 'Puesto y centro de costo',
 }
 
+// Las dos PK internas que el snapshot del backend incluye y que acá no
+// significan nada: `id` es la fila de Vinculacion y `usuarioId` la persona
+// cuyo historial ya se está mirando. Son `Int autoincrement`, así que salían
+// como "ID: — → 7" y "Usuario: — → 42" (el spike de la Story 1 del sprint
+// 13-08 arrancó justamente por eso). Se esconden en el RENDER y no en el
+// backend: el AuditLog las tiene que seguir guardando.
+// Ojo: esto NO es "ocultar todo lo que termine en Id" — organizacionId,
+// puestoId y centroCostoId sí se muestran, traducidos a nombre por valorLegible.
+const CAMPOS_OCULTOS = new Set(['id', 'usuarioId'])
+
 // Nombres de campo del diff en castellano. Las claves son las columnas reales
 // que audita el backend (UsuariosService.vinculacionEscalar / parEscalar).
 const CAMPO = {
-  id: 'ID',
-  usuarioId: 'Usuario',
   organizacionId: 'Organización',
   rol: 'Rol',
   activa: 'Activa',
@@ -456,10 +464,11 @@ export default function HistorialUsuario({
               auditLog.map((log) => {
                 const accion = ACCION[log.accion] ?? { label: log.accion, cls: 'bg-slate-100 text-slate-600' }
                 // Los pares donde nada cambió son ruido: los CREATE traen
-                // cosas como `deletedAt: null → null`. El resto se muestra
-                // completo, sin esconder campos.
+                // cosas como `deletedAt: null → null`. Salvo las PK internas
+                // (ver CAMPOS_OCULTOS), el resto se muestra completo.
                 const cambios = Object.entries(log.diff ?? {}).filter(
-                  ([, { antes, despues }]) => antes !== despues,
+                  ([campo, { antes, despues }]) =>
+                    !CAMPOS_OCULTOS.has(campo) && antes !== despues,
                 )
                 return (
                   <div key={log.id} className="px-4 py-3 space-y-2">
