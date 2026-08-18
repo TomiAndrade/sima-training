@@ -172,6 +172,18 @@ El buscador de texto es **universal**: cuando hay texto escrito siempre gana la 
 
 El filtro de módulo es un multi-select con búsqueda (`MultiSelectFilter`) y no un `<select>` único, con una opción sintética "Sin asignar" que no es un id real sino que se traduce a `?sinAsignar=true`.
 
+### La columna "Módulos" muestra uno solo, y el orden lo decide el CLIENTE
+
+Pintaba un badge por cada módulo al que la pregunta está asignada. Como una pregunta del banco se comparte entre módulos —que es el punto de que el banco sea único—, la celda se desbordaba apenas una pregunta entraba en tres o cuatro. Ahora muestra **el primero más un chip `+N`** que despliega el resto dentro de la fila: el mismo patrón (y el mismo chip `+N`/`−`) que los pares adicionales de la tabla de Usuarios, para no inventar un segundo lenguaje para el mismo problema.
+
+**El orden hay que fijarlo en el cliente, y no es un capricho.** El `findMany` de los pivots en `PreguntasService` **no lleva `orderBy`**, así que el array `modulos` sale en el orden que devuelva Postgres y puede cambiar entre dos requests. Con todos los badges a la vista eso era invisible; mostrando **uno solo**, haría que cambie *cuál* es el módulo visible entre dos cargas de la misma pantalla. `ordenarModulos()` ordena **activas primero y después por nombre**.
+
+El criterio "activas primero" es lo que evita la lectura al revés: un módulo donde la pregunta está desactivada se pinta **tachado**, y si quedara como la única cara visible con el `+N` escondiendo los activos, la fila diría casi lo contrario de la verdad.
+
+Lo que la columna **no** hace es mostrar "el módulo al que se asignó primero": `ModuloVersionPregunta` no tiene ningún timestamp — son `orden` (la posición de la pregunta *dentro* del módulo, que no sirve acá), `obligatoria`, `activa` y `origen`. Ese dato no existe, y fabricarlo era una migración con backfill inventado para todos los pivots ya cargados.
+
+La tabla pasa a llevar `alignTop`, por el mismo motivo que la de Usuarios: la celda de Módulos crece al desplegar y sin eso el resto de la fila se centra contra la celda alta.
+
 ### Los filtros de base y nivel son `<select>` encadenados, no multi-select
 
 A diferencia del de módulos, y por dos motivos: `?baseId=` es único, y sobre todo **un nivel sólo existe dentro de una base** — con varias bases tildadas, el filtro de nivel no significaría nada. Incluye la opción sintética "— Sin clasificar —" (`?sinBase=true`), que es cómo se encuentra el backlog previo a las bases.

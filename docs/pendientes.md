@@ -70,6 +70,8 @@ Registro vivo de lo que falta. Lista de trabajo, no documento formal — actuali
   Ojo también con `ReglaAsignacion`: **su tabla ya no declara ningún `@@unique`**, las dos unicidades son sólo esos índices.
 - **Backfill de vinculación**: al reaplicarlo sobre una base con datos, contar antes los usuarios vivos sin `organizacion_id` — el JOIN los descarta en silencio y quedan sin vinculación (en dev fueron 0 casos, pero no está garantizado en otra base).
 
+- **`GET /preguntas` devuelve `modulos[]` sin orden garantizado.** El `findMany` de `ModuloVersionPregunta` en `PreguntasService` no lleva `orderBy`, así que el array sale en el orden que devuelva Postgres y puede variar entre requests. **Hoy no se nota**: la columna "Módulos" del backoffice ordena en el cliente con `ordenarModulos()` (activas primero, después por nombre) justamente porque no puede confiar en el del backend. Si aparece un segundo consumidor de ese array va a tener que repetir el ordenamiento, o pisarse con él. El arreglo es una línea — un `orderBy` en esa query — y no se hizo en la Story 8 para no mezclar backend en una story de UI; el ordenamiento del cliente se queda igual aunque se agregue, porque el criterio "activas primero" es de presentación y no le corresponde a la API.
+
 ## Frontends
 
 - **Migrar los mocks que quedan en el backoffice.** Ya no queda ninguna pantalla "grande" mockeada, pero sobreviven: `Clients.jsx` (`core/data/clients.js`), casi todo el Resumen de SIMA CHECK (`Overview.jsx` — solo el StatCard de Módulos activos es dato real) y `Dashboard.jsx`, único consumidor que queda de `usuarios-mock.js`, `training-modules.js` y `training-assignments.js`. Mientras tanto los KPIs del Dashboard pueden divergir del estado real del backend.

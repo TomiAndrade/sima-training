@@ -133,9 +133,13 @@ El acordeón lista todos los centros activos, incluidos los que no tienen ningun
 Hoy la columna muestra todos los badges y se desborda cuando una pregunta está en varios módulos.
 
 **Tareas:**
-- [ ] Mostrar el módulo al que se asignó primero, más un contador del resto
-- [ ] Desplegable en la fila con la lista completa
-- [ ] Mantener el badge de activa/inactiva por módulo
+- [x] ~~Mostrar el módulo al que se asignó primero~~, más un contador del resto
+- [x] Desplegable en la fila con la lista completa
+- [x] Mantener el badge de activa/inactiva por módulo
+
+**Resultado:** badge del primer módulo + chip `+N` que despliega el resto en la fila, mismo patrón que los pares adicionales de Usuarios. La tabla pasa a `alignTop` por el mismo motivo que aquella.
+
+**Ojo — "el módulo al que se asignó primero" no existe.** `ModuloVersionPregunta` no tiene ningún timestamp (`orden` es la posición de la pregunta *dentro* del módulo, no sirve), y el `findMany` que arma esos pivots no lleva `orderBy`, así que el orden hoy es el que devuelva Postgres y puede cambiar entre requests — mostrando un solo badge eso haría saltar *cuál* es el visible entre dos cargas. Se ordena en el cliente: **activas primero, después por nombre**. Lo primero evita que un módulo tachado quede como la única cara visible mientras el `+N` esconde los activos. El `orderBy` que falta del lado del backend quedó anotado en [pendientes.md](pendientes.md#backend). Ver [decisiones/preguntas.md](decisiones/preguntas.md#la-columna-módulos-muestra-uno-solo-y-el-orden-lo-decide-el-cliente).
 
 ---
 
