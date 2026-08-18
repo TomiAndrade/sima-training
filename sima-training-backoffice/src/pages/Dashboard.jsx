@@ -124,12 +124,17 @@ export default function Dashboard({ navigate }) {
       <div>
         <SectionHeader>Resumen Operacional</SectionHeader>
         <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
+          {/* "Organizaciones cliente" y no "Clientes" a secas: un *cliente*, en
+              el sentido del producto, va a ser una PERSONA (un usuario con rol
+              AUDITOR) que mira los datos de ciertos subcontratistas — no la
+              empresa. Estas dos tarjetas cuentan empresas, y el rótulo lo dice
+              para no ocupar el nombre que va a significar otra cosa. */}
           <Kpi
-            label="Clientes"
+            label="Organizaciones cliente"
             value={clientes}
-            nota={clientes === 0 ? 'Todavía no se cargó ninguno' : undefined}
+            nota={clientes === 0 ? 'Todavía no se cargó ninguna' : undefined}
           />
-          <Kpi label="Subcontratistas" value={subcontratistas} />
+          <Kpi label="Organizaciones subcontratistas" value={subcontratistas} />
           <Kpi label="Personas en el sistema" value={personas} />
           <Kpi label="Módulos activos" value={modulosActivos} />
         </div>

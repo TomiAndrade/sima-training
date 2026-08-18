@@ -218,7 +218,7 @@ El AuditLog **ya está implementado, parcialmente** (Story 9, ver más abajo): c
 |---|---|
 | `administrador` | Backoffice completo: clientes, usuarios, módulos, preguntas, asignaciones, métricas globales |
 | `coordinador` | Backoffice limitado: asignaciones de su empresa, empleados de su empresa |
-| `auditor` | Rol de las organizaciones CLIENTE (único que la matriz les permite). Sin pantallas propias todavía |
+| `auditor` | Rol de las organizaciones CLIENTE (único que la matriz les permite). **Es lo que el producto llama "un cliente": una PERSONA de la empresa cliente que mira los datos de algunos subcontratistas**, no la empresa. Sin pantallas propias todavía, y el vínculo "qué subcontratistas puede ver" **no está modelado** — ver `docs/pendientes.md` |
 | Empleado (`alumno`) | Solo App SIMA CHECK (acceso por DNI) |
 
 El rol es un campo de `Vinculacion`, no de `Usuario`, y qué roles admite cada organización lo fija la matriz tipo-de-organización ↔ rol (ver arriba).
