@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import Table from '../../components/Table'
 import Button from '../../components/Button'
 import Modal from '../../components/Modal'
+import SearchableSelect from '../../components/SearchableSelect'
 import { usuariosApi } from '../api/usuarios'
 import { organizacionesApi } from '../api/organizaciones'
 import { puestosApi } from '../api/puestos'
@@ -10,6 +11,7 @@ import ImportUsuariosModal from '../components/ImportUsuariosModal'
 import ParesPuestoCentro from '../components/ParesPuestoCentro'
 import HistorialUsuario from './HistorialUsuario'
 import { roleBadge } from '../format/badges'
+import { opcionesCatalogo } from '../format/catalogo'
 
 // Decisión de producto: el backoffice solo da de alta ALUMNOS por ahora (la
 // abstracción de roles del sistema todavía no está definida). El backend
@@ -510,30 +512,29 @@ export default function Usuarios() {
         />
         {/* Catálogo completo, no solo los activos: un puesto dado de baja puede
             seguir teniendo gente asignada, y hay que poder encontrarla. */}
-        <select
-          className={selectCls}
+        {/* SearchableSelect y no <select> nativo: con el catálogo real son 88
+            puestos, y elegir uno se hacía scrolleando con el ojo. Los otros
+            filtros de esta barra siguen siendo <select> a propósito — abrir un
+            panel con buscador para elegir entre tres organizaciones es sumar
+            un paso, no sacarlo. */}
+        <SearchableSelect
+          className="min-w-[200px]"
+          options={opcionesCatalogo(puestos)}
           value={filtroPuesto}
-          onChange={(e) => setFiltroPuesto(e.target.value)}
-        >
-          <option value="">Todos los puestos</option>
-          {puestos.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.nombre}{!p.activo ? ' (inactivo)' : ''}
-            </option>
-          ))}
-        </select>
-        <select
-          className={selectCls}
+          onChange={setFiltroPuesto}
+          placeholder="Todos los puestos"
+          emptyLabel="Todos los puestos"
+          searchPlaceholder="Buscar puesto…"
+        />
+        <SearchableSelect
+          className="min-w-[200px]"
+          options={opcionesCatalogo(centrosCosto)}
           value={filtroCentro}
-          onChange={(e) => setFiltroCentro(e.target.value)}
-        >
-          <option value="">Todos los centros de costo</option>
-          {centrosCosto.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.nombre}{!c.activo ? ' (inactivo)' : ''}
-            </option>
-          ))}
-        </select>
+          onChange={setFiltroCentro}
+          placeholder="Todos los centros de costo"
+          emptyLabel="Todos los centros de costo"
+          searchPlaceholder="Buscar centro de costo…"
+        />
         <select
           className={selectCls}
           value={filtroOrganizacion}

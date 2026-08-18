@@ -6,6 +6,8 @@ import { organizacionesApi } from '../api/organizaciones'
 import { puestosApi } from '../api/puestos'
 import { centrosCostoApi } from '../api/centrosCosto'
 import EstadoSimilitudBadge from './estadoSimilitudBadge'
+import SearchableSelect from '../../components/SearchableSelect'
+import { opcionesCatalogo } from '../format/catalogo'
 
 // Espejo de matriz-rol-organizacion.ts (ver TIPOS_ORG_POR_ROL en Usuarios.jsx):
 // el import siempre da de alta usuarios como ALUMNO, así que solo tiene sentido
@@ -102,17 +104,19 @@ function GrupoResolver({ label, grupos, onChange, catalogo }) {
             <option value="crear_nuevo">Crear nuevo: &quot;{g.textoOriginal}&quot;</option>
             <option value="elegir">Elegir del catálogo…</option>
           </select>
+          {/* Con buscador: acá se resuelve fila por fila contra el catálogo
+              real (88 puestos), y es el flujo de la carga de nómina. El de
+              arriba (usar sugerido / crear nuevo / elegir) queda como <select>:
+              son tres opciones fijas. */}
           {g.accion === 'elegir' && (
-            <select
-              className="bg-white border border-slate-300 rounded px-2 py-1 text-xs focus:outline-none focus:border-red-600"
+            <SearchableSelect
+              className="min-w-[180px]"
+              options={opcionesCatalogo(catalogo)}
               value={g.catalogoId}
-              onChange={(e) => onChange(key, { catalogoId: e.target.value })}
-            >
-              <option value="">— Elegir —</option>
-              {catalogo.map((c) => (
-                <option key={c.id} value={c.id}>{c.nombre}</option>
-              ))}
-            </select>
+              onChange={(id) => onChange(key, { catalogoId: id })}
+              placeholder="— Elegir —"
+              searchPlaceholder={`Buscar ${label.toLowerCase()}…`}
+            />
           )}
         </div>
       ))}
@@ -131,7 +135,7 @@ export default function ImportUsuariosModal({ open, onClose, onImported }) {
   useEffect(() => {
     if (!open) return
     organizacionesApi.list().then(setOrganizaciones).catch(() => setOrganizaciones([]))
-    // Solo activos: estos dos catálogos alimentan el <select> de "elegir del
+    // Solo activos: estos dos catálogos alimentan el buscador de "elegir del
     // catálogo" del resolver, o sea que se ofrecen para asignar a un usuario
     // nuevo — un puesto/centro dado de baja no es una opción válida ahí.
     // (crearOResolverCatalogo sí pide la lista completa: el @unique de nombre

@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import Button from '../../components/Button'
 import Modal from '../../components/Modal'
 import MultiSelectFilter from '../../components/MultiSelectFilter'
+import SearchableSelect from '../../components/SearchableSelect'
+import { opcionesCatalogo } from '../../core/format/catalogo'
 import { reglasAsignacionApi } from '../../core/api/reglasAsignacion'
 import { puestosApi } from '../../core/api/puestos'
 import { centrosCostoApi } from '../../core/api/centrosCosto'
@@ -23,7 +25,7 @@ const badgeBase = 'px-2.5 py-1 rounded-full text-xs font-semibold'
 // la misma gente: se toma el máximo, no la suma (sumar contaría N veces a cada
 // persona). Las asignaciones sí se acumulan: son eventos distintos.
 // SUPUESTO: un solo centro por tanda, invariante que hoy garantiza el modal de
-// alta (un `<select>` de centro, N puestos × N módulos). Si alguna vez se
+// alta (un selector de centro de UNA sola opción, N puestos × N módulos). Si alguna vez se
 // permite elegir varios centros, este máximo subcuenta en silencio y no hay
 // forma de arreglarlo desde acá: la API devuelve un conteo, no los ids, así que
 // la unión real de personas no se puede calcular en el cliente.
@@ -521,7 +523,6 @@ export default function ReglasAsignacion() {
     })
   }, [modal, modulosActivos, moduloPorId])
 
-  const selectCls = 'w-full bg-white border border-slate-300 rounded px-3 py-2 text-slate-900 text-sm focus:outline-none focus:border-red-600'
 
   return (
     <div className="space-y-5">
@@ -861,16 +862,16 @@ export default function ReglasAsignacion() {
             ) : (
               <div>
                 <label className="block text-slate-700 text-sm font-medium mb-1">Centro de costo</label>
-                <select
-                  className={selectCls}
+                <SearchableSelect
+                  options={opcionesCatalogo(centrosActivos)}
                   value={form.centroCostoId}
-                  onChange={(e) => setForm((f) => ({ ...f, centroCostoId: e.target.value }))}
-                >
-                  {centrosActivos.length === 0 && <option value="">— Sin centros activos —</option>}
-                  {centrosActivos.map((c) => (
-                    <option key={c.id} value={c.id}>{c.nombre}</option>
-                  ))}
-                </select>
+                  onChange={(id) => setForm((f) => ({ ...f, centroCostoId: id }))}
+                  placeholder={
+                    centrosActivos.length === 0 ? '— Sin centros activos —' : '— Centro de costo —'
+                  }
+                  searchPlaceholder="Buscar centro de costo…"
+                  disabled={centrosActivos.length === 0}
+                />
               </div>
             )}
             {modal?.mode !== 'edit' && (
