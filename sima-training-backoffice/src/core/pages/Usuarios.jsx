@@ -71,7 +71,10 @@ const emptyForm = {
   organizacionId: '',
 }
 
-export default function Usuarios() {
+// `sub`/`setSub` son el tramo del hash que sigue a la página: acá, `[]` para el
+// listado y `['historial', '<id>']` para la hoja de vida de una persona. Vienen
+// de App.jsx (ver hooks/useNavigation.js).
+export default function Usuarios({ sub = [], setSub = () => {} }) {
   const [usuarios, setUsuarios] = useState([])
   const [organizaciones, setOrganizaciones] = useState([])
   const [puestos, setPuestos] = useState([])
@@ -101,7 +104,18 @@ export default function Usuarios() {
   // usuarios vive en un solo efecto, junto con su guarda de respuesta vieja.
   const [reloadKey, setReloadKey] = useState(0)
   // Id de la persona cuyo historial se está viendo, o null para la lista.
-  const [historialId, setHistorialId] = useState(null)
+  //
+  // **Se DERIVA de la URL, no es un useState.** Así un F5 estando en el
+  // historial de alguien vuelve a abrirlo en vez de caer al listado, y el botón
+  // "atrás" sale del historial hacia la lista (antes saltaba a la pantalla
+  // anterior a Usuarios, porque el navegador no sabía que esta vista existía).
+  //
+  // Un id que no sea numérico —alguien editando la URL a mano— cae a `null` y
+  // muestra el listado, en vez de pedirle a la API un `/usuarios/undefined`.
+  const historialId =
+    sub[0] === 'historial' && /^\d+$/.test(sub[1] ?? '') ? Number(sub[1]) : null
+  const verHistorial = (id) => setSub(['historial', String(id)])
+  const volverAlListado = () => setSub([])
 
   const cargarCatalogos = () =>
     Promise.all([organizacionesApi.list(), puestosApi.list(), centrosCostoApi.list()]).then(
@@ -421,18 +435,21 @@ export default function Usuarios() {
   // El historial se muestra EN LUGAR de la lista, con un early return — mismo
   // patrón que la vista de contenido de TrainingModules.jsx. Es lo que hace que
   // volver conserve la tab, la búsqueda y los usuarios ya cargados: este
-  // componente NUNCA se desmonta (no hay navegación de página, `useNavigation`
-  // sigue en 'usuarios'), así que todos sus useState siguen vivos y no hace
-  // falta levantar el estado a ningún lado.
+  // componente NUNCA se desmonta, porque la PÁGINA sigue siendo 'usuarios'
+  // (sólo cambia el sub del hash), así que todos sus useState siguen vivos y no
+  // hace falta levantar el estado a ningún lado.
   //
   // OJO: mover esta vista a una página propia de App.jsx sí desmontaría
   // Usuarios, y volver resetearía los filtros a cero. No es una simplificación
-  // pendiente, es lo que este early return evita a propósito.
+  // pendiente, es lo que este early return evita a propósito — y sigue siendo
+  // cierto ahora que la vista está en la URL: `#usuarios/historial/42` y
+  // `#usuarios` son la misma página para App.jsx, que renderiza el mismo
+  // componente en los dos casos.
   if (historialId) {
     return (
       <HistorialUsuario
         usuarioId={historialId}
-        onVolver={() => setHistorialId(null)}
+        onVolver={volverAlListado}
         // Los catálogos ya están en memoria (los trae fetchAll al montar): se
         // pasan para traducir a nombres los ids crudos del audit log, sin
         // agregar un request.
@@ -572,7 +589,7 @@ export default function Usuarios() {
           alignTop
           actions={(row) => (
             <>
-              <Button variant="ghost" size="sm" onClick={() => setHistorialId(row.id)}>
+              <Button variant="ghost" size="sm" onClick={() => verHistorial(row.id)}>
                 Ver historial
               </Button>
               <Button variant="ghost" size="sm" onClick={() => openEdit(row)}>
