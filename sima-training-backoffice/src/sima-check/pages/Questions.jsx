@@ -18,6 +18,39 @@ const SIN_ASIGNAR_ID = '__sin_asignar__'
 // las bases de conocimiento.
 const SIN_CLASIFICAR_ID = '__sin_clasificar__'
 
+// Orden de los módulos de una pregunta para la columna "Módulos": primero
+// aquellos donde la pregunta está ACTIVA, y entre esos por nombre.
+//
+// Hace falta ordenar en el cliente porque el backend no garantiza ninguno: el
+// findMany de los pivots (preguntas.service.ts) no lleva `orderBy`, así que el
+// orden es el que devuelva Postgres y puede cambiar entre requests. Con la
+// columna mostrando todos los badges eso pasaba desapercibido; mostrando uno
+// solo + "+N" haría que cambie CUÁL es el visible entre dos cargas.
+//
+// Las activas van primero para que un módulo tachado nunca quede como la única
+// cara visible mientras el "+N" esconde los activos — que es la lectura al
+// revés de lo que la fila quiere decir. No es "el módulo al que se asignó
+// primero" (el pivot no guarda ningún timestamp, así que ese dato no existe).
+function ordenarModulos(modulos) {
+  return [...(modulos ?? [])].sort((a, b) => {
+    if (a.activaEnModulo !== b.activaEnModulo) return a.activaEnModulo ? -1 : 1
+    return (a.moduloNombre ?? '').localeCompare(b.moduloNombre ?? '', 'es')
+  })
+}
+
+// El badge de un módulo en esa columna. Tachado = la pregunta está desactivada
+// en ese módulo (baja lógica por módulo, distinta de la papelera global).
+function badgeModulo(m) {
+  return (
+    <span
+      key={m.moduloId}
+      className={`px-1.5 py-0.5 rounded text-[10px] bg-slate-100 ${m.activaEnModulo ? 'text-slate-500' : 'text-slate-400 line-through'}`}
+    >
+      {m.moduloNombre}
+    </span>
+  )
+}
+
 function estadoBadge(activa) {
   return (
     <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${activa ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-500'}`}>
@@ -130,6 +163,17 @@ function QuestionsTableGlobal({ selectedModuleIds, sinAsignar, showActivas, show
   const [trashing, setTrashing] = useState(false)
   const [trashError, setTrashError] = useState(null)
 
+  // Qué filas tienen desplegada la lista completa de módulos. Mismo patrón
+  // (y mismo chip `+N`/`−`) que los pares adicionales de Usuarios.jsx.
+  const [expandidos, setExpandidos] = useState(() => new Set())
+  const toggleExpandido = (id) =>
+    setExpandidos((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+
   const activaParam = showActivas && showPapelera ? undefined : showActivas ? true : showPapelera ? false : undefined
 
   const load = () => {
@@ -227,19 +271,34 @@ function QuestionsTableGlobal({ selectedModuleIds, sinAsignar, showActivas, show
     {
       key: 'modulos',
       label: 'Módulos',
-      render: (_, row) => (
-        <div className="flex flex-wrap gap-1">
-          {(row.modulos ?? []).length === 0 && <span className="text-slate-400 text-xs">— Sin asignar —</span>}
-          {(row.modulos ?? []).map((m) => (
-            <span
-              key={m.moduloId}
-              className={`px-1.5 py-0.5 rounded text-[10px] bg-slate-100 ${m.activaEnModulo ? 'text-slate-500' : 'text-slate-400 line-through'}`}
-            >
-              {m.moduloNombre}
-            </span>
-          ))}
-        </div>
-      ),
+      render: (_, row) => {
+        const todos = ordenarModulos(row.modulos)
+        if (todos.length === 0) return <span className="text-slate-400 text-xs">— Sin asignar —</span>
+        const [primero, ...resto] = todos
+        const abierto = expandidos.has(row.id)
+        return (
+          <div className="space-y-1">
+            <div className="flex items-center gap-1.5">
+              {badgeModulo(primero)}
+              {resto.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => toggleExpandido(row.id)}
+                  title={abierto ? 'Ocultar los demás módulos' : 'Ver los demás módulos'}
+                  className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-500 hover:bg-slate-200 transition-colors"
+                >
+                  {abierto ? '−' : `+${resto.length}`}
+                </button>
+              )}
+            </div>
+            {abierto && (
+              <div className="flex flex-col items-start gap-1">
+                {resto.map((m) => badgeModulo(m))}
+              </div>
+            )}
+          </div>
+        )
+      },
     },
     { key: 'estado', label: 'Estado', render: (_, row) => estadoPapeleraBadge(row.activa) },
   ]
@@ -248,7 +307,12 @@ function QuestionsTableGlobal({ selectedModuleIds, sinAsignar, showActivas, show
     <div className="space-y-4">
       {error && <div className="bg-red-50 border border-red-200 text-red-700 text-xs rounded px-3 py-2">{error}</div>}
       {loading && <div className="text-slate-400 text-xs font-mono">Cargando...</div>}
+      {/* alignTop por el mismo motivo que Usuarios.jsx: la celda de Módulos
+          crece al desplegar el "+N", y sin esto el resto de la fila se
+          centra contra la celda alta y el primer módulo queda desalineado
+          del enunciado. Con filas de una línea no cambia nada. */}
       <Table
+        alignTop
         columns={columns}
         data={preguntas}
         actions={(row) => (
