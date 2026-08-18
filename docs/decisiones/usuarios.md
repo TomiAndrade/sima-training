@@ -8,7 +8,7 @@ Cubre `Usuario` (identidad pura), `Vinculacion` (organización + rol), `Vinculac
 
 Una sola entidad para **cualquier persona**, sea cuenta de sistema, persona evaluada o las dos cosas: unifica los conceptos `User` y `Employee` que el prototipo modelaba por separado.
 
-Y es **identidad pura**: nombre, apellido, DNI, email, `datos`. Todo lo que es pertenencia —rol y organización— vive en `Vinculacion`, y el par puesto+centro en `VinculacionPuestoCentro`.
+Y es **identidad pura**: nombre, apellido, DNI, email. Todo lo que es pertenencia —rol y organización— vive en `Vinculacion`, y el par puesto+centro en `VinculacionPuestoCentro`.
 
 `Vinculacion` tiene `usuarioId @unique`: la regla *"una sola organización por persona"* **es el índice**, no disciplina del service.
 
@@ -23,7 +23,7 @@ No hay endpoints `/vinculaciones`, y el ABM sigue siendo uno solo (`/usuarios`):
 | `dni` | El identificador **de la gente**. Único en `Usuario` | Columna de la tabla de Usuarios, y **la llave de entrada de la tablet** (`POST /tablet/login`) |
 | `Usuario.id` | PK interna | Path de los endpoints por persona (`/usuarios/:id/informe`), FK de `Asignacion`/`Sesion`, `key` de React |
 | `Vinculacion.id` | PK interna | **Sólo el AuditLog**: es el `entidadId` de las filas de `Vinculacion` y el primer componente de la clave compuesta de los pares (`vinculacionId:puestoId:centroCostoId`, ver [auditoria.md](./auditoria.md)) |
-| `datos.legajo` | El número de nómina de la empresa. Lo único parecido a un "número de usuario" con significado real | **Se escribe y no se lee**: lo carga el import de Excel y ningún frontend lo muestra |
+| ~~`datos.legajo`~~ | El número de nómina de la empresa, lo único parecido a un "número de usuario" con significado real | **Ya no existe** — se escribía y no se leía nunca, así que se eliminó con el jsonb entero (ver abajo) |
 
 **Dónde se filtraron los dos primeros:** en el "Historial de cambios" de `HistorialUsuario.jsx`, que renderiza el diff del AuditLog **completo, sin esconder campos** — decisión deliberada de la Story 9 ("para eso es auditoría"). Como `vinculacionEscalar()` incluye `id` y `usuarioId` en el snapshot, el alta de una vinculación se lee así:
 
@@ -39,11 +39,13 @@ Las otras FK del diff **sí** se traducen a nombre (`puestoId`/`centroCostoId`/`
 
 **La decisión:** el DNI es el identificador visible, y las dos PK no aparecen en ninguna pantalla. `HistorialUsuario.jsx` las descarta con `CAMPOS_OCULTOS` antes de renderizar el diff. Se esconden en el **render** y no en el backend: `vinculacionEscalar()` tiene que seguir guardando las dos columnas, que para eso es auditoría. Y no se generalizó a "ocultar todo lo que termine en `Id`" a propósito — `organizacionId`, `puestoId` y `centroCostoId` siguen mostrándose, traducidos a nombre.
 
-## El campo `datos` (jsonb)
+## `Usuario` ya no tiene el jsonb `datos`, y el import ya no lee `legajo`
 
-Está en `Usuario` para datos de nómina flexibles. Hoy lo escribe **únicamente** el import de Excel y, desde que puesto y centro de costo se resuelven contra el catálogo real (ver más abajo), guarda sólo `legajo`: ya no hay mapeo abierto de columnas no reconocidas ni el viejo `puesto`/`sector` de texto libre.
+`Usuario.datos` era un jsonb de "datos flexibles de nómina" pensado como dato de tránsito: los campos que se estabilizaran cuando llegara el Excel real se promoverían a columnas. Se fue vaciando solo. Primero se sacó la sección "Datos de nómina" del modal del backoffice (duplicaba Puesto y Centro de Costo con el catálogo real, y el PATCH pisaba sin merge las columnas extra del import). Después, al resolver puesto y centro contra el catálogo real (ver más abajo), dejó de guardar el `puesto`/`sector` de texto libre. Quedó con **un solo campo, `legajo`, escrito por un solo camino, el import de Excel** — y ningún frontend que lo leyera: ni la tabla de Usuarios, ni la cabecera del historial, ni la tablet.
 
-El ABM de Usuarios del backoffice **no lo edita ni lo muestra**. Se sacó la sección "Datos de nómina" del modal porque duplicaba Puesto y Centro de Costo con el catálogo real, y porque el PATCH pisaba sin merge las columnas extra que dejaba el import.
+El spike de los identificadores (sprint 13-08, Story 1) lo puso a la vista, porque el `legajo` es justamente lo que en la vida real de HSE podría llamarse "el número de usuario". La decisión fue **eliminarlo, no mostrarlo**: se dropeó la columna con una migración en vez de dejar el jsonb vacío en el schema, porque un campo abierto que nadie escribe ni lee termina llenándose de cualquier cosa, y ahí se vuelve irreversible. Si el legajo hace falta más adelante entra como **columna propia de `Usuario`**, que es lo que permite buscarlo — que era el sentido original del "se promueven a columnas".
+
+Consecuencias: `CreateUsuarioDto` perdió `datos?` (y con él `UpdateUsuarioDto`, que lo heredaba por `PartialType`), `ConfirmarImportUsuariosDto` perdió `legajo?`, y `COLUMN_MAP_USUARIOS` perdió la entrada `legajo`. **Un Excel que todavía traiga esa columna se importa igual**: el mapeo de headers es `if (key) colIdx[key] = i`, así que un header desconocido se ignora en silencio — no es un error de fila ni un warning. Los legajos ya importados se perdieron con la columna, a propósito.
 
 ## Puesto y centro de costo van APAREADOS, no como ejes independientes
 
@@ -93,7 +95,7 @@ El rol quedó **fijado a `ALUMNO`** y la organización se elige una sola vez en 
 
 ## El import resuelve Puesto y Centro de Costo contra el catálogo real
 
-Antes esas dos columnas iban al jsonb `datos` como texto libre sin validar, así que un usuario importado **no aparecía con puesto ni centro en ningún listado** hasta que un admin se lo cargaba a mano. Ahora se resuelven contra `Puesto`/`CentroCosto` y se crea el par `VinculacionPuestoCentro` igual que si se hubiera cargado a mano — el objetivo era cerrar ese hueco, no sólo mostrar el texto.
+Antes esas dos columnas iban al jsonb `datos` (el que después se eliminó, ver arriba) como texto libre sin validar, así que un usuario importado **no aparecía con puesto ni centro en ningún listado** hasta que un admin se lo cargaba a mano. Ahora se resuelven contra `Puesto`/`CentroCosto` y se crea el par `VinculacionPuestoCentro` igual que si se hubiera cargado a mano — el objetivo era cerrar ese hueco, no sólo mostrar el texto.
 
 - **Reusa el matching de `similitud.ts`**, el mismo del import de preguntas: normalización en español + coeficiente de Dice sobre trigramas, con `UMBRAL_PARECIDA = 0.7`. El campo `preguntaId` de `RefSimilitud`/`ClasificacionCatalogo` es el nombre genérico que ya define ese archivo compartido; no vale la pena tocarlo sólo por naming al reusarlo para `puestoId`/`centroCostoId`.
 - **`previewUsuarios` clasifica pero NO empuja las filas nuevas de vuelta a `refs`**, a diferencia de `previewPreguntas`, que sí lo hace para detectar duplicados intra-archivo. Acá dos filas con el mismo puesto nuevo ("Pintor" ×2) deben salir **ambas** `'nueva'` de forma independiente: el catálogo todavía no tiene "Pintor", así que la 2ª fila no es "duplicada de la 1ª". El dedupe de "crear este catálogo nuevo una sola vez" queda del lado del frontend, agrupando por texto normalizado.

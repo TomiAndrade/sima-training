@@ -19,7 +19,10 @@ Sin resolver estas tres, el flujo con PIN no se puede implementar:
 
 1. **Creación del PIN** — ¿lo define la persona la primera vez que usa la
    tablet, se lo asigna un admin al cargarla, o sale de algún dato ya
-   existente (últimos dígitos del DNI, legajo)?
+   existente (últimos dígitos del DNI, legajo)? Ojo con el legajo: el
+   sistema **ya no lo guarda** —se eliminó junto con el jsonb `Usuario.datos`
+   en el sprint 13-08, ver [decisiones/usuarios.md](../../docs/decisiones/usuarios.md)—,
+   así que esa opción implica primero volver a capturarlo, como columna.
 2. **Reset del PIN** — si alguien lo olvida, ¿quién lo puede resetear y
    desde dónde? No hay pantalla de administración de PIN todavía, y el
    backoffice no tiene un flujo de "olvidé mi clave".
