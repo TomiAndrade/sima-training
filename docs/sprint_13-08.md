@@ -229,13 +229,27 @@ Que quien rinde pueda reportar una pregunta mal redactada o dejar un comentario.
 El Resumen es casi todo mock: KPIs, gráfico de aprobación y últimas evaluaciones. Necesita endpoints de agregados que hoy no existen — no hay nada que liste sesiones o asignaciones de toda la gente.
 
 **Tareas:**
-- [ ] Definir qué métricas van y cuáles se descartan
-- [ ] Endpoint de agregados: aprobación por módulo, gente con módulos vencidos, evaluaciones recientes
-- [ ] Decidir si se calcula al vuelo o se cachea (mirar el costo de las queries con la nómina completa)
-- [ ] Reemplazar los StatCards mockeados por los datos reales
-- [ ] Gráfico de aprobación contra datos reales, no contra el array literal de nombres
-- [ ] Definir el refresco: al entrar, o polling cada N segundos
-- [ ] Borrar los mocks que queden sin consumidor y actualizar `CLAUDE.md`
+- [x] Definir qué métricas van y cuáles se descartan
+- [x] Endpoint de agregados: aprobación por módulo, gente con módulos vencidos, evaluaciones recientes
+- [x] Decidir si se calcula al vuelo o se cachea (mirar el costo de las queries con la nómina completa)
+- [x] Reemplazar los StatCards mockeados por los datos reales
+- [x] Gráfico de aprobación contra datos reales, no contra el array literal de nombres
+- [x] Definir el refresco: al entrar, o polling cada N segundos
+- [x] Borrar los mocks que queden sin consumidor y actualizar `CLAUDE.md`
+
+**Métricas: la pantalla pasa a responder "¿cuánta de mi gente está habilitada hoy?".** El bloque dominante son cuatro conteos de **personas** por estado de habilitación (No habilitados / Pendiente / Por vencer / Al día), que es lo que HSE mira todos los días y lo que justifica toda la maquinaria de vencimientos ya construida. `SIN_OBLIGACIONES` no es tarjeta —gente sin capacitaciones asignadas, mezclarla con "al día" inflaría el número que más se mira—: va como línea de contexto.
+
+**Dos KPIs no se migraron, se reemplazaron.** "Asignaciones pendientes/completadas" salían de un mock con estados `pending`/`completed` que **no existen en el modelo real** (una `Asignacion` sólo está Vigente o Revocada). No había nada que traducir. De paso: "Usuarios registrados" leía de `users.js`, que son las **cuentas del backoffice**, no la nómina — el número no se habría movido al cargar los 264 empleados.
+
+**Endpoint nuevo `GET /resumen/sima-check`**, en un módulo `resumen/` propio: es un agregador que cruza `Asignacion` + `Sesion` + `Usuario` y no le pertenece a ninguno de los tres. **Reusa `calcularVencimiento`/`calcularVeredicto`**, no los reimplementa — es lo único que evita que el dashboard y la hoja de vida de la misma persona se contradigan.
+
+**Al vuelo, sin caché — medido, no supuesto.** 10 ms de promedio (10 corridas) contra la base real, y son **7 queries fijas** que no dependen de cuánta gente haya (la versión por-usuario habría hecho 528 con 264 personas). Refresco **al entrar + botón "↻ Actualizar"**, no polling: los datos no cambian segundo a segundo y un Render gratuito que se apaga solo no necesita que lo despierten.
+
+**Verificado contra datos reales**, no sólo con tests: los estados suman exacto el total (32 + 28 = 60), contrastado contra SQL directo. Y el caso raro se explicó en vez de darlo por bueno — `EN_REGLA` daba 0 con 2 sesiones aprobadas, porque **las dos personas que aprobaron algo tienen otro módulo sin aprobar**; su hoja de vida dice `PENDIENTE` igual que el dashboard.
+
+**"Módulos activos" quedó como estaba**, deliberadamente: ya era dato real y usa `estadoModulo`, el mismo helper que la pantalla Módulos. Meterlo en el endpoint habría duplicado en un segundo lugar la regla sutil de qué versión es la "vigente", y el día que divergieran las dos pantallas mostrarían números distintos de lo mismo. Cuesta un request extra.
+
+`evaluations.js` se eliminó (quedó sin consumidores). Los otros mocks siguen vivos porque `Dashboard.jsx` y `Clients.jsx` los usan.
 
 ---
 

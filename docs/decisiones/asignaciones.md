@@ -1,6 +1,6 @@
 # Decisiones — Asignaciones, reglas, vigencia y veredicto
 
-Cubre `ReglaAsignacion` (qué módulo es obligatorio para qué par o centro), `Asignacion` (la obligación concreta de una persona), el motor `recalcular()`, la vigencia de las aprobaciones (`vigencia.ts`), el veredicto de habilitación (`veredicto.ts`), y las tres pantallas del backoffice que los muestran — Reglas, Asignaciones e Historial de una persona.
+Cubre `ReglaAsignacion` (qué módulo es obligatorio para qué par o centro), `Asignacion` (la obligación concreta de una persona), el motor `recalcular()`, la vigencia de las aprobaciones (`vigencia.ts`), el veredicto de habilitación (`veredicto.ts`), y las cuatro pantallas del backoffice que los muestran — Reglas, Asignaciones, Historial de una persona y el Resumen de SIMA CHECK.
 
 **No cubre**: de dónde salen los pares puesto+centro que alimentan el motor ([usuarios.md](./usuarios.md)) ni cómo se registra que alguien aprobó ([sesiones.md](./sesiones.md)). Acá está el **consumo** de esas aprobaciones, no su escritura.
 
@@ -183,6 +183,22 @@ Un round trip de más a cambio de un 404 determinista. Está comentado en el có
 ---
 
 ## Frontend
+
+### El Resumen suma el MISMO veredicto, no uno propio
+
+La pantalla Resumen de SIMA CHECK cuenta **personas por estado de habilitación**, y eso sale de `GET /resumen/sima-check` (`ResumenService`), que llama a `calcularVencimiento()` y `calcularVeredicto()` — las mismas funciones puras que usa la hoja de vida de una persona.
+
+**No es prolijidad, es lo único que evita que las dos pantallas se contradigan.** Si el dashboard tuviera su propia cuenta de "quién está vencido", el día que una de las dos cambiara, el Resumen diría que Fulano está al día y su hoja de vida diría que no. Verificado contra la base real: las dos personas que habían aprobado algo figuran `PENDIENTE` en los dos lados, porque cada una tenía **otro** módulo sin aprobar — el dashboard mostraba `EN_REGLA: 0` y eso era correcto, no un bug.
+
+**Cuenta personas, no asignaciones.** Alguien con tres módulos vencidos es **una** persona no habilitada, no tres. Contar obligaciones daría un número más grande y sin significado operativo: lo que se decide con esta pantalla es a cuánta gente no se puede mandar a planta.
+
+### Dos queries para toda la nómina, no dos por persona
+
+`AsignacionesService.findByUsuario` hace dos queries por persona. Llamarlo en un loop para el dashboard serían **528 queries con 264 personas**. `ResumenService` hace la misma forma de consulta **sin el filtro de `usuarioId`** y agrupa por persona en memoria: 7 queries fijas, sin importar cuánta gente haya.
+
+**Medido, no supuesto**: 10 ms de promedio (10 corridas) contra la base de desarrollo con 60 usuarios. Por eso **no cachea** — cachear agregaría datos viejos para ahorrar algo que no cuesta — y por eso el refresco es **al entrar más un botón manual**, no polling: los datos no cambian segundo a segundo y un Render gratuito que se apaga solo no necesita que lo despierten cada N segundos.
+
+⚠️ **Techo conocido y documentado en el código**: trae todas las sesiones aprobadas de la historia para quedarse con la más reciente por (usuario, módulo). Con la nómina real son miles de filas y entra cómodo; con un par de órdenes de magnitud más hay que pasarlo a un `DISTINCT ON` en SQL crudo. Se eligió agrupar en JS por coherencia con `aprobacionesPorModulo`, que ya resuelve lo mismo así.
 
 ### Las dos pantallas, y por qué la de Asignaciones es de consulta
 
