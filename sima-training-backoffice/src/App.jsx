@@ -26,8 +26,14 @@ const PAGES = {
   'training-assignments': TrainingAssignments,
 }
 
+// Las claves de PAGES son también los ids válidos del hash de la URL: agregar
+// una pantalla acá la hace navegable por `#id` sin tocar nada más. Se calcula
+// una sola vez a nivel de módulo — `useNavigation` lo recibe por parámetro en
+// vez de importarlo, para no acoplar el hook a esta pantalla en particular.
+const PAGE_IDS = Object.keys(PAGES)
+
 export default function App() {
-  const { page, navigate } = useNavigation('dashboard')
+  const { page, navigate } = useNavigation('dashboard', PAGE_IDS)
   const PageComponent = PAGES[page] ?? Dashboard
 
   return (
