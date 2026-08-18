@@ -48,6 +48,15 @@ export default function ReglasAsignacion() {
 
   const [expandidos, setExpandidos] = useState(() => new Set())
 
+  // Buscador por nombre de centro y bloque plegado de los centros que no tienen
+  // ninguna regla. Los centros sin reglas salieron del listado principal porque
+  // con el catálogo real son una docena de filas que sólo dicen "sin reglas",
+  // pero NO se pueden esconder del todo: detectar un centro sin capacitación
+  // configurada era el motivo original de listarlos. Por eso el pie los cuenta
+  // aunque esté cerrado — el dato se ve sin abrir nada.
+  const [busqueda, setBusqueda] = useState('')
+  const [verSinReglas, setVerSinReglas] = useState(false)
+
   // null | { mode: 'create' } | { mode: 'edit', puestoId, centroCostoId, originales, reglaPorModulo }
   const [modal, setModal] = useState(null)
   const [form, setForm] = useState(emptyForm)
@@ -186,17 +195,50 @@ export default function ReglasAsignacion() {
     ]
   }, [reglas, centrosActivos, centrosCosto, puestoNombre, moduloPorId])
 
-  const centrosConReglas = useMemo(
-    () => gruposPorCentro.filter((g) => g.reglas.length > 0).length,
+  // Sin acentos y en minúsculas: el catálogo real mezcla códigos (S31, OB308)
+  // con nombres (LOG_Logística), y nadie tipea el acento al buscar.
+  const normalizar = (s) =>
+    s.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().trim()
+
+  // El listado principal son los centros CON reglas; los que no tienen ninguna
+  // se van al pie. `gruposPorCentro` ya viene ordenado (activos con reglas,
+  // activos sin reglas, inactivos), así que filtrar conserva ese orden y los
+  // inactivos —que siempre tienen reglas, si no no estarían— quedan al final.
+  const gruposConReglas = useMemo(
+    () => gruposPorCentro.filter((g) => g.reglas.length > 0),
+    [gruposPorCentro]
+  )
+  const gruposSinReglas = useMemo(
+    () => gruposPorCentro.filter((g) => g.reglas.length === 0),
     [gruposPorCentro]
   )
 
-  // Expandir abre solo los grupos con contenido (abrir los vacíos es ruido);
-  // colapsar vacía el Set entero, así no queda abierto un grupo vacío que el
-  // usuario haya desplegado a mano.
+  // El buscador atraviesa los dos bloques. Si sólo filtrara el de arriba,
+  // buscar un centro que existe pero no tiene reglas devolvería "sin
+  // coincidencias" — y ese es justo el caso que hay que poder encontrar.
+  const q = normalizar(busqueda)
+  const filtrarPorNombre = (grupos) =>
+    q ? grupos.filter((g) => normalizar(g.centro.nombre).includes(q)) : grupos
+
+  const conReglasVisibles = useMemo(
+    () => filtrarPorNombre(gruposConReglas),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [gruposConReglas, q]
+  )
+  const sinReglasVisibles = useMemo(
+    () => filtrarPorNombre(gruposSinReglas),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [gruposSinReglas, q]
+  )
+
+  const centrosConReglas = gruposConReglas.length
+
+  // "Expandir todos" opera sobre lo VISIBLE: con una búsqueda activa abre lo
+  // que quedó filtrado, no los 16 centros del catálogo. Colapsar vacía el Set
+  // entero igual, así no sobrevive abierto un grupo que la búsqueda escondió.
   const expandibles = useMemo(
-    () => gruposPorCentro.filter((g) => g.reglas.length > 0).map((g) => g.centro.id),
-    [gruposPorCentro]
+    () => conReglasVisibles.map((g) => g.centro.id),
+    [conReglasVisibles]
   )
   const todosExpandidos = expandibles.length > 0 && expandibles.every((id) => expandidos.has(id))
 
@@ -217,9 +259,12 @@ export default function ReglasAsignacion() {
     return `${g.puestosCount} puesto${g.puestosCount === 1 ? '' : 's'} · ${reglasTxt}`
   }
 
-  const openCreate = () => {
+  // `centroId` lo pasa el botón "Configurar" del bloque de centros sin reglas:
+  // desde ahí ya se sabe cuál es, y volver a elegirlo en el select sería
+  // pedirle al usuario un dato que acaba de dar.
+  const openCreate = (centroId) => {
     setForm({
-      centroCostoId: centrosActivos[0]?.id ?? '',
+      centroCostoId: centroId ?? centrosActivos[0]?.id ?? '',
       alcance: 'PUESTO',
       puestoIds: new Set(),
       moduloIds: new Set(),
@@ -484,12 +529,19 @@ export default function ReglasAsignacion() {
         <div>
           <h2 className="text-slate-900 font-bold text-xl">Reglas de asignación</h2>
           <p className="text-slate-400 text-sm">
+            {/* Con búsqueda activa el subtítulo habla de lo que se está viendo:
+                el total global seguiría siendo cierto pero no describiría la
+                pantalla. Mismo criterio que el contador de Usuarios. */}
             {loading
               ? 'Cargando…'
-              : `${reglas.length} regla${reglas.length === 1 ? '' : 's'} en ${centrosConReglas} centro${centrosConReglas === 1 ? '' : 's'} de costo`}
+              : q
+                ? `${conReglasVisibles.length} centro${conReglasVisibles.length === 1 ? '' : 's'} con reglas coincide${conReglasVisibles.length === 1 ? '' : 'n'} con la búsqueda`
+                : `${reglas.length} regla${reglas.length === 1 ? '' : 's'} en ${centrosConReglas} centro${centrosConReglas === 1 ? '' : 's'} de costo`}
           </p>
         </div>
-        <Button onClick={openCreate} disabled={loading || !!loadError}>+ Nueva regla</Button>
+        {/* Arrow y no `onClick={openCreate}`: Button reenvía el evento del
+            click como primer argumento, y openCreate espera un centroCostoId. */}
+        <Button onClick={() => openCreate()} disabled={loading || !!loadError}>+ Nueva regla</Button>
       </div>
 
       {loadError && (
@@ -526,15 +578,24 @@ export default function ReglasAsignacion() {
 
       {!loadError && (
         <>
-          {expandibles.length > 0 && (
-            <div className="flex items-center justify-end">
-              <button
-                type="button"
-                onClick={toggleTodos}
-                className="text-slate-500 hover:text-slate-700 text-xs font-semibold transition-colors"
-              >
-                {todosExpandidos ? 'Colapsar todos' : 'Expandir todos'}
-              </button>
+          {!loading && gruposPorCentro.length > 0 && (
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <input
+                type="text"
+                value={busqueda}
+                onChange={(e) => setBusqueda(e.target.value)}
+                placeholder="Buscar centro de costo…"
+                className="bg-white border border-slate-300 rounded px-3 py-2 text-slate-900 text-sm w-64 max-w-full focus:outline-none focus:border-red-600"
+              />
+              {expandibles.length > 0 && (
+                <button
+                  type="button"
+                  onClick={toggleTodos}
+                  className="text-slate-500 hover:text-slate-700 text-xs font-semibold transition-colors"
+                >
+                  {todosExpandidos ? 'Colapsar todos' : 'Expandir todos'}
+                </button>
+              )}
             </div>
           )}
 
@@ -546,9 +607,19 @@ export default function ReglasAsignacion() {
             <p className="text-slate-400 text-[11px] font-mono uppercase tracking-widest text-center py-10">
               — Sin centros de costo — creá uno para configurar reglas —
             </p>
+          ) : conReglasVisibles.length === 0 ? (
+            <p className="text-slate-400 text-[11px] font-mono uppercase tracking-widest text-center py-10">
+              {/* Con búsqueda activa el mensaje no puede decir "no hay reglas":
+                  puede haberlas de sobra y no coincidir ninguna. Y si lo que
+                  coincide está en el bloque de abajo, el pie lo dice — por eso
+                  acá no se afirma que no haya nada. */}
+              {q
+                ? '— Ningún centro con reglas coincide —'
+                : '— Todavía no hay reglas configuradas —'}
+            </p>
           ) : (
             <div className="space-y-2">
-              {gruposPorCentro.map((g) => {
+              {conReglasVisibles.map((g) => {
                 const abierto = expandidos.has(g.centro.id)
                 const cuerpoId = `grupo-${g.centro.id}`
                 return (
@@ -641,6 +712,51 @@ export default function ReglasAsignacion() {
                   </div>
                 )
               })}
+            </div>
+          )}
+
+          {/* Los centros sin ninguna regla viven acá y no en el listado: con el
+              catálogo real son una docena de filas que sólo dicen "sin reglas".
+              Pero el pie los CUENTA con el bloque cerrado, que es lo que
+              conserva el motivo original de listarlos: ver de un vistazo cuánta
+              gente está trabajando en un centro sin capacitación configurada. */}
+          {!loading && sinReglasVisibles.length > 0 && (
+            <div>
+              <button
+                type="button"
+                onClick={() => setVerSinReglas((v) => !v)}
+                aria-expanded={verSinReglas}
+                className="text-sm text-slate-500 hover:text-slate-700 transition-colors flex items-center gap-1.5"
+              >
+                <span className="text-xs">{verSinReglas ? '▾' : '▸'}</span>
+                {plural(
+                  sinReglasVisibles.length,
+                  'centro sin reglas configuradas',
+                  'centros sin reglas configuradas'
+                )}
+              </button>
+
+              {verSinReglas && (
+                <div className="mt-2 bg-white border border-slate-200 rounded divide-y divide-slate-200">
+                  {sinReglasVisibles.map((g) => (
+                    <div key={g.centro.id} className="px-4 py-2.5 flex items-center gap-2">
+                      <span className="text-slate-700 text-sm">{g.centro.nombre}</span>
+                      {/* "Configurar" y no "Editar módulos": un centro sin
+                          reglas no tiene ningún alcance sobre el que operar,
+                          así que lo que corresponde es el alta, con el centro
+                          ya elegido. */}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="ml-auto"
+                        onClick={() => openCreate(g.centro.id)}
+                      >
+                        Configurar
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </>
