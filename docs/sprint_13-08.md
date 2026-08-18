@@ -40,7 +40,7 @@ Spike. Aparecen dos identificadores distintos y no está claro cuál se muestra 
 - [x] Decidir cuál es el identificador que ve la gente y documentarlo
 - [x] Anotar si hace falta cambiar algo, sin implementarlo en esta story
 
-**Resultado:** los dos salen del mismo lugar — el diff del audit log en `HistorialUsuario.jsx`, que muestra `ID` (= `Vinculacion.id`) y `Usuario` (= `Usuario.id`), las dos PK `autoincrement`. El identificador de la gente es el **DNI**; el `legajo` existe en `datos` pero no lo lee ningún frontend. Rastreo completo en [decisiones/usuarios.md](decisiones/usuarios.md#el-identificador-que-ve-la-gente-es-el-dni-y-es-el-único), los dos arreglos que destapó en [pendientes.md](pendientes.md#frontends). No afecta a ninguna otra pantalla del sprint.
+**Resultado:** los dos salen del mismo lugar — el diff del audit log en `HistorialUsuario.jsx`, que muestra `ID` (= `Vinculacion.id`) y `Usuario` (= `Usuario.id`), las dos PK `autoincrement`. El identificador de la gente es el **DNI**. Los dos arreglos que destapó se hicieron en el acto: las PK salieron del render del audit log, y el `legajo` —que se importaba y no lo leía ningún frontend— se eliminó junto con el jsonb `Usuario.datos` entero. Rastreo completo en [decisiones/usuarios.md](decisiones/usuarios.md#el-identificador-que-ve-la-gente-es-el-dni-y-es-el-único). No afecta a ninguna otra pantalla del sprint.
 
 ---
 
@@ -106,8 +106,10 @@ Hoy el módulo se crea y recién después, entrando a editar contenido, se le pu
 Después de que alguien rinde en la tablet hay que salir y volver a entrar para ver el resultado. Un botón que vuelva a pedir el informe alcanza.
 
 **Tareas:**
-- [ ] Botón que vuelve a llamar a `GET /usuarios/:id/informe`
-- [ ] Indicador de carga mientras refresca, sin desmontar lo que ya se ve
+- [x] Botón que vuelve a llamar a `GET /usuarios/:id/informe`
+- [x] Indicador de carga mientras refresca, sin desmontar lo que ya se ve
+
+**Resultado:** botón "↻ Actualizar" arriba, al lado de "← Volver a Usuarios". La trampa era que `loading` y `error` son early returns que reemplazan la pantalla entera, así que reusar el `reintentar()` existente hubiera hecho exactamente lo que la story pide evitar; el refresco tiene su propio par `refrescando`/`errorRefresco`. Si falla, banner arriba y los datos de la última carga quedan abajo. Ver [decisiones/asignaciones.md](decisiones/asignaciones.md#la-vista-de-historial-early-return-y-coreformat).
 
 ---
 
