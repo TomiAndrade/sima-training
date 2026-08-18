@@ -34,31 +34,38 @@ Los ids válidos salen de las claves de `PAGES` en `App.jsx` y se pasan **por pa
 
 ---
 
-## Lo que sobrevive a un F5 es la pantalla, no lo que estabas haciendo adentro
-
-Decisión explícita de alcance. Sobrevive **la página**; se pierden los filtros, las búsquedas, los grupos desplegados y las **sub-vistas**:
+## Qué sobrevive a un F5: la pantalla y el historial de una persona, no los filtros
 
 | Estabas en… | Después del F5 |
 |---|---|
 | Usuarios, Preguntas, Reglas… | La misma pantalla ✅ |
-| El historial de una persona | El listado de Usuarios |
-| Editando el contenido de un módulo | La lista de Módulos |
+| El historial de una persona | **El mismo historial** ✅ |
+| Editando el contenido de un módulo | La lista de Módulos (a propósito, ver abajo) |
 | Usuarios con el filtro "Soldador" puesto | Usuarios sin filtros |
 
-El motivo es de relación costo/beneficio: persistir el resto obliga a tocar **cada pantalla una por una** serializando su estado, y el valor cae rápido — perder un filtro molesta bastante menos que perder la pantalla entera, que era el problema real.
+Los filtros, las búsquedas y los grupos desplegados **se pierden**, y eso es deliberado: persistirlos obliga a tocar cada pantalla una por una serializando su estado, y el valor cae rápido — perder un filtro molesta bastante menos que perder la pantalla entera, que era el problema real.
 
 ### La tab de SIMA CHECK no necesitó nada
 
 Las tabs (Resumen, Módulos, Preguntas, Bases, Reglas, Asignaciones) **son páginas**, no un estado aparte: `BackofficeLayout` no tiene ningún `useState` y deriva la tab activa de `page`. Persistir la página persiste la tab sola.
 
-### El early return del historial sigue funcionando, y por el mismo motivo que antes
+### El historial de una persona vive en el sub del hash
 
-Ver el historial de una persona **no toca el hash**, así que `page` sigue en `'usuarios'` y `Usuarios.jsx` nunca se desmonta — que es exactamente lo que ese early return existe para lograr (conserva la tab, la búsqueda y los usuarios ya cargados al volver). Mismo caso el editor de contenido de Módulos.
+`#usuarios/historial/42`. `Usuarios.jsx` recibe `sub`/`setSub` y **deriva `historialId` de ahí en vez de tenerlo en un `useState`** — la URL vuelve a ser la única fuente de verdad, igual que para la página.
 
-### ⚠️ La contracara: el botón "atrás" no sale de una sub-vista
+Un id no numérico (alguien editando la URL a mano) cae a `null` y muestra el listado, en vez de pedirle a la API un `/usuarios/undefined`.
 
-Es la consecuencia directa del alcance elegido, y conviene tenerla escrita porque es **una expectativa nueva que este cambio crea**. Estando en el historial de una persona, "atrás" no vuelve al listado de Usuarios: vuelve a la pantalla anterior a Usuarios. Las sub-vistas no están en el historial del navegador porque no están en la URL.
+**El early return sigue haciendo lo que hacía**, y esto es lo que había que no romper: `#usuarios` y `#usuarios/historial/42` son **la misma página** para `App.jsx`, que renderiza el mismo componente en los dos casos. `Usuarios.jsx` nunca se desmonta al entrar o salir del historial, así que volver conserva la tab, la búsqueda y los usuarios ya cargados — que es exactamente para lo que ese early return existe.
 
-Antes esto no confundía a nadie porque "atrás" no hacía nada en ningún lado. Ahora que funciona para las pantallas, es razonable que alguien espere que funcione también acá. Si molesta en la práctica, el arreglo es meter la sub-vista en el hash (`#usuarios/historial/42`) — y ahí sí empieza a parecerse a un router de verdad, con lo cual conviene decidirlo a propósito y no de arrastre.
+De yapa se arregló una molestia preexistente: estando en el historial, tocar "Usuarios" en el sidebar **antes no hacía nada** (navegar a la página en la que ya estás no dispara ningún cambio). Ahora el hash sí cambia —`#usuarios/historial/42` → `#usuarios`— así que vuelve al listado.
 
-Lo mismo, pero preexistente y sin relación con este cambio: estando en una sub-vista, hacer clic en el ítem del sidebar de esa misma pantalla **no hace nada** (navegar a la página en la que ya estás no dispara ningún cambio). Se sale con el botón "← Volver" de la propia vista.
+### ⚠️ El editor de contenido de un módulo NO se restaura, y no es por falta de ganas
+
+Es la otra sub-vista del backoffice (`TrainingModules.jsx`) y quedó afuera **a propósito**, porque no es simétrica con el historial:
+
+- **El historial es de sólo lectura.** Restaurarlo es ganancia pura: se vuelve a pedir el informe y listo.
+- **El editor tiene trabajo sin guardar en memoria.** Asignar preguntas, quitarlas y activarlas/desactivarlas viven en el cliente hasta "Guardar y volver" (`flushCambios()`). Un F5 se lleva esos cambios **inevitablemente** — son estado del cliente, no están en ningún lado.
+
+Restaurar la vista sin los cambios sería **peor que caer en la lista**: mostraría el editor abierto, como si siguieras a mitad de editar, cuando tu trabajo ya no está. La pantalla mentiría. Caer en la lista de módulos es honesto: se perdió, y se ve que se perdió.
+
+Si alguna vez se quiere que sobreviva, lo que hay que resolver primero es **persistir el staging**, no la URL — y ahí la pregunta es si conviene eso o directamente que el editor guarde a medida que se toca, que es otra decisión de producto.

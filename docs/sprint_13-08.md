@@ -197,11 +197,15 @@ El backoffice no usa router a propósito y la navegación vive en `useState`, as
 
 **La segunda tarea eran dos cosas y es una sola.** La tab de SIMA CHECK **no es un estado aparte**: las tabs *son* páginas y `BackofficeLayout` no tiene ningún `useState` — deriva la tab activa de `page`. Persistir la página persiste la tab sola, sin código extra.
 
-**Alcance decidido: sobrevive la pantalla, no lo que estabas haciendo adentro.** Los filtros, las búsquedas y las **sub-vistas** (el historial de una persona, el editor de contenido de un módulo) se pierden con el F5. Persistir el resto obliga a tocar cada pantalla una por una serializando su estado, y el valor cae rápido — perder un filtro molesta mucho menos que perder la pantalla entera, que era el problema real.
+**Alcance: la pantalla + el historial de una persona.** Se hizo en dos pasadas — primero sólo la pantalla, y al ver la consecuencia (que "atrás" no salía del historial) se sumó la sub-vista, que vive en el sub del hash: `#usuarios/historial/42`. `historialId` pasó de `useState` a **derivarse de la URL**, así que la única fuente de verdad vuelve a ser una sola.
 
-**El early return del historial sigue intacto, y por el mismo motivo que antes**: ver un historial no toca el hash, así que `page` sigue en `'usuarios'` y `Usuarios.jsx` nunca se desmonta — que es exactamente lo que ese early return existe para lograr.
+Los filtros y las búsquedas **sí** se pierden con el F5, a propósito: persistirlos obliga a tocar cada pantalla una por una serializando su estado, y el valor cae rápido comparado con perder la pantalla entera.
 
-⚠️ **Contracara anotada en `pendientes.md`**: "atrás" no sale de una sub-vista, y ahora eso se nota. Antes el botón no hacía nada en ningún lado; ahora que funciona para las pantallas, es razonable esperar que funcione también ahí. Ver [decisiones/navegacion.md](decisiones/navegacion.md).
+**El early return sigue intacto, que era lo que había que no romper**: `#usuarios` y `#usuarios/historial/42` son la misma *página* para `App.jsx`, que renderiza el mismo componente en los dos casos. `Usuarios.jsx` no se desmonta al entrar ni al salir del historial, así que volver sigue conservando la tab, la búsqueda y los usuarios ya cargados.
+
+**De yapa se arregló una molestia preexistente**: estando en el historial, tocar "Usuarios" en el sidebar antes no hacía nada (navegar a la página en la que ya estás no dispara nada). Ahora el hash cambia y vuelve al listado.
+
+⚠️ **El editor de contenido de un módulo quedó afuera a propósito**, y no por falta de ganas: tiene cambios sin guardar en memoria (`flushCambios()`), así que un F5 se los lleva igual. Restaurar la vista sin los cambios mostraría el editor abierto como si siguieras editando cuando el trabajo ya no está — peor que caer en la lista, que al menos es honesto. Anotado en `pendientes.md`. Ver [decisiones/navegacion.md](decisiones/navegacion.md).
 
 ---
 
