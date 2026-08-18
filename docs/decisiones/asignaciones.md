@@ -198,6 +198,22 @@ Se aceptó la duplicación en vez de agregar un campo `motivo` a `Asignacion` �
 
 Cuando no encuentra ninguna regla que la justifique muestra **"Regla desconocida"** en ámbar, en vez de inventar una explicación. Ese caso se volvió raro desde que tocar una regla recalcula en el acto: lo que queda son residuos —asignaciones derivadas antes de que el recálculo fuera automático, o datos cambiados por fuera de la app— y el hecho de que la pantalla trae las reglas **una sola vez al montar**, así que si otra sesión edita una regla mientras tanto, acá se ven viejas. Sigue siendo la señal que justifica apretar "Recalcular".
 
+### El listado de Reglas muestra sólo los centros configurados, pero sigue contando los otros
+
+El acordeón listaba **todos** los centros activos, incluidos los que no tenían ninguna regla, con el conteo "sin reglas". Eso era deliberado: ver un centro sin capacitación configurada es exactamente la clase de hueco que la pantalla tiene que hacer visible. Con el catálogo real (16 centros, y unos pocos configurados) el efecto se dio vuelta — una docena de filas vacías empujando hacia abajo las tres que importan.
+
+La salida **no** fue esconderlos: se movieron a un bloque plegado al pie que los **cuenta con el bloque cerrado**. El dato que justificaba listarlos ("faltan 13") se lee sin abrir nada, y cuáles son están a un clic. Descartadas: un checkbox "mostrar sin reglas" arriba (apagado no dice cuántos hay, que es justo el dato) y un mensaje sin desplegar (saber que faltan 13 sin poder ver cuáles no alcanza para actuar).
+
+Dentro del bloque, la acción por centro es **"Configurar"** y no "Editar módulos": ese botón opera sobre un **alcance** (centro + puesto), y un centro sin ninguna regla no tiene alcances. Lo que corresponde es el alta, con el centro ya elegido — `openCreate()` acepta un `centroCostoId` opcional para eso. Ojo con el call site del header: `Button` reenvía el evento del click como primer argumento, así que va `onClick={() => openCreate()}` y no `onClick={openCreate}`.
+
+### El buscador de centros atraviesa los dos bloques
+
+Cuando se pasó a acordeón se eliminó el filtro de alcance y se anotó que, si algún día hacía falta filtrar, el eje útil era módulo o un buscador por nombre de centro. Se construyó el segundo, como input suelto y no como `MultiSelectFilter`: es un solo eje de texto libre, no una selección múltiple sobre un catálogo.
+
+Filtra **los dos bloques**, el de centros con reglas y el del pie. Si sólo filtrara el de arriba, buscar por nombre un centro que existe pero no tiene reglas devolvería "sin coincidencias" — y ese es precisamente el centro que uno quiere encontrar. Por el mismo motivo el mensaje de lista vacía con búsqueda activa dice "ningún centro **con reglas** coincide" y no "no hay coincidencias": lo que coincide puede estar abajo, y el pie lo dice.
+
+Dos efectos que acompañan: "Expandir todos" opera sobre lo **visible** (con una búsqueda activa abre lo filtrado, no los 16 del catálogo), y el subtítulo pasa a contar lo que se está viendo en vez del total global — mismo criterio que el contador de Usuarios, donde un total que dejó de describir la pantalla es peor que no mostrarlo.
+
 ### La vista de historial: early return y `core/format/`
 
 La hoja de vida de una persona (`HistorialUsuario.jsx`) se muestra **en lugar** de la lista, con un early return dentro de `Usuarios.jsx`, no como página propia de `App.jsx`. Es lo que hace que volver conserve la tab, la búsqueda y los usuarios ya cargados: el componente **nunca se desmonta**, así que sus `useState` siguen vivos y no hace falta levantar el estado a ningún lado. Moverla a `App.jsx` sí lo desmontaría — está comentado en el código.

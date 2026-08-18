@@ -119,9 +119,11 @@ Después de que alguien rinde en la tablet hay que salir y volver a entrar para 
 El acordeón lista todos los centros activos, incluidos los que no tienen ninguna regla. Con el catálogo real eso es una lista larga de filas vacías.
 
 **Tareas:**
-- [ ] Mostrar solo los centros que tengan al menos una regla
-- [ ] Buscador por nombre de centro
-- [ ] Que los centros sin reglas sigan siendo alcanzables (toggle o mensaje), porque detectar centros sin capacitación configurada era el motivo original de listarlos
+- [x] Mostrar solo los centros que tengan al menos una regla
+- [x] Buscador por nombre de centro
+- [x] Que los centros sin reglas sigan siendo alcanzables (toggle o mensaje), porque detectar centros sin capacitación configurada era el motivo original de listarlos
+
+**Resultado:** los centros sin reglas se fueron a un bloque plegado al pie que los **cuenta con el bloque cerrado** — así el dato que justificaba listarlos ("faltan 13") se sigue leyendo sin abrir nada. Adentro, cada uno con "Configurar", que abre el alta con el centro ya elegido (no "Editar módulos": sin reglas no hay alcance sobre el que operar). El buscador atraviesa los dos bloques, porque si sólo filtrara el de arriba, buscar un centro sin reglas devolvería "sin coincidencias" — justo el que se quiere encontrar. Ver [decisiones/asignaciones.md](decisiones/asignaciones.md#el-listado-de-reglas-muestra-sólo-los-centros-configurados-pero-sigue-contando-los-otros).
 
 ---
 
