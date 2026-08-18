@@ -38,6 +38,16 @@ La base corre local vía `docker compose up -d db`; requiere Docker Desktop. Es 
 
 El estado y lo que bloquea (una implementación de object storage, ver abajo) viven en [`../pendientes.md`](../pendientes.md).
 
+### `/health` chequea la base, y aun así nunca devuelve 503
+
+Antes sólo devolvía `{ status: 'ok' }` sin tocar Postgres, o sea que probaba que el proceso estaba vivo y nada más. Eso deja pasar **el caso que más importa**: la API arriba y la base caída, que es exactamente cuando todo falla y nada lo avisa. Ahora corre un `SELECT 1` y el resultado va en el campo `db`.
+
+**Sigue respondiendo 200 con la base caída, a propósito.** Es la distinción liveness / readiness: devolver 503 haría que el health check de Render marque el servicio como caído y **reinicie el contenedor**, y reiniciar **no arregla una base caída** — sólo agrega un ciclo de reinicios encima del incidente. El proceso está vivo; lo que no está disponible es una dependencia, y eso se informa en el body en vez de suicidarse.
+
+Verificado contra la realidad, no sólo con tests: con el contenedor de Postgres frenado en caliente el endpoint devolvió `{"status":"ok","db":"error"}` con HTTP 200, y al volver a levantarlo se recuperó solo sin reiniciar nada.
+
+El consumidor es el bloque "Estado del sistema" del Panel Principal, que por eso **mira el body y no el código HTTP**.
+
 ---
 
 ## Storage de archivos
