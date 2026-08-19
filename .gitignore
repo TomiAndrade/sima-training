@@ -1,0 +1,16 @@
+node_modules/
+dist/
+.env
+*.log
+.DS_Store
+
+# Config local de Claude Code (launch.json, settings.json, etc.).
+.claude/
+
+# Excels con datos reales de nómina/personal (PII), no se versionan
+docs/*.xlsx
+docs/.~lock.*
+# Los recortes de demo salen del mismo Excel y arrastran la misma PII (nombre,
+# apellido, DNI y legajo de empleados reales). Los regenera scripts/demo/ de
+# forma determinista, así que versionarlos no aportaría reproducibilidad.
+docs/demo/
