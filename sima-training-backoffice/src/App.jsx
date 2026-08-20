@@ -1,7 +1,6 @@
 import useNavigation from './hooks/useNavigation'
 import BackofficeLayout from './pages/BackofficeLayout'
 import Dashboard from './pages/Dashboard'
-import Clients from './core/pages/Clients'
 import Usuarios from './core/pages/Usuarios'
 import Puestos from './core/pages/Puestos'
 import CentrosCosto from './core/pages/CentrosCosto'
@@ -14,7 +13,6 @@ import BasesConocimiento from './sima-check/pages/BasesConocimiento'
 
 const PAGES = {
   dashboard: Dashboard,
-  clients: Clients,
   usuarios: Usuarios,
   puestos: Puestos,
   'centros-costo': CentrosCosto,

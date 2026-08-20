@@ -18,7 +18,6 @@ const NAV_SECTIONS = [
   {
     header: 'Administración',
     items: [
-      { id: 'clients',   label: 'Clientes' },
       { id: 'usuarios',  label: 'Usuarios' },
       { id: 'puestos',   label: 'Puestos' },
       { id: 'centros-costo', label: 'Centros de Costo' },
