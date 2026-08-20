@@ -1,13 +1,15 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Table from '../../components/Table'
 import Button from '../../components/Button'
 import Modal from '../../components/Modal'
 import { centrosCostoApi } from '../api/centrosCosto'
+import { normalizarTexto } from '../format/texto'
 
 const emptyForm = { nombre: '', activo: true }
 
 export default function CentrosCosto() {
   const [centrosCosto, setCentrosCosto] = useState([])
+  const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(null)
 
@@ -81,6 +83,20 @@ export default function CentrosCosto() {
     }
   }
 
+  // Mismo criterio que Puestos: filtra en MEMORIA porque `GET /centros-costo`
+  // no acepta ningún `?q=` y el catálogo entero ya está cargado igual.
+  //
+  // Acá son 19 filas y no 90, así que el buscador no lo pide el tamaño: lo pide
+  // la CONSISTENCIA. Son dos pantallas gemelas, y que en una se pueda buscar y
+  // en la otra no se lee como que algo falta, no como una decisión.
+  const visibles = useMemo(() => {
+    const q = normalizarTexto(search)
+    if (!q) return centrosCosto
+    return centrosCosto.filter((c) => normalizarTexto(c.nombre).includes(q))
+  }, [centrosCosto, search])
+
+  const filtrando = normalizarTexto(search) !== ''
+
   const columns = [
     { key: 'nombre', label: 'Nombre' },
     {
@@ -100,7 +116,11 @@ export default function CentrosCosto() {
         <div>
           <h2 className="text-slate-900 font-bold text-xl">Centros de Costo</h2>
           <p className="text-slate-400 text-sm">
-            {loading ? 'Cargando…' : `${centrosCosto.length} centro${centrosCosto.length !== 1 ? 's' : ''} de costo registrados`}
+            {loading
+              ? 'Cargando…'
+              : filtrando
+                ? `${visibles.length} de ${centrosCosto.length} centro${centrosCosto.length !== 1 ? 's' : ''} de costo`
+                : `${centrosCosto.length} centro${centrosCosto.length !== 1 ? 's' : ''} de costo registrados`}
           </p>
         </div>
         <Button onClick={openCreate} disabled={loading || !!loadError}>+ Nuevo centro de costo</Button>
@@ -114,9 +134,25 @@ export default function CentrosCosto() {
       )}
 
       {!loadError && (
+        <div className="flex items-center gap-2">
+          <input
+            className="bg-white border border-slate-300 rounded px-3 py-2 text-slate-900 text-sm focus:outline-none focus:border-red-600 min-w-[280px]"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Buscar centro de costo..."
+          />
+          {filtrando && (
+            <Button variant="ghost" size="sm" onClick={() => setSearch('')}>
+              Limpiar
+            </Button>
+          )}
+        </div>
+      )}
+
+      {!loadError && (
         <Table
           columns={columns}
-          data={centrosCosto}
+          data={visibles}
           actions={(row) => (
             <>
               <Button variant="ghost" size="sm" onClick={() => openEdit(row)}>Editar</Button>
