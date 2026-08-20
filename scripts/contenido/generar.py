@@ -13,6 +13,11 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from parse import parsear
 from clasificar import clasificar
 from geometria import recortes
+# Alias: `CORRECCIONES` a secas ya es, en este archivo, el arreglo a mano de lo
+# que el Excel deja AMBIGUO (una pregunta sin verde, otra con dos). Esto otro es
+# ortografia y redaccion, que es otra cosa.
+from correcciones import CORRECCIONES as CORRECCIONES_TEXTO
+from correcciones import CORRECCIONES_POR_PREGUNTA
 
 RAIZ = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DOCS = os.path.join(RAIZ, 'docs')
@@ -48,6 +53,29 @@ CORRECCIONES = {
 def normalizar_texto(texto):
     texto = re.sub(r'\s*"A"\s*o\s*"B"\s*$', '', texto).strip()
     return re.sub(r'[ \t]+', ' ', texto).strip()
+
+
+# Claves de CORRECCIONES_TEXTO que llegaron a usarse. Lo que quede afuera es una
+# clave mal tipeada --no matchea nada y la correccion se pierde en silencio--, y
+# main() aborta si pasa.
+_usadas = set()
+
+
+def corregir(cadena, slug, numero):
+    """Aplica las correcciones de redaccion a UNA cadena.
+
+    Se llama igual para el enunciado, para cada opcion y para la respuesta
+    correcta. Que sea la misma funcion con el mismo mapa es lo que garantiza
+    que una opcion y la respuesta correcta no se desincronicen (ver la cabecera
+    de correcciones.py).
+    """
+    por_pregunta = CORRECCIONES_POR_PREGUNTA.get((slug, numero), {})
+    if cadena in por_pregunta:
+        return por_pregunta[cadena]
+    if cadena in CORRECCIONES_TEXTO:
+        _usadas.add(cadena)
+        return CORRECCIONES_TEXTO[cadena]
+    return cadena
 
 
 class Assets:
@@ -197,17 +225,40 @@ def main():
             return assets.guardar(im, base, formato)
 
         lista = []
-        for q in preguntas:
-            q.update(CORRECCIONES.get((slug, q['n']), {}))
-            item = {'texto': normalizar_texto(q['texto']), 'tipo': q['tipo']}
+        # `numero` es la POSICION dentro del modulo (1-based), no el `n` que
+        # trae el Excel: el Intermedio numera 1..24 y despues 31 dos veces, asi
+        # que su `n` no sirve como clave. Es tambien el numero que se ve en el
+        # backoffice y en la tablet.
+        for numero, q in enumerate(preguntas, start=1):
+            q.update(CORRECCIONES.get((slug, numero), {}))
+            item = {
+                'texto': corregir(normalizar_texto(q['texto']), slug, numero),
+                'tipo': q['tipo'],
+            }
 
             if q['tipo'] == 'OPCIONES_IMAGEN':
+                # Acá las opciones son nombres de archivo, no texto: no se
+                # corrigen (ningún key del mapa los matchea) y se resuelven a
+                # su clave de storage.
                 item['opciones'] = [asset(o) for o in q['opciones']]
                 item['respuestaCorrecta'] = asset(q['correcta'])
             else:
                 if q['tipo'] == 'OPCION_MULTIPLE':
-                    item['opciones'] = q['opciones']
-                item['respuestaCorrecta'] = q['correcta']
+                    item['opciones'] = [corregir(o, slug, numero) for o in q['opciones']]
+                item['respuestaCorrecta'] = corregir(q['correcta'], slug, numero)
+
+                # La correcta es UNA DE LAS OPCIONES, comparada por igualdad de
+                # string. Si una corrección tocara la opción y no la respuesta
+                # (o al revés), la pregunta quedaría sin ninguna correcta y
+                # nadie podría aprobarla — y no se notaría hasta que alguien la
+                # rinda. El backend lo valida también, pero acá se ve el
+                # nombre del módulo y el número.
+                if item.get('opciones') and item['respuestaCorrecta'] not in item['opciones']:
+                    raise SystemExit(
+                        f'{slug} #{numero}: tras corregir, la respuesta correcta '
+                        f'{item["respuestaCorrecta"]!r} no está entre las opciones '
+                        f'{item["opciones"]!r}'
+                    )
 
             enunciado = q['imagenes_enunciado']
             if len(enunciado) == 1:
@@ -221,6 +272,15 @@ def main():
                 avisos.append(f'{slug} #{q["n"]}: SIN RESPUESTA CORRECTA')
             lista.append(item)
         salida[slug] = lista
+
+    # Una clave que no matcheó nada es una clave mal tipeada, y su corrección se
+    # perdería en silencio. Aborta antes de emitir.
+    sin_usar = sorted(set(CORRECCIONES_TEXTO) - _usadas)
+    if sin_usar:
+        print(f'\n{len(sin_usar)} correcciones NO matchearon ningun texto:')
+        for clave in sin_usar:
+            print(f'  - {clave[:110]!r}')
+        raise SystemExit('Revisá esas claves contra el texto real antes de regenerar.')
 
     emitir_ts(salida)
     total = sum(len(v) for v in salida.values())

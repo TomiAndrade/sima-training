@@ -40,7 +40,7 @@ export interface PreguntaSeed {
 export const PREGUNTAS: Record<string, PreguntaSeed[]> = {
   'basico': [
     {
-      texto: '¿Quienes deben aplicar las Reglas de Oro de Ingeniería Sima?',
+      texto: '¿Quiénes deben aplicar las Reglas de Oro de Ingeniería Sima?',
       tipo: TipoPregunta.OPCION_MULTIPLE,
       opciones: [
         'Solo quien ejecuta el trabajo',
@@ -52,19 +52,19 @@ export const PREGUNTAS: Record<string, PreguntaSeed[]> = {
       imagen: 'basico-image23.jpg',
     },
     {
-      texto: 'Indique de que regla se trata.',
+      texto: 'Indique de qué regla se trata.',
       tipo: TipoPregunta.OPCION_MULTIPLE,
       opciones: [
         'Prohibido utilizar grúas',
         'Permiso de izaje',
-        'Prohibidos circular debajo de carga suspendida',
+        'Prohibido circular debajo de carga suspendida',
         'Equipo de izaje en movimiento',
       ],
-      respuestaCorrecta: 'Prohibidos circular debajo de carga suspendida',
+      respuestaCorrecta: 'Prohibido circular debajo de carga suspendida',
       imagen: 'basico-image28.jpg',
     },
     {
-      texto: 'La Política de detención de tareas, quien la puede aplicar?',
+      texto: 'La Política de detención de tareas, ¿quién la puede aplicar?',
       tipo: TipoPregunta.OPCION_MULTIPLE,
       opciones: [
         'Solo quien ejecuta el trabajo',
@@ -76,7 +76,7 @@ export const PREGUNTAS: Record<string, PreguntaSeed[]> = {
       imagen: 'basico-image22.jpg',
     },
     {
-      texto: 'Indicar de que regla se trata:',
+      texto: 'Indicar de qué regla se trata:',
       tipo: TipoPregunta.OPCION_MULTIPLE,
       opciones: [
         'Seguridad Vial',
@@ -88,7 +88,7 @@ export const PREGUNTAS: Record<string, PreguntaSeed[]> = {
       imagen: 'basico-image21.jpg',
     },
     {
-      texto: 'Indicar de que regla se trata:',
+      texto: 'Indicar de qué regla se trata:',
       tipo: TipoPregunta.OPCION_MULTIPLE,
       opciones: [
         'Trabajo en altura',
@@ -100,31 +100,31 @@ export const PREGUNTAS: Record<string, PreguntaSeed[]> = {
       imagen: 'basico-image40.jpg',
     },
     {
-      texto: 'Indicar de que regla se trata:',
+      texto: 'Indicar de qué regla se trata:',
       tipo: TipoPregunta.OPCION_MULTIPLE,
       opciones: [
         'Trabajo en altura',
         'Permiso de trabajo',
         'Excavaciones',
-        'Aislaciones de Energía',
+        'Aislamiento de Energías',
       ],
-      respuestaCorrecta: 'Aislaciones de Energía',
+      respuestaCorrecta: 'Aislamiento de Energías',
       imagen: 'basico-image24.jpg',
     },
     {
-      texto: 'Indicar de que regla se trata:',
+      texto: 'Indicar de qué regla se trata:',
       tipo: TipoPregunta.OPCION_MULTIPLE,
       opciones: [
         'Prohibido beber y comer',
         'Prohibido tomar agua',
         'Agua no potable',
-        'Prohibido el consumo Alcohol y Drogas',
+        'Prohibido el consumo de Alcohol y Drogas',
       ],
-      respuestaCorrecta: 'Prohibido el consumo Alcohol y Drogas',
+      respuestaCorrecta: 'Prohibido el consumo de Alcohol y Drogas',
       imagen: 'basico-image27.jpg',
     },
     {
-      texto: 'Indicar de que regla se trata:',
+      texto: 'Indicar de qué regla se trata:',
       tipo: TipoPregunta.OPCION_MULTIPLE,
       opciones: [
         'Espacio Confinado',
@@ -136,7 +136,7 @@ export const PREGUNTAS: Record<string, PreguntaSeed[]> = {
       imagen: 'basico-image39.jpg',
     },
     {
-      texto: 'Indicar de que regla se trata:',
+      texto: 'Indicar de qué regla se trata:',
       tipo: TipoPregunta.OPCION_MULTIPLE,
       opciones: [
         'Trabajo en altura',
@@ -148,7 +148,7 @@ export const PREGUNTAS: Record<string, PreguntaSeed[]> = {
       imagen: 'basico-image25.jpg',
     },
     {
-      texto: 'Indique que Regla corresponde a Excavación y Apertura',
+      texto: 'Indique qué Regla corresponde a Excavación y Apertura',
       tipo: TipoPregunta.OPCIONES_IMAGEN,
       opciones: [
         'basico-image25.jpg',
@@ -158,7 +158,7 @@ export const PREGUNTAS: Record<string, PreguntaSeed[]> = {
       respuestaCorrecta: 'basico-image1.jpg',
     },
     {
-      texto: 'Indique que Regla corresponde carga suspendida',
+      texto: 'Indique qué Regla corresponde a carga suspendida',
       tipo: TipoPregunta.OPCIONES_IMAGEN,
       opciones: [
         'basico-image40.jpg',
@@ -168,7 +168,7 @@ export const PREGUNTAS: Record<string, PreguntaSeed[]> = {
       respuestaCorrecta: 'basico-image28.jpg',
     },
     {
-      texto: 'Indique que Regla aplica para trabajo con equipos de izaje',
+      texto: 'Indique qué Regla aplica para trabajo con equipos de izaje',
       tipo: TipoPregunta.OPCIONES_IMAGEN,
       opciones: [
         'basico-image25.jpg',
@@ -178,7 +178,7 @@ export const PREGUNTAS: Record<string, PreguntaSeed[]> = {
       respuestaCorrecta: 'basico-image25.jpg',
     },
     {
-      texto: 'Indique que Regla corresponde aplica a Aislamiento de Energías',
+      texto: 'Indique qué Regla aplica a Aislamiento de Energías',
       tipo: TipoPregunta.OPCIONES_IMAGEN,
       opciones: [
         'basico-image16.jpg',
@@ -188,7 +188,7 @@ export const PREGUNTAS: Record<string, PreguntaSeed[]> = {
       respuestaCorrecta: 'basico-image24.jpg',
     },
     {
-      texto: 'Indique que Regla corresponde a Detención de Tarea',
+      texto: 'Indique qué Regla corresponde a Detención de Tarea',
       tipo: TipoPregunta.OPCIONES_IMAGEN,
       opciones: [
         'basico-image22.jpg',
@@ -198,7 +198,7 @@ export const PREGUNTAS: Record<string, PreguntaSeed[]> = {
       respuestaCorrecta: 'basico-image22.jpg',
     },
     {
-      texto: 'Indique que Regla corresponde a Trabajo en Altura',
+      texto: 'Indique qué Regla corresponde a Trabajo en Altura',
       tipo: TipoPregunta.OPCIONES_IMAGEN,
       opciones: [
         'basico-image16.jpg',
@@ -208,7 +208,7 @@ export const PREGUNTAS: Record<string, PreguntaSeed[]> = {
       respuestaCorrecta: 'basico-image39.jpg',
     },
     {
-      texto: 'Indique que Regla corresponde a Línea de Fuego',
+      texto: 'Indique qué Regla corresponde a Línea de Fuego',
       tipo: TipoPregunta.OPCIONES_IMAGEN,
       opciones: [
         'basico-image16.jpg',
@@ -218,7 +218,7 @@ export const PREGUNTAS: Record<string, PreguntaSeed[]> = {
       respuestaCorrecta: 'basico-image40.jpg',
     },
     {
-      texto: 'Indique que Regla corresponde a Seguridad Vial',
+      texto: 'Indique qué Regla corresponde a Seguridad Vial',
       tipo: TipoPregunta.OPCIONES_IMAGEN,
       opciones: [
         'basico-image21.jpg',
@@ -228,7 +228,7 @@ export const PREGUNTAS: Record<string, PreguntaSeed[]> = {
       respuestaCorrecta: 'basico-image21.jpg',
     },
     {
-      texto: 'Indique que Regla corresponde a Permiso de Trabajo',
+      texto: 'Indique qué Regla corresponde a Permiso de Trabajo',
       tipo: TipoPregunta.OPCIONES_IMAGEN,
       opciones: [
         'basico-image21.jpg',
@@ -238,7 +238,7 @@ export const PREGUNTAS: Record<string, PreguntaSeed[]> = {
       respuestaCorrecta: 'basico-image16.jpg',
     },
     {
-      texto: 'Indique que Regla corresponde a Prohibición de consumo de Alcohol y Drogas',
+      texto: 'Indique qué Regla corresponde a Prohibición de consumo de Alcohol y Drogas',
       tipo: TipoPregunta.OPCIONES_IMAGEN,
       opciones: [
         'basico-image28.jpg',
@@ -248,27 +248,27 @@ export const PREGUNTAS: Record<string, PreguntaSeed[]> = {
       respuestaCorrecta: 'basico-image27.jpg',
     },
     {
-      texto: 'LÍNEA DE FUEGO: Lugar donde una persona (o parte de su cuerpo) puede ser impactada, golpeada o atravesada por objetos, materiales o cualquier tipo de energía que se libera repentinamente.',
+      texto: 'LÍNEA DE FUEGO: es el lugar donde una persona (o parte de su cuerpo) puede ser impactada, golpeada o atravesada por objetos, materiales o cualquier tipo de energía que se libera repentinamente.',
       tipo: TipoPregunta.VERDADERO_FALSO,
       respuestaCorrecta: 'Verdadero',
     },
     {
-      texto: 'PERMISO DE TRABAJO: Documento formal que autoriza la realización de una tarea específica, establece puntos de chequeo para verificar las condiciones y medidas de seguridad que deben seguirse para prevenir accidentes.',
+      texto: 'PERMISO DE TRABAJO: es el documento formal que autoriza la realización de una tarea específica y establece los puntos de chequeo para verificar las condiciones y medidas de seguridad que deben seguirse para prevenir accidentes.',
       tipo: TipoPregunta.VERDADERO_FALSO,
       respuestaCorrecta: 'Verdadero',
     },
     {
-      texto: 'OPERACIONES DE ELEVACION Y MONTAJE: El equipo, los elementos, el operador y el señaleros en una tarea de izaje deben tener certificación vigentes',
+      texto: 'OPERACIONES DE ELEVACIÓN Y MONTAJE: el equipo, los elementos, el operador y los señaleros en una tarea de izaje deben tener certificación vigente.',
       tipo: TipoPregunta.VERDADERO_FALSO,
       respuestaCorrecta: 'Verdadero',
     },
     {
-      texto: 'La Política de DETENCION DE TAREA la aplica solo los Ref. SSAMC.',
+      texto: 'La Política de DETENCIÓN DE TAREA la aplican solo los Ref. SSMAC.',
       tipo: TipoPregunta.VERDADERO_FALSO,
       respuestaCorrecta: 'Falso',
     },
     {
-      texto: 'El orden y la limpieza son factores claves para prevenir accidentes',
+      texto: 'El orden y la limpieza son factores clave para prevenir accidentes.',
       tipo: TipoPregunta.VERDADERO_FALSO,
       respuestaCorrecta: 'Verdadero',
     },
@@ -278,7 +278,7 @@ export const PREGUNTAS: Record<string, PreguntaSeed[]> = {
       respuestaCorrecta: 'Verdadero',
     },
     {
-      texto: 'Nunca debemos en una maniobra de izaje circular por debajo de la carga suspendida',
+      texto: 'Nunca debemos circular por debajo de la carga suspendida en una maniobra de izaje.',
       tipo: TipoPregunta.VERDADERO_FALSO,
       respuestaCorrecta: 'Verdadero',
     },
@@ -288,27 +288,27 @@ export const PREGUNTAS: Record<string, PreguntaSeed[]> = {
       respuestaCorrecta: 'Falso',
     },
     {
-      texto: 'Ajustar la velocidades a las condiciones climáticas, estado del camino, condición de iluminación es una forma de aplicar Seguridad Vial',
+      texto: 'Ajustar la velocidad a las condiciones climáticas, al estado del camino y a la condición de iluminación es una forma de aplicar Seguridad Vial.',
       tipo: TipoPregunta.VERDADERO_FALSO,
       respuestaCorrecta: 'Verdadero',
     },
     {
-      texto: 'Siempre que suba o baje escaleras debo aplicar la técnica de los tres puntos de apoyo',
+      texto: 'Siempre que suba o baje escaleras debo aplicar la técnica de los tres puntos de apoyo.',
       tipo: TipoPregunta.VERDADERO_FALSO,
       respuestaCorrecta: 'Verdadero',
     },
     {
-      texto: 'Se permite fumar y/o usar cigarrillos electrónicos dentro de los tráiler u oficinas.',
+      texto: 'Se permite fumar y/o usar cigarrillos electrónicos dentro de los tráileres u oficinas.',
       tipo: TipoPregunta.VERDADERO_FALSO,
       respuestaCorrecta: 'Falso',
     },
     {
-      texto: 'En caso de eventualidades (derrames, accidentes personal, incendio, accidente de transito) debo activar el Rol de Emergencias de Ingeniería Sima que aplica a cada sitio.',
+      texto: 'En caso de eventualidades (derrames, accidentes personales, incendio, accidente de tránsito) debo activar el Rol de Emergencias de Ingeniería Sima que aplica a cada sitio.',
       tipo: TipoPregunta.VERDADERO_FALSO,
       respuestaCorrecta: 'Verdadero',
     },
     {
-      texto: 'En que tacho debo disponer un residuo METALICO libre de hidrocarburo',
+      texto: '¿En qué tacho debo disponer un residuo METÁLICO libre de hidrocarburo?',
       tipo: TipoPregunta.OPCIONES_IMAGEN,
       opciones: [
         'basico-image19.jpg',
@@ -318,7 +318,7 @@ export const PREGUNTAS: Record<string, PreguntaSeed[]> = {
       respuestaCorrecta: 'basico-image19.jpg',
     },
     {
-      texto: 'En que tacho debo disponer un residuo BIODEGRADABLES o RECICLABLES libre de hidrocarburo',
+      texto: '¿En qué tacho debo disponer un residuo BIODEGRADABLE o RECICLABLE libre de hidrocarburo?',
       tipo: TipoPregunta.OPCIONES_IMAGEN,
       opciones: [
         'basico-image19.jpg',
@@ -328,7 +328,7 @@ export const PREGUNTAS: Record<string, PreguntaSeed[]> = {
       respuestaCorrecta: 'basico-image9.jpg',
     },
     {
-      texto: 'En que tacho debo disponer los residuos CONDICIONADOS o SUELOS CONTAMINADOS',
+      texto: '¿En qué tacho debo disponer los residuos CONDICIONADOS o SUELOS CONTAMINADOS?',
       tipo: TipoPregunta.OPCIONES_IMAGEN,
       opciones: [
         'basico-image19.jpg',
@@ -338,7 +338,7 @@ export const PREGUNTAS: Record<string, PreguntaSeed[]> = {
       respuestaCorrecta: 'basico-image11.jpg',
     },
     {
-      texto: 'En que tacho debo disponer los residuos contaminados con hidrocarburos y productos químicos, como filtros, trapos, guantes, suelo, aceites.',
+      texto: '¿En qué tacho debo disponer los residuos contaminados con hidrocarburos y productos químicos, como filtros, trapos, guantes, suelo o aceites?',
       tipo: TipoPregunta.OPCIONES_IMAGEN,
       opciones: [
         'basico-image19.jpg',
@@ -348,7 +348,7 @@ export const PREGUNTAS: Record<string, PreguntaSeed[]> = {
       respuestaCorrecta: 'basico-image11.jpg',
     },
     {
-      texto: 'En que tacho debo disponer la yerba, resto de comida, cartones, envases plásticos libres de hidrocarburos o químicos',
+      texto: '¿En qué tacho debo disponer la yerba, los restos de comida, los cartones y los envases plásticos libres de hidrocarburos o químicos?',
       tipo: TipoPregunta.OPCIONES_IMAGEN,
       opciones: [
         'basico-image19.jpg',
@@ -358,7 +358,7 @@ export const PREGUNTAS: Record<string, PreguntaSeed[]> = {
       respuestaCorrecta: 'basico-image9.jpg',
     },
     {
-      texto: 'En que tacho debo disponer los restos de chapas, cobre, broce, chatarra, libres de hidrocarburos',
+      texto: '¿En qué tacho debo disponer los restos de chapa, cobre, bronce y chatarra libres de hidrocarburos?',
       tipo: TipoPregunta.OPCIONES_IMAGEN,
       opciones: [
         'basico-image19.jpg',
@@ -368,7 +368,7 @@ export const PREGUNTAS: Record<string, PreguntaSeed[]> = {
       respuestaCorrecta: 'basico-image19.jpg',
     },
     {
-      texto: 'Indique que significa este pictograma.',
+      texto: 'Indique qué significa este pictograma.',
       tipo: TipoPregunta.OPCION_MULTIPLE,
       opciones: [
         'Trabajo en altura',
@@ -380,7 +380,7 @@ export const PREGUNTAS: Record<string, PreguntaSeed[]> = {
       imagen: 'basico-image37.jpg',
     },
     {
-      texto: 'Debo conocer el Rol de emergencias y punto de reunión de cada sitio de trabajo.',
+      texto: 'Debo conocer el Rol de Emergencias y el punto de reunión de cada sitio de trabajo.',
       tipo: TipoPregunta.VERDADERO_FALSO,
       respuestaCorrecta: 'Verdadero',
     },
@@ -390,13 +390,13 @@ export const PREGUNTAS: Record<string, PreguntaSeed[]> = {
       respuestaCorrecta: 'Verdadero',
     },
     {
-      texto: 'Indique si esta imagen corresponde a la reglas de las 3R',
+      texto: 'Indique si esta imagen corresponde a la regla de las 3R.',
       tipo: TipoPregunta.VERDADERO_FALSO,
       respuestaCorrecta: 'Verdadero',
       imagen: 'basico-image31.png',
     },
     {
-      texto: 'Indique cual es la posición correcta para el levantamiento manual de cargas',
+      texto: 'Indique cuál es la posición correcta para el levantamiento manual de cargas.',
       tipo: TipoPregunta.OPCIONES_IMAGEN,
       opciones: [
         'basico-image34.png',
@@ -405,7 +405,7 @@ export const PREGUNTAS: Record<string, PreguntaSeed[]> = {
       respuestaCorrecta: 'basico-image29.png',
     },
     {
-      texto: 'Indique en cual de las imágenes ve riesgo eléctrico o posibilidad de incendio',
+      texto: 'Indique en cuál de las imágenes ve riesgo eléctrico o posibilidad de incendio.',
       tipo: TipoPregunta.OPCIONES_IMAGEN,
       opciones: [
         'basico-image26.jpg',
@@ -414,7 +414,7 @@ export const PREGUNTAS: Record<string, PreguntaSeed[]> = {
       respuestaCorrecta: 'basico-image26.jpg',
     },
     {
-      texto: 'Indique cual es una postura ergonómicamente correcta',
+      texto: 'Indique cuál es una postura ergonómicamente correcta.',
       tipo: TipoPregunta.OPCIONES_IMAGEN,
       opciones: [
         'basico-image30.jpg',
@@ -423,7 +423,7 @@ export const PREGUNTAS: Record<string, PreguntaSeed[]> = {
       respuestaCorrecta: 'basico-image30.jpg',
     },
     {
-      texto: 'Indique cual de estos no se considera un residuo peligroso',
+      texto: 'Indique cuál de estos no se considera un residuo peligroso.',
       tipo: TipoPregunta.OPCIONES_IMAGEN,
       opciones: [
         'basico-image20.jpg',
@@ -433,7 +433,7 @@ export const PREGUNTAS: Record<string, PreguntaSeed[]> = {
       respuestaCorrecta: 'basico-image12.jpg',
     },
     {
-      texto: 'Indicar de que se trata la siguiente imagen:',
+      texto: 'Indicar de qué se trata la siguiente imagen:',
       tipo: TipoPregunta.OPCION_MULTIPLE,
       opciones: [
         'Obligatorio uso de protección auditiva',
@@ -445,29 +445,29 @@ export const PREGUNTAS: Record<string, PreguntaSeed[]> = {
       imagen: 'basico-image33.jpg',
     },
     {
-      texto: 'Indicar de que se trata la siguiente imagen:',
+      texto: 'Indicar de qué se trata la siguiente imagen:',
       tipo: TipoPregunta.OPCION_MULTIPLE,
       opciones: [
         'Obligatorio uso de guantes de protección',
         'Prohibido aplaudir',
-        'Obligación saludar',
+        'Obligación de saludar',
         'Salude al ingresar',
       ],
       respuestaCorrecta: 'Obligatorio uso de guantes de protección',
       imagen: 'basico-image32.jpg',
     },
     {
-      texto: 'El término ralentí hace referencia al régimen mínimo de revoluciones a las cuales se puede mantener estable el funcionamiento de un motor de combustión interna sin requerir aceleración. Se produce cuando el vehículo esta detenido con el motor en marcha',
+      texto: 'El término ralentí hace referencia al régimen mínimo de revoluciones al cual se puede mantener estable el funcionamiento de un motor de combustión interna sin requerir aceleración. Se produce cuando el vehículo está detenido con el motor en marcha.',
       tipo: TipoPregunta.VERDADERO_FALSO,
       respuestaCorrecta: 'Verdadero',
     },
     {
-      texto: 'El ralentí no genera ningún inconveniente al ambiente',
+      texto: 'El ralentí no genera ningún inconveniente al ambiente.',
       tipo: TipoPregunta.VERDADERO_FALSO,
       respuestaCorrecta: 'Falso',
     },
     {
-      texto: 'Indicar de que se trata la siguiente imagen:',
+      texto: 'Indicar de qué se trata la siguiente imagen:',
       tipo: TipoPregunta.OPCION_MULTIPLE,
       opciones: [
         'Punto de Reunión',
@@ -479,7 +479,7 @@ export const PREGUNTAS: Record<string, PreguntaSeed[]> = {
       imagen: 'basico-image38.jpg',
     },
     {
-      texto: 'Cual no es una energía renovable',
+      texto: '¿Cuál no es una energía renovable?',
       tipo: TipoPregunta.OPCIONES_IMAGEN,
       opciones: [
         'basico-image13.jpg',
@@ -489,12 +489,12 @@ export const PREGUNTAS: Record<string, PreguntaSeed[]> = {
       respuestaCorrecta: 'basico-image14.jpg',
     },
     {
-      texto: 'Que es un EPP',
+      texto: '¿Qué es un EPP?',
       tipo: TipoPregunta.OPCION_MULTIPLE,
       opciones: [
-        'Elemento de producción personal',
-        'Equipo de prevención personal',
-        'Equipo de producción personal',
+        'Elementos de producción personal',
+        'Equipos de prevención personal',
+        'Equipos de producción personal',
         'Elementos de protección personal',
       ],
       respuestaCorrecta: 'Elementos de protección personal',
@@ -521,7 +521,7 @@ export const PREGUNTAS: Record<string, PreguntaSeed[]> = {
       respuestaCorrecta: 'Verdadero',
     },
     {
-      texto: '¿Cual es la primera acción que debe realizar el observador ante un Cuasi - accidente?.',
+      texto: '¿Cuál es la primera acción que debe realizar el observador ante un cuasi accidente?',
       tipo: TipoPregunta.OPCION_MULTIPLE,
       opciones: [
         'Señalizar la zona',
@@ -532,44 +532,44 @@ export const PREGUNTAS: Record<string, PreguntaSeed[]> = {
       respuestaCorrecta: 'Dar aviso',
     },
     {
-      texto: 'Los vehículos de la empresa cuentan con un sistema de arranque de identificación obligatoria, por lo cual a cada conductor se le asigna una llave de uso estrictamente personal e intransferible denominada llave PIN',
+      texto: 'Los vehículos de la empresa cuentan con un sistema de arranque de identificación obligatoria, por lo cual a cada conductor se le asigna una llave de uso estrictamente personal e intransferible denominada llave PIN.',
       tipo: TipoPregunta.VERDADERO_FALSO,
       respuestaCorrecta: 'Verdadero',
     },
     {
-      texto: 'Se prohíbe el uso de vehículos de la empresa fuera de los horarios laborales y para uso personal',
+      texto: 'Se prohíbe el uso de vehículos de la empresa fuera de los horarios laborales y para uso personal.',
       tipo: TipoPregunta.VERDADERO_FALSO,
       respuestaCorrecta: 'Verdadero',
     },
     {
-      texto: 'Según el procedimiento de Mantenimiento de vehículos y equipos, es obligatorio realizar el check list forma mensual ?',
+      texto: 'Según el procedimiento de Mantenimiento de vehículos y equipos, ¿es obligatorio realizar el check list de forma mensual?',
       tipo: TipoPregunta.VERDADERO_FALSO,
       respuestaCorrecta: 'Verdadero',
     },
     {
-      texto: 'Toda contravención de transito deberá ser asumida por la persona que conduzca la unidad en ese momento y lugar.',
+      texto: 'Toda contravención de tránsito deberá ser asumida por la persona que conduzca la unidad en ese momento y lugar.',
       tipo: TipoPregunta.VERDADERO_FALSO,
       respuestaCorrecta: 'Verdadero',
     },
     {
-      texto: 'Es necesario que todo personal nuevo, en un Sector, Obras o Servicios reciba una inducción en sitio de trabajo antes de comenzar las actividades.',
+      texto: 'Es necesario que todo personal nuevo en un Sector, Obra o Servicio reciba una inducción en el sitio de trabajo antes de comenzar las actividades.',
       tipo: TipoPregunta.VERDADERO_FALSO,
       respuestaCorrecta: 'Verdadero',
     },
     {
-      texto: 'Al trasportar manualmente una carga es importante siempre poder visualizar el camino a recorrer',
+      texto: 'Al transportar manualmente una carga es importante poder visualizar siempre el camino a recorrer.',
       tipo: TipoPregunta.VERDADERO_FALSO,
       respuestaCorrecta: 'Verdadero',
     },
     {
-      texto: 'Para la ley de transito, las bicicletas son consideradas otro vehículo más.',
+      texto: 'Para la ley de tránsito, las bicicletas son consideradas un vehículo más.',
       tipo: TipoPregunta.VERDADERO_FALSO,
       respuestaCorrecta: 'Verdadero',
     },
   ],
   'intermedio': [
     {
-      texto: 'Indique que símbolo nos indica la eficiencia energética de un electrodoméstico',
+      texto: 'Indique qué símbolo nos indica la eficiencia energética de un electrodoméstico.',
       tipo: TipoPregunta.OPCIONES_IMAGEN,
       opciones: [
         'intermedio-image2.jpg',
@@ -579,7 +579,7 @@ export const PREGUNTAS: Record<string, PreguntaSeed[]> = {
       respuestaCorrecta: 'intermedio-image4.jpg',
     },
     {
-      texto: 'Indique que significa estas imágenes',
+      texto: 'Indique qué significan estas imágenes',
       tipo: TipoPregunta.OPCION_MULTIPLE,
       opciones: [
         'Conducción Segura',
@@ -591,7 +591,7 @@ export const PREGUNTAS: Record<string, PreguntaSeed[]> = {
       imagen: 'intermedio-image6.jpg',
     },
     {
-      texto: 'Quienes deben aplicar las Reglas de Oro de Ingeniería Sima?',
+      texto: '¿Quiénes deben aplicar las Reglas de Oro de Ingeniería Sima?',
       tipo: TipoPregunta.OPCION_MULTIPLE,
       opciones: [
         'Solo quien ejecuta el trabajo',
@@ -603,7 +603,7 @@ export const PREGUNTAS: Record<string, PreguntaSeed[]> = {
       imagen: 'basico-image23.jpg',
     },
     {
-      texto: 'La Política de detención de tareas, quien la puede aplicar?',
+      texto: 'La Política de detención de tareas, ¿quién la puede aplicar?',
       tipo: TipoPregunta.OPCION_MULTIPLE,
       opciones: [
         'Solo quien ejecuta el trabajo',
@@ -615,24 +615,24 @@ export const PREGUNTAS: Record<string, PreguntaSeed[]> = {
       imagen: 'basico-image22.jpg',
     },
     {
-      texto: 'Las Reglas de Oro para trabajo en equipos y sistemas eléctricos sin tensión son:\n1. Corte Visible\n2. Enclavamiento y bloqueo\n3. Verificación de ausencia de tensión\n5. Puesta a tierra y cortocircuito\n6. Señalización de la zona',
+      texto: 'Las Reglas de Oro para trabajo en equipos y sistemas eléctricos sin tensión son:\n1. Corte visible\n2. Enclavamiento y bloqueo\n3. Verificación de ausencia de tensión\n4. Puesta a tierra y en cortocircuito\n5. Señalización de la zona',
       tipo: TipoPregunta.VERDADERO_FALSO,
       respuestaCorrecta: 'Verdadero',
     },
     {
-      texto: 'Indique que significa esta imagen',
+      texto: 'Indique qué significa esta imagen',
       tipo: TipoPregunta.OPCION_MULTIPLE,
       opciones: [
         'Conducción segura',
         'Medición de puesta a tierra',
-        'La Regla de los 5 puntos de apoyo',
-        'Las 5 reglas de oro para trabajo sin tensión',
+        'La regla de los 5 puntos de apoyo',
+        'Las 5 Reglas de Oro para trabajo sin tensión',
       ],
-      respuestaCorrecta: 'Las 5 reglas de oro para trabajo sin tensión',
+      respuestaCorrecta: 'Las 5 Reglas de Oro para trabajo sin tensión',
       imagen: 'intermedio-image9.jpg',
     },
     {
-      texto: 'Indique que significa esta imagen',
+      texto: 'Indique qué significa esta imagen',
       tipo: TipoPregunta.OPCION_MULTIPLE,
       opciones: [
         'Cadena de supervivencia',
@@ -642,7 +642,7 @@ export const PREGUNTAS: Record<string, PreguntaSeed[]> = {
       imagen: 'intermedio-image10.jpg',
     },
     {
-      texto: 'Indique que significa esta imagen',
+      texto: 'Indique qué significa esta imagen',
       tipo: TipoPregunta.OPCION_MULTIPLE,
       opciones: [
         'RCP',
@@ -652,17 +652,17 @@ export const PREGUNTAS: Record<string, PreguntaSeed[]> = {
       imagen: 'intermedio-image11.jpg',
     },
     {
-      texto: 'Es necesario que todo personal nuevo en el Sector, Obras, Servicios reciba una inducción en sitio de trabajo antes de comenzar las actividades.',
+      texto: 'Es necesario que todo personal nuevo en un Sector, Obra o Servicio reciba una inducción en el sitio de trabajo antes de comenzar las actividades.',
       tipo: TipoPregunta.VERDADERO_FALSO,
       respuestaCorrecta: 'Verdadero',
     },
     {
-      texto: 'En un ESPACIO CONFINADO debo verificar y registrar las condiciones de la atmosfera mediante equipos de medición calibrados y personal competente.',
+      texto: 'En un ESPACIO CONFINADO debo verificar y registrar las condiciones de la atmósfera mediante equipos de medición calibrados y personal competente.',
       tipo: TipoPregunta.VERDADERO_FALSO,
       respuestaCorrecta: 'Verdadero',
     },
     {
-      texto: 'Indique que significa esta imagen',
+      texto: 'Indique qué significa esta imagen',
       tipo: TipoPregunta.OPCION_MULTIPLE,
       opciones: [
         'Puntos ciegos en equipos pesados',
@@ -672,71 +672,71 @@ export const PREGUNTAS: Record<string, PreguntaSeed[]> = {
       imagen: 'intermedio-image12.jpg',
     },
     {
-      texto: 'En el proceso de AISLAMIENTO DE ENERGÍAS puedo intervenir el equipo sin comprobar presiones residuales.',
+      texto: 'En el proceso de AISLAMIENTO DE ENERGÍAS puedo intervenir el equipo sin comprobar las presiones residuales.',
       tipo: TipoPregunta.VERDADERO_FALSO,
       respuestaCorrecta: 'Falso',
     },
     {
-      texto: 'PROHIBIDO retirar o remover dispositivos de bloqueo y/o etiquetas en los equipos que no fueron colocados por mí.',
+      texto: 'Está PROHIBIDO retirar o remover dispositivos de bloqueo y/o etiquetas que no fueron colocados por mí.',
       tipo: TipoPregunta.VERDADERO_FALSO,
       respuestaCorrecta: 'Verdadero',
     },
     {
-      texto: 'Indique que es el Ralentí',
+      texto: '¿Qué es el ralentí?',
       tipo: TipoPregunta.OPCION_MULTIPLE,
       opciones: [
         'Hacer aceleradas cortas mientras espero la habilitación del semáforo',
         'Dejar el vehículo detenido con el motor en marcha',
-        'No cumplir con los mantenimiento programados',
+        'No cumplir con los mantenimientos programados',
         'Parar y arrancar el vehículo en cada detención',
       ],
       respuestaCorrecta: 'Dejar el vehículo detenido con el motor en marcha',
       imagen: 'intermedio-image13.png',
     },
     {
-      texto: 'El ralentí genera impacto en el ambiente y desgaste en el motor',
+      texto: 'El ralentí genera impacto en el ambiente y desgaste en el motor.',
       tipo: TipoPregunta.VERDADERO_FALSO,
       respuestaCorrecta: 'Verdadero',
     },
     {
-      texto: 'Todo producto químico debe estar etiquetado según SGA',
+      texto: 'Todo producto químico debe estar etiquetado según el SGA.',
       tipo: TipoPregunta.VERDADERO_FALSO,
       respuestaCorrecta: 'Verdadero',
     },
     {
-      texto: 'Estos Pictogramas corresponden a los productos químicos según el SGA - Sistema Globalmente Armonizado',
+      texto: 'Estos pictogramas corresponden a los productos químicos según el SGA (Sistema Globalmente Armonizado).',
       tipo: TipoPregunta.VERDADERO_FALSO,
       respuestaCorrecta: 'Verdadero',
       imagen: 'intermedio-image5.jpg',
     },
     {
-      texto: 'Una contravención de transito es una conducta antijurídica que se encuentra penada por la Ley Nacional de Tránsito, la misma debe ser asumida por la persona que conduzca la unidad en ese momento y lugar.',
+      texto: 'Una contravención de tránsito es una conducta antijurídica penada por la Ley Nacional de Tránsito, y debe ser asumida por la persona que conduzca la unidad en ese momento y lugar.',
       tipo: TipoPregunta.VERDADERO_FALSO,
       respuestaCorrecta: 'Verdadero',
     },
     {
-      texto: 'Cual es el propósito de realizar simulacros en sitios de trabajo',
+      texto: '¿Cuál es el propósito de realizar simulacros en los sitios de trabajo?',
       tipo: TipoPregunta.OPCION_MULTIPLE,
       opciones: [
         'Para entretener',
-        'Para conocer como activar el rol de emergencias',
+        'Para conocer cómo activar el rol de emergencias',
         'Para gastar tiempo',
         'Para ser bombero',
       ],
-      respuestaCorrecta: 'Para conocer como activar el rol de emergencias',
+      respuestaCorrecta: 'Para conocer cómo activar el rol de emergencias',
     },
     {
-      texto: 'Cuando un vehículo viene de frente por el mismo carril, debemos aplicar la regla de las cuatro "M"\n1- Mirar la Ruta\n2- Mantener la derecha\n3- Mermar la Velocidad\n4- Maniobrar hacia afuera de la ruta',
+      texto: 'Cuando un vehículo viene de frente por el mismo carril, debemos aplicar la regla de las cuatro "M":\n1- Mirar la ruta\n2- Mantener la derecha\n3- Mermar la velocidad\n4- Maniobrar hacia afuera de la ruta',
       tipo: TipoPregunta.VERDADERO_FALSO,
       respuestaCorrecta: 'Verdadero',
     },
     {
-      texto: 'Estas son las cuatro prohibiciones cuando utilizamos un vehículo de la empresa.\n1- Ceder la conducción a personal ajeno a la empresa\n2- Transportar a personas ajenas a la Empresa\n3- Ceder la llave PIN o de ID de arranque\n4- Uso personal del vehículo',
+      texto: 'Estas son las cuatro prohibiciones cuando utilizamos un vehículo de la empresa:\n1- Ceder la conducción a personal ajeno a la empresa\n2- Transportar a personas ajenas a la empresa\n3- Ceder la llave PIN o de ID de arranque\n4- Uso personal del vehículo',
       tipo: TipoPregunta.VERDADERO_FALSO,
       respuestaCorrecta: 'Verdadero',
     },
     {
-      texto: 'Quienes deben confeccionar una tarjeta de observación si se advierte de un desvío?',
+      texto: '¿Quiénes deben confeccionar una tarjeta de observación si se advierte un desvío?',
       tipo: TipoPregunta.OPCION_MULTIPLE,
       opciones: [
         'Solo quien ejecuta el trabajo',
@@ -747,24 +747,24 @@ export const PREGUNTAS: Record<string, PreguntaSeed[]> = {
       respuestaCorrecta: 'Todo el personal',
     },
     {
-      texto: 'Confeccionar tarjetas de observaciones, participar en la confección de un IPER, proponer una oportunidad de mejora es una forma de Participación y Consulta de los Trabajadores.',
+      texto: 'Confeccionar tarjetas de observación, participar en la confección de un IPER o proponer una oportunidad de mejora son formas de Participación y Consulta de los Trabajadores.',
       tipo: TipoPregunta.VERDADERO_FALSO,
       respuestaCorrecta: 'Verdadero',
     },
     {
-      texto: 'Quien debe asegurarse que esta premisa se cumpla?',
+      texto: '¿Quién debe asegurarse de que esta premisa se cumpla?',
       tipo: TipoPregunta.OPCION_MULTIPLE,
       opciones: [
-        'el que ejecuta el trabajo',
-        'todo el personal',
-        'el Referente SSMAC',
-        'del Supervisor',
+        'El que ejecuta el trabajo',
+        'Todo el personal',
+        'El Referente SSMAC',
+        'El Supervisor',
       ],
-      respuestaCorrecta: 'todo el personal',
+      respuestaCorrecta: 'Todo el personal',
       imagen: 'intermedio-image14.jpg',
     },
     {
-      texto: 'De que se trata esta Pirámide?',
+      texto: '¿De qué se trata esta Pirámide?',
       tipo: TipoPregunta.OPCION_MULTIPLE,
       opciones: [
         'Pirámide de la Vida',
@@ -776,21 +776,21 @@ export const PREGUNTAS: Record<string, PreguntaSeed[]> = {
       imagen: 'intermedio-image15.jpg',
     },
     {
-      texto: 'Quien debe identificar condiciones y acciones inseguras?',
+      texto: '¿Quién debe identificar condiciones y acciones inseguras?',
       tipo: TipoPregunta.OPCION_MULTIPLE,
       opciones: [
-        'el que ejecuta el trabajo',
-        'del Supervisor',
-        'el Referente SSMAC',
-        'todo el personal',
+        'El que ejecuta el trabajo',
+        'El Supervisor',
+        'El Referente SSMAC',
+        'Todo el personal',
       ],
-      respuestaCorrecta: 'todo el personal',
+      respuestaCorrecta: 'Todo el personal',
       imagen: 'intermedio-image15.jpg',
     },
   ],
   'avanzado': [
     {
-      texto: 'Quienes deben aplicar las Reglas de Oro de Ingeniería Sima?',
+      texto: '¿Quiénes deben aplicar las Reglas de Oro de Ingeniería Sima?',
       tipo: TipoPregunta.OPCION_MULTIPLE,
       opciones: [
         'Solo quien ejecuta el trabajo',
@@ -802,7 +802,7 @@ export const PREGUNTAS: Record<string, PreguntaSeed[]> = {
       imagen: 'basico-image23.jpg',
     },
     {
-      texto: 'La Política de detención de tareas, quien la puede aplicar?',
+      texto: 'La Política de detención de tareas, ¿quién la puede aplicar?',
       tipo: TipoPregunta.OPCION_MULTIPLE,
       opciones: [
         'Solo quien ejecuta el trabajo',
@@ -814,32 +814,32 @@ export const PREGUNTAS: Record<string, PreguntaSeed[]> = {
       imagen: 'basico-image22.jpg',
     },
     {
-      texto: 'Es un punto de la Política del Sistema Integrado de Gestión " Cumplir con los requisitos y expectativas de sus cliente y demás partes interesadas"',
+      texto: 'Es un punto de la Política del Sistema Integrado de Gestión: "Cumplir con los requisitos y expectativas de sus clientes y demás partes interesadas".',
       tipo: TipoPregunta.VERDADERO_FALSO,
       respuestaCorrecta: 'Verdadero',
     },
     {
-      texto: 'Es un punto de la Política del Sistema Integrado de Gestión " Concientizar a todos los integrantes de la organización para dar cumplimiento a esta Política"',
+      texto: 'Es un punto de la Política del Sistema Integrado de Gestión: "Concientizar a todos los integrantes de la organización para dar cumplimiento a esta Política".',
       tipo: TipoPregunta.VERDADERO_FALSO,
       respuestaCorrecta: 'Verdadero',
     },
     {
-      texto: 'Es un punto de la Política del Sistema Integrado de Gestión "Aplicar los requisitos legales, practica de trabajo seguro y protección ambiental solo cuando el cliente los solicite"',
+      texto: 'Es un punto de la Política del Sistema Integrado de Gestión: "Aplicar los requisitos legales, las prácticas de trabajo seguro y la protección ambiental solo cuando el cliente los solicite".',
       tipo: TipoPregunta.VERDADERO_FALSO,
       respuestaCorrecta: 'Falso',
     },
     {
-      texto: 'Es un punto de la Política del Sistema Integrado de Gestión "Promover la eliminación de peligros y reducción de riesgos en la gestión de Seguridad y Salud en el Trabajo"',
+      texto: 'Es un punto de la Política del Sistema Integrado de Gestión: "Promover la eliminación de peligros y la reducción de riesgos en la gestión de Seguridad y Salud en el Trabajo".',
       tipo: TipoPregunta.VERDADERO_FALSO,
       respuestaCorrecta: 'Verdadero',
     },
     {
-      texto: 'Es un punto de la Política del Sistema Integrado de Gestión "Cumplir con los requisitos legales y otros requisitos aplicables solo cuando sea posible"',
+      texto: 'Es un punto de la Política del Sistema Integrado de Gestión: "Cumplir con los requisitos legales y otros requisitos aplicables solo cuando sea posible".',
       tipo: TipoPregunta.VERDADERO_FALSO,
       respuestaCorrecta: 'Falso',
     },
     {
-      texto: 'Según la Política de Ingeniería Sima "Las practicas seguras de trabajo es responsabilidad …"',
+      texto: 'Según la Política de Ingeniería Sima, "las prácticas seguras de trabajo son responsabilidad…"',
       tipo: TipoPregunta.OPCION_MULTIPLE,
       opciones: [
         'de quien ejecuta el trabajo',
@@ -850,27 +850,27 @@ export const PREGUNTAS: Record<string, PreguntaSeed[]> = {
       respuestaCorrecta: 'de todo el personal',
     },
     {
-      texto: 'Nuestra Visión: "Ser la opción más confiable en la producción de hidrocarburos y en la generación de otras formas de energías"',
+      texto: 'Nuestra Visión es "ser la opción más confiable en la producción de hidrocarburos y en la generación de otras formas de energía".',
       tipo: TipoPregunta.VERDADERO_FALSO,
       respuestaCorrecta: 'Verdadero',
     },
     {
-      texto: 'Nuestra Visión: "Ser la empresa mejor vista y optimista del mercado"',
+      texto: 'Nuestra Visión es "ser la empresa mejor vista y más optimista del mercado".',
       tipo: TipoPregunta.VERDADERO_FALSO,
       respuestaCorrecta: 'Falso',
     },
     {
-      texto: 'Nuestra Misión: “Ofrecer ventajas competitivas a nuestros clientes: calidad, bajos costos, y rapidez, basadas en los criterios máximos de la industria en cuanto salud, seguridad, medio ambiente y responsabilidad social”',
+      texto: 'Nuestra Misión es "ofrecer ventajas competitivas a nuestros clientes —calidad, bajos costos y rapidez— basadas en los criterios máximos de la industria en cuanto a salud, seguridad, medio ambiente y responsabilidad social".',
       tipo: TipoPregunta.VERDADERO_FALSO,
       respuestaCorrecta: 'Verdadero',
     },
     {
-      texto: 'Este es el alcance que Ingeniería Sima tiene certificado: “Ingeniería, ejecución, montaje y puesta en marcha de proyectos constructivos, tipo “llave en mano”. Servicio de movimiento de suelos. Servicio de operación y mantenimiento de yacimientos de petróleo y gas. “',
+      texto: 'Este es el alcance que Ingeniería Sima tiene certificado: "Ingeniería, ejecución, montaje y puesta en marcha de proyectos constructivos tipo llave en mano. Servicio de movimiento de suelos. Servicio de operación y mantenimiento de yacimientos de petróleo y gas".',
       tipo: TipoPregunta.VERDADERO_FALSO,
       respuestaCorrecta: 'Verdadero',
     },
     {
-      texto: 'La ISO 14001 es una norma internacional que proporciona orientación respecto a como gestionar los aspectos medioambientales de una organización.',
+      texto: 'La ISO 14001 es una norma internacional que proporciona orientación respecto a cómo gestionar los aspectos medioambientales de una organización.',
       tipo: TipoPregunta.VERDADERO_FALSO,
       respuestaCorrecta: 'Verdadero',
     },
@@ -890,22 +890,22 @@ export const PREGUNTAS: Record<string, PreguntaSeed[]> = {
       respuestaCorrecta: 'Verdadero',
     },
     {
-      texto: 'La norma ISO 14001 es una norma internacional que establece los requisitos para un Sistema de Gestión de Salud y Seguridad Ocupacional (SST)',
+      texto: 'La ISO 14001 es una norma internacional que establece los requisitos para un Sistema de Gestión de Salud y Seguridad Ocupacional (SST).',
       tipo: TipoPregunta.VERDADERO_FALSO,
       respuestaCorrecta: 'Falso',
     },
     {
-      texto: 'PELIGRO: Es un agente (material o energía) con potencial para provocar daños en las personas, instalaciones, equipos, materiales y al medio ambiente.',
+      texto: 'PELIGRO: es un agente (material o energía) con potencial para provocar daños en las personas, las instalaciones, los equipos, los materiales y el medio ambiente.',
       tipo: TipoPregunta.VERDADERO_FALSO,
       respuestaCorrecta: 'Verdadero',
     },
     {
-      texto: 'RIESGO: Es la combinación de la probabilidad de ocurrencia y de la consecuencia de un determinado evento peligroso.',
+      texto: 'RIESGO: es la combinación de la probabilidad de ocurrencia y la consecuencia de un determinado evento peligroso.',
       tipo: TipoPregunta.VERDADERO_FALSO,
       respuestaCorrecta: 'Verdadero',
     },
     {
-      texto: 'Para que utiliza esta herramienta ?',
+      texto: '¿Para qué se utiliza esta herramienta?',
       tipo: TipoPregunta.OPCION_MULTIPLE,
       opciones: [
         'No es una herramienta',
@@ -917,67 +917,67 @@ export const PREGUNTAS: Record<string, PreguntaSeed[]> = {
       imagen: 'avanzado-image4.jpg',
     },
     {
-      texto: 'Que significa el termino Ergonomía',
+      texto: '¿Qué significa el término Ergonomía?',
       tipo: TipoPregunta.OPCION_MULTIPLE,
       opciones: [
-        'Elemento de producción personal',
-        'Equipo de prevención personal',
-        'Capacitar al personal en uso adecuado de EPP',
+        'Elementos de producción personal',
+        'Equipos de prevención personal',
+        'Capacitar al personal en el uso adecuado de EPP',
         'Diseñar espacios de trabajo para minimizar la fatiga y el estrés físico',
       ],
       respuestaCorrecta: 'Diseñar espacios de trabajo para minimizar la fatiga y el estrés físico',
     },
     {
-      texto: 'Cuando se realicen trabajos fuera de los horarios habituales, fines de semana o feriado el supervisor o jefe de obra debe enviar un comunicación al mail a trabajonorutinario@sima.com.ar indicando la actividad que se va a realizar y personal afectado, este mail informa a Dirección, Gerencias, SSMAC, RRHH',
+      texto: 'Cuando se realicen trabajos fuera de los horarios habituales, fines de semana o feriados, el supervisor o jefe de obra debe enviar una comunicación a trabajonorutinario@sima.com.ar indicando la actividad que se va a realizar y el personal afectado. Ese mail informa a Dirección, Gerencias, SSMAC y RRHH.',
       tipo: TipoPregunta.VERDADERO_FALSO,
       respuestaCorrecta: 'Verdadero',
     },
     {
-      texto: 'Si se va a realizar un trabajo fuera de los horarios habituales o fines de semana no es necesario dar aviso, solo se debe pasar las horas a RRHH.',
+      texto: 'Si se va a realizar un trabajo fuera de los horarios habituales o fines de semana no es necesario dar aviso: solo se deben pasar las horas a RRHH.',
       tipo: TipoPregunta.VERDADERO_FALSO,
       respuestaCorrecta: 'Falso',
     },
     {
-      texto: 'Es un objetivo disminuir la recepción de mail al comomanejo@sima.com.ar, por parte de la comunidad por causas y conductas impropias de nuestros conductores.',
+      texto: 'Es un objetivo disminuir los mails que la comunidad envía a comomanejo@sima.com.ar por causas y conductas impropias de nuestros conductores.',
       tipo: TipoPregunta.VERDADERO_FALSO,
       respuestaCorrecta: 'Verdadero',
     },
     {
-      texto: 'Como puedo mejorar mi conducta proactiva',
+      texto: '¿Cómo puedo mejorar mi conducta proactiva?',
       tipo: TipoPregunta.OPCION_MULTIPLE,
       opciones: [
         'Cumpliendo solo con lo que me solicita el cliente',
-        'Confeccionando Tarjetas de Observaciones, Auditorias de campo, Visitas Gerenciales',
+        'Confeccionando tarjetas de observación, auditorías de campo y visitas gerenciales',
       ],
-      respuestaCorrecta: 'Confeccionando Tarjetas de Observaciones, Auditorias de campo, Visitas Gerenciales',
+      respuestaCorrecta: 'Confeccionando tarjetas de observación, auditorías de campo y visitas gerenciales',
     },
     {
-      texto: 'Es responsabilidad de los Jefes de Obras, Jefes de Servicios y Referentes de SSMAC destinar un espacio de tiempo para realizar una inducción en sitio de trabajo antes de que el nuevo empleado comience las actividades, dejando registro de la misma.',
+      texto: 'Es responsabilidad de los Jefes de Obra, Jefes de Servicio y Referentes de SSMAC destinar un espacio de tiempo para realizar una inducción en el sitio de trabajo antes de que el nuevo empleado comience las actividades, dejando registro de ella.',
       tipo: TipoPregunta.VERDADERO_FALSO,
       respuestaCorrecta: 'Verdadero',
     },
     {
-      texto: 'En actividad EXCAVACIONES o ZANJEO en zonas de baterías o plantas, no es necesario realizar la geo detección de interferencias.',
+      texto: 'En actividades de EXCAVACIÓN o ZANJEO en zonas de baterías o plantas no es necesario realizar la geodetección de interferencias.',
       tipo: TipoPregunta.VERDADERO_FALSO,
       respuestaCorrecta: 'Falso',
     },
     {
-      texto: 'Una contravención de transito es una conducta antijurídica que se encuentra penada por la Ley Nacional de Tránsito, la misma debe ser asumida por la persona que conduzca la unidad en ese momento y lugar.',
+      texto: 'Una contravención de tránsito es una conducta antijurídica penada por la Ley Nacional de Tránsito, y debe ser asumida por la persona que conduzca la unidad en ese momento y lugar.',
       tipo: TipoPregunta.VERDADERO_FALSO,
       respuestaCorrecta: 'Verdadero',
     },
     {
-      texto: 'En el procedimiento de Gestión de la Organización define las herramientas que dispone la empresa para la Participación y Consulta de los Trabajadores ( confección y revisión de los IPER, tarjetas de observaciones, participación en la confección de procedimientos e instructivos, Sima Check, etc.)',
+      texto: 'El procedimiento de Gestión de la Organización define las herramientas de las que dispone la empresa para la Participación y Consulta de los Trabajadores (confección y revisión de los IPER, tarjetas de observación, participación en la confección de procedimientos e instructivos, Sima Check, etc.).',
       tipo: TipoPregunta.VERDADERO_FALSO,
       respuestaCorrecta: 'Verdadero',
     },
     {
-      texto: 'Estas son las cuatro prohibiciones cuando utilizamos un vehículo de la empresa.\n1- Ceder la conducción a personal ajeno a la empresa\n2- Transportar a personas ajenas a la Empresa\n3- Ceder la llave PIN o de ID de arranque\n4- Uso personal del vehículo',
+      texto: 'Estas son las cuatro prohibiciones cuando utilizamos un vehículo de la empresa:\n1- Ceder la conducción a personal ajeno a la empresa\n2- Transportar a personas ajenas a la empresa\n3- Ceder la llave PIN o de ID de arranque\n4- Uso personal del vehículo',
       tipo: TipoPregunta.VERDADERO_FALSO,
       respuestaCorrecta: 'Verdadero',
     },
     {
-      texto: 'De que se trata esta Pirámide?',
+      texto: '¿De qué se trata esta Pirámide?',
       tipo: TipoPregunta.OPCION_MULTIPLE,
       opciones: [
         'Pirámide de la Vida',
@@ -989,56 +989,56 @@ export const PREGUNTAS: Record<string, PreguntaSeed[]> = {
       imagen: 'intermedio-image15.jpg',
     },
     {
-      texto: 'Que hace Ingeniería Sima en la industria?',
+      texto: '¿Qué hace Ingeniería Sima en la industria?',
       tipo: TipoPregunta.OPCION_MULTIPLE,
       opciones: [
-        'Hace Obras de ductos, movimiento de suelo, construcción de plantas',
+        'Hace Obras de ductos, movimiento de suelos y construcción de plantas',
         'Gestiona Proyectos',
         'Presta Servicios de O&M para la industria petrolera',
-        'Ejecutar Obras y ofrecer Servicios enfocados en satisfacer las necesidades de nuestros clientes',
+        'Ejecuta Obras y ofrece Servicios enfocados en satisfacer las necesidades de nuestros clientes',
       ],
-      respuestaCorrecta: 'Ejecutar Obras y ofrecer Servicios enfocados en satisfacer las necesidades de nuestros clientes',
+      respuestaCorrecta: 'Ejecuta Obras y ofrece Servicios enfocados en satisfacer las necesidades de nuestros clientes',
       imagen: 'avanzado-image6.jpg',
     },
     {
-      texto: 'Quien debe asegurarse que esta premisa se cumpla?',
+      texto: '¿Quién debe asegurarse de que esta premisa se cumpla?',
       tipo: TipoPregunta.OPCION_MULTIPLE,
       opciones: [
-        'el que ejecuta el trabajo',
-        'todo el personal',
-        'el Referente SSMAC',
-        'del Supervisor',
+        'El que ejecuta el trabajo',
+        'Todo el personal',
+        'El Referente SSMAC',
+        'El Supervisor',
       ],
-      respuestaCorrecta: 'todo el personal',
+      respuestaCorrecta: 'Todo el personal',
       imagen: 'intermedio-image14.jpg',
     },
   ],
   'reglas-oro': [
     {
-      texto: 'Quien PUEDE y DEBE aplicar las Regla de Oro',
+      texto: '¿Quién PUEDE y DEBE aplicar las Reglas de Oro?',
       tipo: TipoPregunta.OPCION_MULTIPLE,
       opciones: [
-        '...Solo del Técnico de Seguridad',
-        '…Solo del Supervisor',
-        '…mi compañero',
-        '... todos',
+        'Solo el Técnico de Seguridad',
+        'Solo el Supervisor',
+        'Mi compañero',
+        'Todos',
       ],
-      respuestaCorrecta: '... todos',
+      respuestaCorrecta: 'Todos',
     },
     {
-      texto: 'Indicar de que regla se trata:',
+      texto: 'Indicar de qué regla se trata:',
       tipo: TipoPregunta.OPCION_MULTIPLE,
       opciones: [
         'Excavaciones',
         'Operaciones de Izaje',
-        'Seguridad vial',
+        'Seguridad Vial',
         'Equipamiento en movimiento',
       ],
-      respuestaCorrecta: 'Seguridad vial',
+      respuestaCorrecta: 'Seguridad Vial',
       imagen: 'reglas-oro-image4.jpg',
     },
     {
-      texto: 'Indicar de que regla se trata:',
+      texto: 'Indicar de qué regla se trata:',
       tipo: TipoPregunta.OPCION_MULTIPLE,
       opciones: [
         'Trabajo en altura',
@@ -1050,7 +1050,7 @@ export const PREGUNTAS: Record<string, PreguntaSeed[]> = {
       imagen: 'reglas-oro-image6.jpg',
     },
     {
-      texto: 'Indicar de que regla se trata:',
+      texto: 'Indicar de qué regla se trata:',
       tipo: TipoPregunta.OPCION_MULTIPLE,
       opciones: [
         'Trabajo en altura',
@@ -1062,7 +1062,7 @@ export const PREGUNTAS: Record<string, PreguntaSeed[]> = {
       imagen: 'reglas-oro-image12.jpg',
     },
     {
-      texto: 'Indicar de que regla se trata:',
+      texto: 'Indicar de qué regla se trata:',
       tipo: TipoPregunta.OPCION_MULTIPLE,
       opciones: [
         'Trabajo en altura',
@@ -1074,31 +1074,31 @@ export const PREGUNTAS: Record<string, PreguntaSeed[]> = {
       imagen: 'reglas-oro-image7.jpg',
     },
     {
-      texto: 'Indicar de que regla se trata:',
+      texto: 'Indicar de qué regla se trata:',
       tipo: TipoPregunta.OPCION_MULTIPLE,
       opciones: [
         'Trabajo en altura',
         'Permiso de trabajo',
         'Excavaciones',
-        'Operaciones de izado',
+        'Operaciones de Izado',
       ],
-      respuestaCorrecta: 'Operaciones de izado',
+      respuestaCorrecta: 'Operaciones de Izado',
       imagen: 'reglas-oro-06-compuesta.jpg',
     },
     {
-      texto: 'Indicar de que regla se trata:',
+      texto: 'Indicar de qué regla se trata:',
       tipo: TipoPregunta.OPCION_MULTIPLE,
       opciones: [
         'Trabajo en altura',
         'Permiso de trabajo',
         'Excavaciones',
-        'Aislamiento de energías',
+        'Aislamiento de Energías',
       ],
-      respuestaCorrecta: 'Aislamiento de energías',
+      respuestaCorrecta: 'Aislamiento de Energías',
       imagen: 'reglas-oro-image8.jpg',
     },
     {
-      texto: 'Indicar de que regla se trata:',
+      texto: 'Indicar de qué regla se trata:',
       tipo: TipoPregunta.OPCION_MULTIPLE,
       opciones: [
         'Trabajo en altura',
@@ -1110,19 +1110,19 @@ export const PREGUNTAS: Record<string, PreguntaSeed[]> = {
       imagen: 'reglas-oro-image5.jpg',
     },
     {
-      texto: 'Indicar de que regla se trata:',
+      texto: 'Indicar de qué regla se trata:',
       tipo: TipoPregunta.OPCION_MULTIPLE,
       opciones: [
         'Trabajo en altura',
-        'Manejo de Cambio',
+        'Manejo del Cambio',
         'Excavaciones',
         'Equipo en movimiento',
       ],
-      respuestaCorrecta: 'Manejo de Cambio',
+      respuestaCorrecta: 'Manejo del Cambio',
       imagen: 'reglas-oro-image9.jpg',
     },
     {
-      texto: 'Indique que Regla de Oro corresponde a Espacio Confinado',
+      texto: 'Indique qué Regla de Oro corresponde a Espacio Confinado',
       tipo: TipoPregunta.OPCIONES_IMAGEN,
       opciones: [
         'reglas-oro-image6.jpg',
@@ -1132,7 +1132,7 @@ export const PREGUNTAS: Record<string, PreguntaSeed[]> = {
       respuestaCorrecta: 'reglas-oro-image5.jpg',
     },
     {
-      texto: 'Indique que Regla de Oro corresponde a Línea de fuego',
+      texto: 'Indique qué Regla de Oro corresponde a Línea de Fuego',
       tipo: TipoPregunta.OPCIONES_IMAGEN,
       opciones: [
         'reglas-oro-image5.jpg',
@@ -1142,7 +1142,7 @@ export const PREGUNTAS: Record<string, PreguntaSeed[]> = {
       respuestaCorrecta: 'reglas-oro-image7.jpg',
     },
     {
-      texto: 'Indique que Regla de Oro corresponde a Operaciones de Izado',
+      texto: 'Indique qué Regla de Oro corresponde a Operaciones de Izado',
       tipo: TipoPregunta.OPCIONES_IMAGEN,
       opciones: [
         'reglas-oro-image10.jpg',
@@ -1152,7 +1152,7 @@ export const PREGUNTAS: Record<string, PreguntaSeed[]> = {
       respuestaCorrecta: 'reglas-oro-image10.jpg',
     },
     {
-      texto: 'Indique que Regla de Oro aplica a Aislamiento de Energías',
+      texto: 'Indique qué Regla de Oro aplica a Aislamiento de Energías',
       tipo: TipoPregunta.OPCIONES_IMAGEN,
       opciones: [
         'reglas-oro-image5.jpg',
@@ -1162,7 +1162,7 @@ export const PREGUNTAS: Record<string, PreguntaSeed[]> = {
       respuestaCorrecta: 'reglas-oro-image8.jpg',
     },
     {
-      texto: 'Indique que Regla de Oro aplica a Manejo del Cambio',
+      texto: 'Indique qué Regla de Oro aplica a Manejo del Cambio',
       tipo: TipoPregunta.OPCIONES_IMAGEN,
       opciones: [
         'reglas-oro-image9.jpg',
@@ -1172,7 +1172,7 @@ export const PREGUNTAS: Record<string, PreguntaSeed[]> = {
       respuestaCorrecta: 'reglas-oro-image9.jpg',
     },
     {
-      texto: 'Indique que Regla de Oro aplica a la Seguridad Vial…',
+      texto: 'Indique qué Regla de Oro aplica a Seguridad Vial',
       tipo: TipoPregunta.OPCIONES_IMAGEN,
       opciones: [
         'reglas-oro-image4.jpg',
@@ -1182,7 +1182,7 @@ export const PREGUNTAS: Record<string, PreguntaSeed[]> = {
       respuestaCorrecta: 'reglas-oro-image4.jpg',
     },
     {
-      texto: 'Indique que Regla de Oro aplica Permiso de Trabajo',
+      texto: 'Indique qué Regla de Oro aplica a Permiso de Trabajo',
       tipo: TipoPregunta.OPCIONES_IMAGEN,
       opciones: [
         'reglas-oro-image5.jpg',
@@ -1192,7 +1192,7 @@ export const PREGUNTAS: Record<string, PreguntaSeed[]> = {
       respuestaCorrecta: 'reglas-oro-image6.jpg',
     },
     {
-      texto: 'Indique que Regla de Oro aplica a Trabajos en Altura',
+      texto: 'Indique qué Regla de Oro aplica a Trabajo en Altura',
       tipo: TipoPregunta.OPCIONES_IMAGEN,
       opciones: [
         'reglas-oro-image3.jpg',
@@ -1202,65 +1202,65 @@ export const PREGUNTAS: Record<string, PreguntaSeed[]> = {
       respuestaCorrecta: 'reglas-oro-image3.jpg',
     },
     {
-      texto: 'Ante una situación insegura, Suspender la Tarea. Es un derecho y una responsabilidad …',
+      texto: 'Ante una situación insegura, suspender la tarea es un derecho y una responsabilidad…',
       tipo: TipoPregunta.OPCION_MULTIPLE,
       opciones: [
-        '...Solo del Técnico de Seguridad',
-        '…de Todos',
-        '…Solo del Supervisor',
-        '… de la Operadora',
+        '…solo del Técnico de Seguridad',
+        '…de todos',
+        '…solo del Supervisor',
+        '…de la Operadora',
       ],
-      respuestaCorrecta: '…de Todos',
+      respuestaCorrecta: '…de todos',
     },
     {
-      texto: 'En un ESPACIO CONFINADO debo verificar y registrar las condiciones de la atmosfera mediante equipos de medición calibrados y personal competente',
+      texto: 'En un ESPACIO CONFINADO debo verificar y registrar las condiciones de la atmósfera mediante equipos de medición calibrados y personal competente.',
       tipo: TipoPregunta.VERDADERO_FALSO,
       respuestaCorrecta: 'Verdadero',
     },
     {
-      texto: 'En el proceso de AISLAMIENTO DE ENERGÍAS puedo intervenir el equipo sin comprobar el bloqueo de la fuente',
+      texto: 'En el proceso de AISLAMIENTO DE ENERGÍAS puedo intervenir el equipo sin comprobar el bloqueo de la fuente.',
       tipo: TipoPregunta.VERDADERO_FALSO,
       respuestaCorrecta: 'Falso',
     },
     {
-      texto: 'LÍNEA DE FUEGO: Lugar donde una persona (o parte de su cuerpo) puede ser impactada, golpeada o atravesada por objetos, materiales o cualquier tipo de energía que se libera repentinamente.',
+      texto: 'LÍNEA DE FUEGO: es el lugar donde una persona (o parte de su cuerpo) puede ser impactada, golpeada o atravesada por objetos, materiales o cualquier tipo de energía que se libera repentinamente.',
       tipo: TipoPregunta.VERDADERO_FALSO,
       respuestaCorrecta: 'Verdadero',
     },
     {
-      texto: 'PERMISO DE TRABAJO: Debe estar debidamente autorizado, identificado los peligros y salvaguardas correspondientes a cada paso de la tarea.',
+      texto: 'PERMISO DE TRABAJO: debe estar debidamente autorizado, con los peligros y las salvaguardas correspondientes identificados para cada paso de la tarea.',
       tipo: TipoPregunta.VERDADERO_FALSO,
       respuestaCorrecta: 'Verdadero',
     },
     {
-      texto: 'OPERACIONES DE IZADO: El equipo y los elementos de izaje deben tener certificación vigentes',
+      texto: 'OPERACIONES DE IZADO: el equipo y los elementos de izaje deben tener certificación vigente.',
       tipo: TipoPregunta.VERDADERO_FALSO,
       respuestaCorrecta: 'Verdadero',
     },
     {
-      texto: 'SEGURIDAD VIAL: Cumplir con las normas de Seguridad Vial solo dentro de los yacimientos',
+      texto: 'SEGURIDAD VIAL: hay que cumplir con las normas de Seguridad Vial solo dentro de los yacimientos.',
       tipo: TipoPregunta.VERDADERO_FALSO,
       respuestaCorrecta: 'Falso',
     },
     {
-      texto: 'TRABAJO EN ALTURA: El operario debe contar con la aptitud psicofísica, capacitaciones y entrenamiento para realizar tareas en altura.',
+      texto: 'TRABAJO EN ALTURA: el operario debe contar con la aptitud psicofísica, las capacitaciones y el entrenamiento para realizar tareas en altura.',
       tipo: TipoPregunta.VERDADERO_FALSO,
       respuestaCorrecta: 'Verdadero',
     },
     {
-      texto: 'MANEJO DEL CAMBIO: En una gestión de cambio se evalúa con el personal afectado a la tarea las nuevas condiciones, revisando los análisis de riegos realizados según la nueva condición',
+      texto: 'MANEJO DEL CAMBIO: en una gestión de cambio se evalúan las nuevas condiciones con el personal afectado a la tarea, revisando los análisis de riesgo realizados según la nueva condición.',
       tipo: TipoPregunta.VERDADERO_FALSO,
       respuestaCorrecta: 'Verdadero',
     },
     {
-      texto: 'AISLAMIENTO DE ENERGÍA: Es aislar todas las fuentes de energía identificadas, bloquear y etiquetar de modo de impedir el accionamiento de forma erronea.',
+      texto: 'AISLAMIENTO DE ENERGÍA: es aislar todas las fuentes de energía identificadas, bloquear y etiquetar de modo de impedir el accionamiento de forma errónea.',
       tipo: TipoPregunta.VERDADERO_FALSO,
       respuestaCorrecta: 'Verdadero',
     },
   ],
   'phoenix': [
     {
-      texto: 'Indique que Reglas que Salvan Vidas (RSV) aplica a Trabajos en Altura …',
+      texto: 'Indique cuál de las Reglas que Salvan Vidas (RSV) aplica a Trabajo en Altura.',
       tipo: TipoPregunta.OPCIONES_IMAGEN,
       opciones: [
         'phoenix-image5.jpg',
@@ -1270,22 +1270,22 @@ export const PREGUNTAS: Record<string, PreguntaSeed[]> = {
       respuestaCorrecta: 'phoenix-image5.jpg',
     },
     {
-      texto: 'La SEGURIDAD es un compromiso …',
+      texto: 'La SEGURIDAD es un compromiso…',
       tipo: TipoPregunta.OPCION_MULTIPLE,
       opciones: [
-        '...Solo del Técnico de Seguridad',
+        '…solo del Técnico de Seguridad',
         '…de todos',
-        '…Solo del Supervisor',
+        '…solo del Supervisor',
         '…solo de mi compañero',
       ],
       respuestaCorrecta: '…de todos',
     },
     {
-      texto: 'Quien PUEDE y DEBE aplicar las Reglas que Salvan Vidas (RSV)',
+      texto: '¿Quién PUEDE y DEBE aplicar las Reglas que Salvan Vidas (RSV)?',
       tipo: TipoPregunta.OPCION_MULTIPLE,
       opciones: [
         'Solo los Referentes de SSMAC',
-        'Solo los Supervisor',
+        'Solo los Supervisores',
         'Quien ejecuta el trabajo',
         'Todo el personal',
       ],
@@ -1293,31 +1293,31 @@ export const PREGUNTAS: Record<string, PreguntaSeed[]> = {
       imagen: 'phoenix-image18.jpg',
     },
     {
-      texto: 'Indicar de que regla se trata:',
+      texto: 'Indicar de qué regla se trata:',
       tipo: TipoPregunta.OPCION_MULTIPLE,
       opciones: [
         'Excavación',
         'Izaje',
-        'Conducción de vehículos',
+        'Conducción de Vehículos',
         'Equipamiento en movimiento',
       ],
-      respuestaCorrecta: 'Conducción de vehículos',
+      respuestaCorrecta: 'Conducción de Vehículos',
       imagen: 'phoenix-image9.jpg',
     },
     {
-      texto: 'Indique a que Reglas que Salvan Vidas (RSV) corresponde',
+      texto: 'Indique a cuál de las Reglas que Salvan Vidas (RSV) corresponde',
       tipo: TipoPregunta.OPCION_MULTIPLE,
       opciones: [
         'Trabajo en altura',
         'Permiso de trabajo',
         'Excavación',
-        'Línea de fuego',
+        'Línea de Fuego',
       ],
       respuestaCorrecta: 'Permiso de trabajo',
       imagen: 'phoenix-image7.jpg',
     },
     {
-      texto: 'Indique que Reglas que Salvan Vidas (RSV) corresponde a Excavación',
+      texto: 'Indique cuál de las Reglas que Salvan Vidas (RSV) corresponde a Excavación.',
       tipo: TipoPregunta.OPCIONES_IMAGEN,
       opciones: [
         'phoenix-image8.jpg',
@@ -1327,7 +1327,7 @@ export const PREGUNTAS: Record<string, PreguntaSeed[]> = {
       respuestaCorrecta: 'phoenix-image4.jpg',
     },
     {
-      texto: 'Indique que Reglas que Salvan Vidas (RSV) corresponde a Espacios Confiados',
+      texto: 'Indique cuál de las Reglas que Salvan Vidas (RSV) corresponde a Espacios Confinados.',
       tipo: TipoPregunta.OPCIONES_IMAGEN,
       opciones: [
         'phoenix-image6.jpg',
@@ -1337,7 +1337,7 @@ export const PREGUNTAS: Record<string, PreguntaSeed[]> = {
       respuestaCorrecta: 'phoenix-image8.jpg',
     },
     {
-      texto: 'Indique que Reglas que Salvan Vidas (RSV) corresponde a Trabajo en Caliente',
+      texto: 'Indique cuál de las Reglas que Salvan Vidas (RSV) corresponde a Trabajo en Caliente.',
       tipo: TipoPregunta.OPCIONES_IMAGEN,
       opciones: [
         'phoenix-image1.jpg',
@@ -1358,7 +1358,7 @@ export const PREGUNTAS: Record<string, PreguntaSeed[]> = {
       respuestaCorrecta: 'Todas las anteriores son correctas',
     },
     {
-      texto: 'En que recipiente debo disponer un residuo PLASTICO libre de hidrocarburo9.',
+      texto: '¿En qué recipiente debo disponer un residuo PLÁSTICO libre de hidrocarburo?',
       tipo: TipoPregunta.OPCIONES_IMAGEN,
       opciones: [
         'phoenix-image13.jpg',
@@ -1368,7 +1368,7 @@ export const PREGUNTAS: Record<string, PreguntaSeed[]> = {
       respuestaCorrecta: 'phoenix-image13.jpg',
     },
     {
-      texto: 'En que recipiente debo disponer un residuo BIODEGRADABLE (restos de comida, papel, cartón, maderas, etc.)',
+      texto: '¿En qué recipiente debo disponer un residuo BIODEGRADABLE (restos de comida, papel, cartón, madera, etc.)?',
       tipo: TipoPregunta.OPCIONES_IMAGEN,
       opciones: [
         'phoenix-image14.jpg',
@@ -1378,7 +1378,7 @@ export const PREGUNTAS: Record<string, PreguntaSeed[]> = {
       respuestaCorrecta: 'phoenix-image17.jpg',
     },
     {
-      texto: 'En que recipiente debo disponer un residuo de VIDRIO libre de hidrocarburo.',
+      texto: '¿En qué recipiente debo disponer un residuo de VIDRIO libre de hidrocarburo?',
       tipo: TipoPregunta.OPCIONES_IMAGEN,
       opciones: [
         'phoenix-image14.jpg',
@@ -1388,7 +1388,7 @@ export const PREGUNTAS: Record<string, PreguntaSeed[]> = {
       respuestaCorrecta: 'phoenix-image15.jpg',
     },
     {
-      texto: 'En que tacho debo disponer un residuo CONTAMINADOS CON HIDROCARBUROS',
+      texto: '¿En qué recipiente debo disponer un residuo CONTAMINADO CON HIDROCARBUROS?',
       tipo: TipoPregunta.OPCIONES_IMAGEN,
       opciones: [
         'phoenix-image14.jpg',
@@ -1398,7 +1398,7 @@ export const PREGUNTAS: Record<string, PreguntaSeed[]> = {
       respuestaCorrecta: 'phoenix-image11.jpg',
     },
     {
-      texto: 'En que recipiente debo disponer un residuos METALICOS limpios sin hidrocarburos (caños, electrodos, recortes de chapa, latas, etc.)',
+      texto: '¿En qué recipiente debo disponer los residuos METÁLICOS limpios, sin hidrocarburos (caños, electrodos, recortes de chapa, latas, etc.)?',
       tipo: TipoPregunta.OPCIONES_IMAGEN,
       opciones: [
         'phoenix-image14.jpg',
@@ -1408,7 +1408,7 @@ export const PREGUNTAS: Record<string, PreguntaSeed[]> = {
       respuestaCorrecta: 'phoenix-image14.jpg',
     },
     {
-      texto: 'Indique que Regla que Salvan Vidas (RSV) corresponde a Aislamiento de energía.',
+      texto: 'Indique cuál de las Reglas que Salvan Vidas (RSV) corresponde a Aislamiento de Energía.',
       tipo: TipoPregunta.OPCIONES_IMAGEN,
       opciones: [
         'phoenix-image9.jpg',
@@ -1418,7 +1418,7 @@ export const PREGUNTAS: Record<string, PreguntaSeed[]> = {
       respuestaCorrecta: 'phoenix-image6.jpg',
     },
     {
-      texto: 'Indique que Regla que Salvan Vidas (RSV) corresponde a Izaje.',
+      texto: 'Indique cuál de las Reglas que Salvan Vidas (RSV) corresponde a Izaje.',
       tipo: TipoPregunta.OPCIONES_IMAGEN,
       opciones: [
         'phoenix-image2.jpg',
@@ -1428,7 +1428,7 @@ export const PREGUNTAS: Record<string, PreguntaSeed[]> = {
       respuestaCorrecta: 'phoenix-image2.jpg',
     },
     {
-      texto: 'Indique que Regla que Salvan Vidas (RSV) corresponde a Conducción de Vehículos.',
+      texto: 'Indique cuál de las Reglas que Salvan Vidas (RSV) corresponde a Conducción de Vehículos.',
       tipo: TipoPregunta.OPCIONES_IMAGEN,
       opciones: [
         'phoenix-image9.jpg',
@@ -1438,7 +1438,7 @@ export const PREGUNTAS: Record<string, PreguntaSeed[]> = {
       respuestaCorrecta: 'phoenix-image9.jpg',
     },
     {
-      texto: 'Indique que Regla que Salvan Vidas (RSV) aplica a Línea de fuego.',
+      texto: 'Indique cuál de las Reglas que Salvan Vidas (RSV) aplica a Línea de Fuego.',
       tipo: TipoPregunta.OPCIONES_IMAGEN,
       opciones: [
         'phoenix-image1.jpg',
@@ -1448,7 +1448,7 @@ export const PREGUNTAS: Record<string, PreguntaSeed[]> = {
       respuestaCorrecta: 'phoenix-image3.jpg',
     },
     {
-      texto: 'Indique que Regla que Salvan Vidas (RSV) corresponde a Permiso de Trabajo',
+      texto: 'Indique cuál de las Reglas que Salvan Vidas (RSV) corresponde a Permiso de Trabajo.',
       tipo: TipoPregunta.OPCIONES_IMAGEN,
       opciones: [
         'phoenix-image1.jpg',
@@ -1458,103 +1458,103 @@ export const PREGUNTAS: Record<string, PreguntaSeed[]> = {
       respuestaCorrecta: 'phoenix-image7.jpg',
     },
     {
-      texto: 'Indique a que Reglas que Salvan Vidas (RSV) corresponde',
+      texto: 'Indique a cuál de las Reglas que Salvan Vidas (RSV) corresponde',
       tipo: TipoPregunta.OPCION_MULTIPLE,
       opciones: [
         'Trabajo en altura',
         'Izaje',
         'Excavación',
-        'Línea de fuego',
+        'Línea de Fuego',
       ],
       respuestaCorrecta: 'Izaje',
       imagen: 'phoenix-image2.jpg',
     },
     {
-      texto: 'Indique a que Reglas que Salvan Vidas (RSV) corresponde',
+      texto: 'Indique a cuál de las Reglas que Salvan Vidas (RSV) corresponde',
       tipo: TipoPregunta.OPCION_MULTIPLE,
       opciones: [
         'Trabajo en altura',
-        'Aislamiento de energía',
+        'Aislamiento de Energía',
         'Excavación',
-        'Línea de fuego',
+        'Línea de Fuego',
       ],
-      respuestaCorrecta: 'Aislamiento de energía',
+      respuestaCorrecta: 'Aislamiento de Energía',
       imagen: 'phoenix-image6.jpg',
     },
     {
-      texto: 'Indique a que Reglas que Salvan Vidas (RSV) corresponde',
+      texto: 'Indique a cuál de las Reglas que Salvan Vidas (RSV) corresponde',
       tipo: TipoPregunta.OPCION_MULTIPLE,
       opciones: [
         'Trabajo en altura',
-        'Línea de fuego',
+        'Línea de Fuego',
         'Excavación',
-        'Trabajo en caliente',
+        'Trabajo en Caliente',
       ],
-      respuestaCorrecta: 'Trabajo en caliente',
+      respuestaCorrecta: 'Trabajo en Caliente',
       imagen: 'phoenix-image1.jpg',
     },
     {
-      texto: 'Indique a que Reglas que Salvan Vidas (RSV) corresponde',
+      texto: 'Indique a cuál de las Reglas que Salvan Vidas (RSV) corresponde',
       tipo: TipoPregunta.OPCION_MULTIPLE,
       opciones: [
         'Trabajo en altura',
         'Permiso de trabajo',
         'Excavación',
-        'Línea de fuego',
+        'Línea de Fuego',
       ],
-      respuestaCorrecta: 'Línea de fuego',
+      respuestaCorrecta: 'Línea de Fuego',
       imagen: 'phoenix-image3.jpg',
     },
     {
-      texto: 'Indique a que Reglas que Salvan Vidas (RSV) corresponde',
+      texto: 'Indique a cuál de las Reglas que Salvan Vidas (RSV) corresponde',
       tipo: TipoPregunta.OPCION_MULTIPLE,
       opciones: [
         'Trabajo en altura',
         'Permiso de trabajo',
         'Excavación',
-        'Línea de fuego',
+        'Línea de Fuego',
       ],
       respuestaCorrecta: 'Trabajo en altura',
       imagen: 'phoenix-image5.jpg',
     },
     {
-      texto: 'Indique a que Reglas que Salvan Vidas (RSV) corresponde',
+      texto: 'Indique a cuál de las Reglas que Salvan Vidas (RSV) corresponde',
       tipo: TipoPregunta.OPCION_MULTIPLE,
       opciones: [
         'Trabajo en altura',
         'Permiso de trabajo',
         'Excavación',
-        'Línea de fuego',
+        'Línea de Fuego',
       ],
       respuestaCorrecta: 'Excavación',
       imagen: 'phoenix-image4.jpg',
     },
     {
-      texto: 'Indique a que Reglas que Salvan Vidas (RSV) corresponde',
+      texto: 'Indique a cuál de las Reglas que Salvan Vidas (RSV) corresponde',
       tipo: TipoPregunta.OPCION_MULTIPLE,
       opciones: [
         'Trabajo en altura',
-        'Espacio confinado',
+        'Espacio Confinado',
         'Excavación',
-        'Línea de fuego',
+        'Línea de Fuego',
       ],
-      respuestaCorrecta: 'Espacio confinado',
+      respuestaCorrecta: 'Espacio Confinado',
       imagen: 'phoenix-image8.jpg',
     },
     {
-      texto: 'Indique a que Reglas que Salvan Vidas (RSV) corresponde',
+      texto: 'Indique a cuál de las Reglas que Salvan Vidas (RSV) corresponde',
       tipo: TipoPregunta.OPCION_MULTIPLE,
       opciones: [
         'Trabajo en altura',
         'Permiso de trabajo',
-        'Barrera de control de riego',
-        'Línea de fuego',
+        'Barrera de control de riesgo',
+        'Línea de Fuego',
       ],
-      respuestaCorrecta: 'Barrera de control de riego',
+      respuestaCorrecta: 'Barrera de control de riesgo',
       imagen: 'phoenix-image10.jpg',
     },
     {
-      texto: 'Indique que Regla que Salvan Vidas (RSV) corresponde a Barrera de control de riesgo degradada.',
+      texto: 'Indique cuál de las Reglas que Salvan Vidas (RSV) corresponde a Barrera de control de riesgo degradada.',
       tipo: TipoPregunta.OPCIONES_IMAGEN,
       opciones: [
         'phoenix-image10.jpg',
@@ -1564,77 +1564,77 @@ export const PREGUNTAS: Record<string, PreguntaSeed[]> = {
       respuestaCorrecta: 'phoenix-image10.jpg',
     },
     {
-      texto: 'Las reglas que salvan vidas son requisitos mínimos necesarios a aplicar por la totalidad del personal que trabaja diariamente en las operaciones de Phoenix Global Resources (PGR), para facilitar la prevención de riesgos con consecuencias fatales o graves.',
+      texto: 'Las Reglas que Salvan Vidas son requisitos mínimos que debe aplicar la totalidad del personal que trabaja diariamente en las operaciones de Phoenix Global Resources (PGR), para facilitar la prevención de riesgos con consecuencias fatales o graves.',
       tipo: TipoPregunta.VERDADERO_FALSO,
       respuestaCorrecta: 'Verdadero',
     },
     {
-      texto: 'En el proceso de AISLAMIENTO DE ENERGIAS puedo intervenir el equipo sin comprobar el bloqueo de la fuente.',
+      texto: 'En el proceso de AISLAMIENTO DE ENERGÍAS puedo intervenir el equipo sin comprobar el bloqueo de la fuente.',
       tipo: TipoPregunta.VERDADERO_FALSO,
       respuestaCorrecta: 'Falso',
     },
     {
-      texto: 'Un ESPACIO CONFINADO es cualquier espacio con aberturas limitadas de entrada y salida y/o cuya ventilación natural sea o pueda ser desfavorable y que pueda contener productos peligrosos',
+      texto: 'Un ESPACIO CONFINADO es cualquier espacio con aberturas limitadas de entrada y salida, y/o cuya ventilación natural sea o pueda ser desfavorable, y que pueda contener productos peligrosos.',
       tipo: TipoPregunta.VERDADERO_FALSO,
       respuestaCorrecta: 'Verdadero',
     },
     {
-      texto: 'Un trabajo en Caliente es un trabajos que pueden producir una fuente de ignición de materiales inflamables o combustibles presentes en el entorno.',
+      texto: 'Un TRABAJO EN CALIENTE es un trabajo que puede producir una fuente de ignición de los materiales inflamables o combustibles presentes en el entorno.',
       tipo: TipoPregunta.VERDADERO_FALSO,
       respuestaCorrecta: 'Verdadero',
     },
     {
-      texto: 'Una Barrera de control de riesgos degradada, es aquella que por mal funcionamiento y/o deterioro no cumple la función para la cual fue diseñada, aumentando el riesgo de ocurrencia de un incidente mayor.',
+      texto: 'Una barrera de control de riesgos degradada es aquella que, por mal funcionamiento y/o deterioro, no cumple la función para la cual fue diseñada, aumentando el riesgo de ocurrencia de un incidente mayor.',
       tipo: TipoPregunta.VERDADERO_FALSO,
       respuestaCorrecta: 'Verdadero',
     },
     {
-      texto: 'Aislamiento de energía, es un sistema mediante el cual un equipo, instalación o proceso es aislado de modo efectivo de la fuente de energía que lo acciona.',
+      texto: 'El AISLAMIENTO DE ENERGÍA es un sistema mediante el cual un equipo, instalación o proceso es aislado de modo efectivo de la fuente de energía que lo acciona.',
       tipo: TipoPregunta.VERDADERO_FALSO,
       respuestaCorrecta: 'Verdadero',
     },
     {
-      texto: 'Quien tiene la responsabilidad de identificar claramente las medidas de control para prevenir y mitigar los riesgos.',
+      texto: '¿Quién tiene la responsabilidad de identificar claramente las medidas de control para prevenir y mitigar los riesgos?',
       tipo: TipoPregunta.OPCION_MULTIPLE,
       opciones: [
         'Solo los Referentes de SSMAC',
-        'Solo los Supervisor',
+        'Solo los Supervisores',
         'Quien ejecuta el trabajo',
         'Todo el personal',
       ],
       respuestaCorrecta: 'Todo el personal',
     },
     {
-      texto: 'Izaje: Operación que permite el levantamiento y suspensión de cargas de manera segura y controlada, mediante equipos aptos y habilitados para ese fin.',
+      texto: 'IZAJE: operación que permite el levantamiento y la suspensión de cargas de manera segura y controlada, mediante equipos aptos y habilitados para ese fin.',
       tipo: TipoPregunta.VERDADERO_FALSO,
       respuestaCorrecta: 'Verdadero',
     },
     {
-      texto: 'Conducción vehicular, es la acción del conductor para hacerlo funcionar de manera controlada, teniendo en cuenta la capacidades del vehículo y cumplimento las reglas que apliquen',
+      texto: 'La CONDUCCIÓN VEHICULAR es la acción del conductor para hacer funcionar el vehículo de manera controlada, teniendo en cuenta sus capacidades y cumpliendo las reglas que apliquen.',
       tipo: TipoPregunta.VERDADERO_FALSO,
       respuestaCorrecta: 'Verdadero',
     },
     {
-      texto: 'Línea de Fuego, es un área de proyección y contacto con partes de instalaciones, equipos, cargas, vehículos y maquinas',
+      texto: 'La LÍNEA DE FUEGO es un área de proyección y contacto con partes de instalaciones, equipos, cargas, vehículos y máquinas.',
       tipo: TipoPregunta.VERDADERO_FALSO,
       respuestaCorrecta: 'Verdadero',
     },
     {
-      texto: 'Trabajo en Altura, es toda tarea que involucre circular o trabajar a un nivel cuya diferencia de cota sea igual o mayor a 2 metros.',
+      texto: 'El TRABAJO EN ALTURA es toda tarea que involucre circular o trabajar a un nivel cuya diferencia de cota sea igual o mayor a 2 metros.',
       tipo: TipoPregunta.VERDADERO_FALSO,
       respuestaCorrecta: 'Verdadero',
     },
     {
-      texto: 'Excavación, es una cavidad o depresión en el terreno hecha por el hombre, ya sea en forma manual o mecánicas.',
+      texto: 'Una EXCAVACIÓN es una cavidad o depresión en el terreno hecha por el hombre, ya sea en forma manual o mecánica.',
       tipo: TipoPregunta.VERDADERO_FALSO,
       respuestaCorrecta: 'Verdadero',
     },
     {
-      texto: 'Quien PUEDE y DEBE aplicar la Autoridad para Detener una Tarea y revisar la actividad cunado se vulnere una o más Reglas que Salvan Vidas (RSV)',
+      texto: '¿Quién PUEDE y DEBE aplicar la Autoridad para Detener una Tarea y revisar la actividad cuando se vulnere una o más Reglas que Salvan Vidas (RSV)?',
       tipo: TipoPregunta.OPCION_MULTIPLE,
       opciones: [
         'Solo los Referentes de SSMAC',
-        'Solo los Supervisor',
+        'Solo los Supervisores',
         'Quien ejecuta el trabajo',
         'Todo el personal',
       ],
@@ -1646,7 +1646,7 @@ export const PREGUNTAS: Record<string, PreguntaSeed[]> = {
       respuestaCorrecta: 'Falso',
     },
     {
-      texto: 'Permanecer debajo de una carga suspendida no es considerado estar en la línea de fuego',
+      texto: 'Permanecer debajo de una carga suspendida no se considera estar en la línea de fuego.',
       tipo: TipoPregunta.VERDADERO_FALSO,
       respuestaCorrecta: 'Falso',
     },
@@ -1656,7 +1656,7 @@ export const PREGUNTAS: Record<string, PreguntaSeed[]> = {
       respuestaCorrecta: 'Verdadero',
     },
     {
-      texto: 'En trabajos en altura es obligatorio usar sistema de control de caídas y estar siempre conectado a un punto de anclaje apto.',
+      texto: 'En trabajos en altura es obligatorio usar un sistema de control de caídas y estar siempre conectado a un punto de anclaje apto.',
       tipo: TipoPregunta.VERDADERO_FALSO,
       respuestaCorrecta: 'Verdadero',
     },
@@ -1682,7 +1682,7 @@ export const PREGUNTAS: Record<string, PreguntaSeed[]> = {
       respuestaCorrecta: 'Verdadero',
     },
     {
-      texto: 'Ante cambios en las condiciones de trabajo, se debe detener la actividad y reevaluar',
+      texto: 'Ante cambios en las condiciones de trabajo se debe detener la actividad y reevaluar.',
       tipo: TipoPregunta.VERDADERO_FALSO,
       respuestaCorrecta: 'Verdadero',
     },
@@ -1692,12 +1692,12 @@ export const PREGUNTAS: Record<string, PreguntaSeed[]> = {
       respuestaCorrecta: 'Falso',
     },
     {
-      texto: 'El ATS no es necesario discutirlo o difundirlo en el frente de trabajo antes de comenzar las tareas.',
+      texto: 'No es necesario discutir ni difundir el ATS en el frente de trabajo antes de comenzar las tareas.',
       tipo: TipoPregunta.VERDADERO_FALSO,
       respuestaCorrecta: 'Falso',
     },
     {
-      texto: '¿Quien es el responsable de discutir el ATS con el personal que va a realizar la tarea y asegurarse de que se apliquen los controles necesarios antes y durante el desarrollo de la tarea?',
+      texto: '¿Quién es el responsable de discutir el ATS con el personal que va a realizar la tarea y de asegurarse de que se apliquen los controles necesarios antes y durante su desarrollo?',
       tipo: TipoPregunta.OPCION_MULTIPLE,
       opciones: [
         'Ref. SSMAC',
@@ -1708,7 +1708,7 @@ export const PREGUNTAS: Record<string, PreguntaSeed[]> = {
       respuestaCorrecta: 'Supervisor',
     },
     {
-      texto: 'Antes de comenzar una tarea el ATS debe ser revisado por el Supervisor y el personal involucrado en la tarea, llevando la firma de todos los involucrados en la tarea.',
+      texto: 'Antes de comenzar una tarea, el ATS debe ser revisado por el Supervisor y el personal involucrado, y llevar la firma de todos ellos.',
       tipo: TipoPregunta.VERDADERO_FALSO,
       respuestaCorrecta: 'Verdadero',
     },
