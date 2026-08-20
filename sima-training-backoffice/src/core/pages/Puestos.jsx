@@ -3,18 +3,9 @@ import Table from '../../components/Table'
 import Button from '../../components/Button'
 import Modal from '../../components/Modal'
 import { puestosApi } from '../api/puestos'
+import { normalizarTexto } from '../format/texto'
 
 const emptyForm = { nombre: '', activo: true }
-
-// Sin acentos y en minúsculas: el catálogo real está lleno de ellos (Albañil,
-// Cañista, Mecánico, Topografía) y nadie los tipea al buscar.
-//
-// Es una copia de la que tiene SearchableSelect, y a propósito: `components/`
-// es un kit de UI que hoy no importa NADA de la app (ni de `core/`), y esa
-// independencia vale más que ahorrar tres líneas. Si aparece un tercer
-// consumidor, ahí sí va a `core/format/`.
-const normalizar = (s) =>
-  (s ?? '').normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().trim()
 
 export default function Puestos() {
   const [puestos, setPuestos] = useState([])
@@ -98,12 +89,12 @@ export default function Puestos() {
   // filas, mandar un request por tecla sería trabajo de más para el mismo
   // resultado.
   const visibles = useMemo(() => {
-    const q = normalizar(search)
+    const q = normalizarTexto(search)
     if (!q) return puestos
-    return puestos.filter((p) => normalizar(p.nombre).includes(q))
+    return puestos.filter((p) => normalizarTexto(p.nombre).includes(q))
   }, [puestos, search])
 
-  const filtrando = normalizar(search) !== ''
+  const filtrando = normalizarTexto(search) !== ''
 
   const columns = [
     { key: 'nombre', label: 'Nombre' },
@@ -124,7 +115,7 @@ export default function Puestos() {
         <div>
           <h2 className="text-slate-900 font-bold text-xl">Puestos</h2>
           {/* Con búsqueda activa el contador dice cuántos de cuántos: si sólo
-              dijera el total filtrado, "3 puestos registrados" seria mentira. */}
+              dijera el total filtrado, "3 puestos registrados" sería mentira. */}
           <p className="text-slate-400 text-sm">
             {loading
               ? 'Cargando…'
