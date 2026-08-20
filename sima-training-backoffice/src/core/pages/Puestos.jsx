@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Table from '../../components/Table'
 import Button from '../../components/Button'
 import Modal from '../../components/Modal'
@@ -6,10 +6,21 @@ import { puestosApi } from '../api/puestos'
 
 const emptyForm = { nombre: '', activo: true }
 
+// Sin acentos y en minúsculas: el catálogo real está lleno de ellos (Albañil,
+// Cañista, Mecánico, Topografía) y nadie los tipea al buscar.
+//
+// Es una copia de la que tiene SearchableSelect, y a propósito: `components/`
+// es un kit de UI que hoy no importa NADA de la app (ni de `core/`), y esa
+// independencia vale más que ahorrar tres líneas. Si aparece un tercer
+// consumidor, ahí sí va a `core/format/`.
+const normalizar = (s) =>
+  (s ?? '').normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().trim()
+
 export default function Puestos() {
   const [puestos, setPuestos] = useState([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(null)
+  const [search, setSearch] = useState('')
 
   const [modal, setModal] = useState(null) // null | { mode: 'create'|'edit', data }
   const [form, setForm] = useState(emptyForm)
@@ -81,6 +92,19 @@ export default function Puestos() {
     }
   }
 
+  // Filtra en MEMORIA y no contra la API: `GET /puestos` no acepta ningún `?q=`
+  // y el catálogo entero ya está cargado igual (hace falta completo para el
+  // contador y para poder seguir nombrando un puesto dado de baja). Con 90
+  // filas, mandar un request por tecla sería trabajo de más para el mismo
+  // resultado.
+  const visibles = useMemo(() => {
+    const q = normalizar(search)
+    if (!q) return puestos
+    return puestos.filter((p) => normalizar(p.nombre).includes(q))
+  }, [puestos, search])
+
+  const filtrando = normalizar(search) !== ''
+
   const columns = [
     { key: 'nombre', label: 'Nombre' },
     {
@@ -99,8 +123,14 @@ export default function Puestos() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-slate-900 font-bold text-xl">Puestos</h2>
+          {/* Con búsqueda activa el contador dice cuántos de cuántos: si sólo
+              dijera el total filtrado, "3 puestos registrados" seria mentira. */}
           <p className="text-slate-400 text-sm">
-            {loading ? 'Cargando…' : `${puestos.length} puesto${puestos.length !== 1 ? 's' : ''} registrados`}
+            {loading
+              ? 'Cargando…'
+              : filtrando
+                ? `${visibles.length} de ${puestos.length} puesto${puestos.length !== 1 ? 's' : ''}`
+                : `${puestos.length} puesto${puestos.length !== 1 ? 's' : ''} registrados`}
           </p>
         </div>
         <Button onClick={openCreate} disabled={loading || !!loadError}>+ Nuevo puesto</Button>
@@ -114,9 +144,25 @@ export default function Puestos() {
       )}
 
       {!loadError && (
+        <div className="flex items-center gap-2">
+          <input
+            className="bg-white border border-slate-300 rounded px-3 py-2 text-slate-900 text-sm focus:outline-none focus:border-red-600 min-w-[280px]"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Buscar puesto..."
+          />
+          {filtrando && (
+            <Button variant="ghost" size="sm" onClick={() => setSearch('')}>
+              Limpiar
+            </Button>
+          )}
+        </div>
+      )}
+
+      {!loadError && (
         <Table
           columns={columns}
-          data={puestos}
+          data={visibles}
           actions={(row) => (
             <>
               <Button variant="ghost" size="sm" onClick={() => openEdit(row)}>Editar</Button>
