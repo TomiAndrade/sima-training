@@ -21,7 +21,11 @@ export default function QuestionCard({ question, selectedAnswer, onSelect }) {
 
   return (
     <div className="space-y-4">
-      <p className="text-slate-900 text-2xl font-semibold leading-snug">{question.texto}</p>
+      {/* whitespace-pre-line: hay enunciados que enumeran pasos en líneas
+          aparte (las 5 reglas de oro para trabajo sin tensión, la regla de las
+          cuatro "M", las cuatro prohibiciones del vehículo). Sin esto los saltos
+          de línea se colapsan y quedan como un párrafo corrido. */}
+      <p className="text-slate-900 text-2xl font-semibold leading-snug whitespace-pre-line">{question.texto}</p>
       {question.imagen && (
         <div className="rounded-xl overflow-hidden border border-slate-200 bg-slate-50">
           <img src={resolverImagenUrl(question.imagen.url)} alt="Imagen de referencia" className="w-full max-h-64 object-contain" />
