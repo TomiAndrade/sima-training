@@ -62,6 +62,14 @@ Sin eso la única señal sería el 409 al tocar el botón, o sea descubrir el bl
 
 La regla la decide siempre el backend: `sima-check-app/src/core/reintentos.js` sólo traduce ese objeto a texto.
 
+### Reintentar es sólo para quien desaprobó, y esa regla es del FRONTEND
+
+La pantalla de Resultado no ofrece "Reintentar evaluación" cuando la sesión salió aprobada. Es la única regla de reintentos que **no** viene del backend, y conviene tener claro por qué: el backend lo dejaría pasar. `reintentos.ts` resetea el contador de intentos justo **al aprobar**, así que después de una aprobación `puedeRendir` vuelve a ser `true` y el 409 nunca llegaría.
+
+No es una restricción de permisos, entonces, sino de sentido: aprobado, el módulo ya salió de `pendientes()` (que filtra los `modulosAprobados`), así que el botón era el único camino de vuelta a un examen que ya no hay que rendir. Y lo único que lograba era sumarle sesiones al historial de la persona y darle la chance de "desaprobar" algo que ya tenía aprobado — cosa que además no cambiaría nada, porque la asignación se cumple con la primera aprobación y `Asignacion.moduloVersionId` ya quedó completo.
+
+Vive en el frontend y no como un 409 más porque **no hay nada que proteger**: registrar una rendición extra no rompe ningún invariante, sólo ensucia. Bloquearlo en el backend, en cambio, sí rompería algo — el modo offline, donde una sesión legítima puede llegar horas tarde y después de otra que ya aprobó.
+
 ### Imágenes como `{ clave, url }`, con `url` relativa
 
 La app muestra `url` y manda `clave` de vuelta como respuesta; `corregir.ts` compara esa clave cruda, nunca la URL armada (hay un spec que lo fija).
