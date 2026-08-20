@@ -33,16 +33,17 @@ const PAGES = {
 const PAGE_IDS = Object.keys(PAGES)
 
 export default function App() {
-  const { page, sub, navigate, setSub } = useNavigation('dashboard', PAGE_IDS)
+  const { page, sub, navigate, setSub, replaceSub } = useNavigation('dashboard', PAGE_IDS)
   const PageComponent = PAGES[page] ?? Dashboard
 
   return (
     <BackofficeLayout page={page} navigate={navigate}>
-      {/* `sub`/`setSub` son el tramo del hash que sigue a la página
-          (`#usuarios/historial/42`). Sólo lo usan las pantallas con una
-          sub-vista que vale la pena sobrevivir a un F5 — hoy Usuarios; el
-          resto los ignora. */}
-      <PageComponent navigate={navigate} sub={sub} setSub={setSub} />
+      {/* `sub` es el tramo del hash que sigue a la página, y se usa para dos
+          cosas distintas: una sub-vista que vale la pena sobrevivir a un F5
+          (`#usuarios/historial/42`, con `setSub`) y una intención de entrada que
+          la pantalla consume al montar (`#questions/base/<id>/nivel/<id>`, con
+          `replaceSub`). El resto de las pantallas los ignora. */}
+      <PageComponent navigate={navigate} sub={sub} setSub={setSub} replaceSub={replaceSub} />
     </BackofficeLayout>
   )
 }

@@ -16,7 +16,18 @@ const inputCls =
 
 const emptyForm = { nombre: '', codigo: '', descripcion: '', fuente: '', activa: true }
 
-export default function BasesConocimiento() {
+// Salto a la pantalla Preguntas con el filtro de clasificación ya puesto. El
+// sub viaja etiquetado (`base/<id>` y opcionalmente `nivel/<id>`) y lo consume
+// Questions.jsx al montar; ver filtroDeEntrada() allá.
+//
+// Es navegación y no un filtro compartido entre pantallas a propósito: Bases
+// responde "qué temas hay y cómo están escalonados" y Preguntas "qué hay
+// adentro". Sin esto, para ver las 63 del nivel Básico había que ir a
+// Preguntas y volver a elegir base y nivel a mano en dos selects encadenados.
+const irAPreguntas = (navigate, baseId, nivelId) =>
+  navigate('questions', nivelId ? ['base', baseId, 'nivel', nivelId] : ['base', baseId])
+
+export default function BasesConocimiento({ navigate }) {
   const [bases, setBases] = useState([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(null)
@@ -154,6 +165,7 @@ export default function BasesConocimiento() {
               onEdit={() => openEdit(base)}
               onToggleActiva={() => toggleActiva(base)}
               onChanged={loadData}
+              onVerPreguntas={(nivelId) => irAPreguntas(navigate, base.id, nivelId)}
             />
           ))}
         </div>
@@ -248,7 +260,7 @@ export default function BasesConocimiento() {
 }
 
 // Fila colapsable: cabecera con los datos de la base, y adentro su escala.
-function BaseCard({ base, abierta, onToggleAbierta, onEdit, onToggleActiva, onChanged }) {
+function BaseCard({ base, abierta, onToggleAbierta, onEdit, onToggleActiva, onChanged, onVerPreguntas }) {
   const niveles = base.niveles ?? []
   const totalPreguntas = base._count?.preguntas ?? 0
 
@@ -285,6 +297,18 @@ function BaseCard({ base, abierta, onToggleAbierta, onEdit, onToggleActiva, onCh
         </button>
 
         <div className="flex items-center gap-2 flex-shrink-0">
+          {/* Va como Button aparte y no como link sobre el contador del
+              subtítulo porque ese contador vive DENTRO del botón que despliega
+              la base: un <button> anidado en otro es HTML inválido. */}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => onVerPreguntas()}
+            disabled={totalPreguntas === 0}
+            title={totalPreguntas === 0 ? 'Esta base todavía no tiene preguntas' : 'Ver estas preguntas en el banco'}
+          >
+            Ver preguntas
+          </Button>
           <Button variant="ghost" size="sm" onClick={onEdit}>
             Editar
           </Button>
@@ -299,7 +323,7 @@ function BaseCard({ base, abierta, onToggleAbierta, onEdit, onToggleActiva, onCh
           {base.descripcion && (
             <p className="text-slate-500 text-xs mb-3 max-w-3xl">{base.descripcion}</p>
           )}
-          <EscalaNiveles base={base} onChanged={onChanged} />
+          <EscalaNiveles base={base} onChanged={onChanged} onVerPreguntas={onVerPreguntas} />
         </div>
       )}
     </div>
@@ -309,7 +333,7 @@ function BaseCard({ base, abierta, onToggleAbierta, onEdit, onToggleActiva, onCh
 // Escala de dificultad de una base. Reordenar manda SIEMPRE la lista completa:
 // el backend reindexa todo de una porque el índice único (base, orden) no
 // tolera movimientos parciales.
-function EscalaNiveles({ base, onChanged }) {
+function EscalaNiveles({ base, onChanged, onVerPreguntas }) {
   const [nuevo, setNuevo] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
@@ -416,10 +440,23 @@ function EscalaNiveles({ base, onChanged }) {
             ) : (
               <>
                 <span className="flex-1 text-slate-800 text-sm">{nivel.nombre}</span>
-                <span className="text-slate-400 text-xs">
-                  {nivel._count?.preguntas ?? 0} pregunta
-                  {(nivel._count?.preguntas ?? 0) !== 1 ? 's' : ''}
-                </span>
+                {/* El contador ES el link: es lo que el ojo ya está mirando
+                    para saber cuántas hay, así que sumarle un botón "Ver" al
+                    lado sería un control de más para la misma pregunta. Con
+                    cero preguntas queda como texto plano — un link que lleva a
+                    una lista vacía es sólo una decepción. */}
+                {(nivel._count?.preguntas ?? 0) > 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => onVerPreguntas(nivel.id)}
+                    title={`Ver las preguntas de ${base.nombre} · ${nivel.nombre} en el banco`}
+                    className="text-slate-500 hover:text-red-600 text-xs underline decoration-dotted underline-offset-2 transition-colors"
+                  >
+                    {nivel._count.preguntas} pregunta{nivel._count.preguntas !== 1 ? 's' : ''}
+                  </button>
+                ) : (
+                  <span className="text-slate-400 text-xs">0 preguntas</span>
+                )}
                 <div className="flex items-center gap-1 flex-shrink-0">
                   <button
                     onClick={() => mover(i, -1)}

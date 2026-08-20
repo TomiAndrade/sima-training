@@ -88,14 +88,40 @@ export default function useNavigation(inicial, paginasValidas) {
     window.location.hash = construirHash(page, sub);
   };
 
-  // Ir a una página **limpia el sub**: tocar "Usuarios" en el sidebar lleva al
-  // listado, no a la sub-vista que hubiera quedado abierta.
-  const navigate = (p) => escribir(normalizar(p), []);
+  // Ir a una página **limpia el sub** por default: tocar "Usuarios" en el
+  // sidebar lleva al listado, no a la sub-vista que hubiera quedado abierta.
+  // El segundo parámetro es para el caso contrario —saltar a otra pantalla
+  // llevándole un dato—, como el "Ver preguntas" de Bases, que abre Preguntas
+  // ya filtrada por esa base y nivel. Sin esto habría que hacer navigate() y
+  // después setSub(), que son dos escrituras del hash y dos entradas en el
+  // historial para un solo salto.
+  const navigate = (p, sub = []) => escribir(normalizar(p), sub);
 
   // Abre/cierra una sub-vista **dentro** de la página actual, agregando una
   // entrada al historial: por eso "atrás" sale del historial de una persona y
   // vuelve al listado, en vez de saltar a la pantalla anterior.
   const setSub = (sub) => escribir(ruta.page, sub);
 
-  return { page: ruta.page, sub: ruta.sub, navigate, setSub };
+  // Igual que setSub pero SIN agregar una entrada al historial. Es para los sub
+  // que son una **intención de entrada** y no un lugar: el `base/<id>/nivel/<id>`
+  // con el que Bases abre Preguntas se aplica al montar y se consume — desde ahí
+  // la pantalla se comporta igual que si hubieras entrado por el sidebar, y el
+  // filtro que quede en pantalla es el que dice el select, no el que quedó
+  // congelado en la URL.
+  //
+  // Es la ÚNICA función que escribe el estado a mano en vez de dejar que lo
+  // haga el hashchange, y por eso vale la excepción a "el hash es la única
+  // fuente de verdad": replaceState no dispara hashchange, así que sin el
+  // setRuta el estado quedaría con el sub viejo. No desincroniza el botón
+  // "atrás" —que es lo que esa regla protege— justamente porque reemplaza en
+  // vez de apilar: la entrada del historial sigue siendo la de la pantalla
+  // anterior.
+  const replaceSub = (sub) => {
+    const canonico = construirHash(ruta.page, sub);
+    if (window.location.hash.replace(/^#/, '') === canonico) return;
+    window.history.replaceState(null, '', `#${canonico}`);
+    setRuta({ page: ruta.page, sub });
+  };
+
+  return { page: ruta.page, sub: ruta.sub, navigate, setSub, replaceSub };
 }
