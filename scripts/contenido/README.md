@@ -43,6 +43,23 @@ imagen son inaccesibles.
 | `geometria.py` | los recortes `srcRect` que Excel le aplica a cada imagen |
 | `generar.py` | orquesta, recorta y deduplica las imágenes, aplica las correcciones a mano y emite el `.ts` |
 | `catalogos.py` | el otro Excel: puestos y "Dependencia" (= centro de costo) de la nómina, **sin** las personas |
+| `correcciones.py` | los datos de las correcciones de ortografía y redacción (ver abajo) |
+
+## Las correcciones de texto
+
+`correcciones.py` es un mapa de **cadena completa** → cadena corregida, más un
+puñado de correcciones por pregunta para lo que depende del contexto. Se aplica
+igual al enunciado, a las opciones y a la respuesta correcta, que es lo que
+impide que una opción y su respuesta correcta se desincronicen.
+
+`generar.py` aborta si una clave del mapa no matchea nada (clave mal tipeada:
+la corrección se perdería en silencio) o si, después de corregir, la respuesta
+correcta de alguna pregunta dejó de estar entre sus opciones.
+
+⚠️ Regenerar cambia el `.ts`, pero **no toca la base**. Si ya hay preguntas
+sembradas con usuarios y rendiciones encima, re-correr el seed las borraría:
+en ese caso hay que actualizar el texto de las filas existentes emparejándolas
+con la versión previa del archivo generado (`git show HEAD:...`).
 
 ## No confundir con `sima-training-api/scripts/demo/`
 

@@ -191,6 +191,20 @@ Están en el `CORRECCIONES` de `scripts/contenido/generar.py`, con el porqué al
 | Reglas de Oro #4 | Tiene **dos** opciones pintadas de verde ("Trabajo en altura" y "Permiso de trabajo") y dos imágenes de enunciado que no se corresponden entre sí | Se deja "Trabajo en altura" con la imagen de trabajo en altura, y se descarta la de excavaciones |
 | Reglas de Oro #1 | El enunciado arrastra la tira de los diez pictogramas de portada | Se descartan: son decoración del Excel, no la imagen de esa pregunta |
 
+### El texto se corrige en el GENERADOR, no en el archivo generado
+
+Los Excel se escribieron a mano y arrastran erratas ("broce" por bronce, "cunado" por cuando, "Espacios Confiados" por Confinados, "un residuos METALICOS limpios"), faltas de acento y signos de interrogación que no están. Es contenido que se muestra en una tablet a personal de clientes de Oil & Gas, así que se corrige — pero **en `scripts/contenido/correcciones.py`**, no editando `preguntas-sima-check.ts`, que dice "no editar a mano" y se pisa en la próxima regeneración.
+
+Qué se corrige: ortografía, acentuación, concordancia y redacciones que no se entienden. Qué **no**: la terminología del cliente. "Reglas que Salvan Vidas", "Ref. SSMAC" y "tacho" quedan como están.
+
+Tres decisiones del mecanismo:
+
+- **Es un mapa de cadena COMPLETA, no reemplazos de palabra.** Un reemplazo de palabra ("que" → "qué") es imposible de acotar sin romper la media docena de frases donde ese "que" no es interrogativo. Escribir la cadena entera es más largo pero deja ver exactamente cómo queda cada pregunta.
+- **El MISMO mapa se aplica al enunciado, a las opciones y a la respuesta correcta.** En `OPCION_MULTIPLE` la correcta *es* una de las opciones, comparada por igualdad de string. Corregir la opción y no la respuesta dejaría la pregunta sin ninguna correcta y **nadie podría aprobarla** — y no se notaría hasta que alguien la rindiera. Con el mismo mapa las dos reciben la misma corrección y no se pueden desincronizar; encima el generador valida que la correcta siga entre las opciones y aborta si no.
+- **Una clave que no matchea nada aborta la generación.** Es el único síntoma de una clave mal tipeada: sin ese chequeo, la corrección se perdería en silencio y el texto viejo seguiría publicado.
+
+Hay además un puñado de correcciones **por pregunta** (`CORRECCIONES_POR_PREGUNTA`), para lo que depende del contexto: `"del Supervisor"` está bien como respuesta a *"…es responsabilidad…"* y mal como respuesta a *"¿Quién debe asegurarse…?"*, así que la misma cadena no puede corregirse igual en todos lados. La clave es `(slug, posición dentro del módulo)` — **la posición, no el `n` del Excel**, porque el Intermedio numera 1..24 y después 31 dos veces.
+
 ### El generador se versiona aunque los Excel no
 
 Los Excel **no entran al repo**: el archivo hermano de nómina lleva PII (legajo, DNI y nombre de 530 empleados) y el `.gitignore` bloquea `docs/*.xlsx` entero. Lo versionado es la **salida** — `prisma/seed-data/preguntas-sima-check.ts` y las 73 imágenes de `prisma/seed-assets/preguntas/` — más los scripts que la producen, en `scripts/contenido/`.
