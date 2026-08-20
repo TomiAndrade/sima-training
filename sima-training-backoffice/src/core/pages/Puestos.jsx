@@ -85,7 +85,7 @@ export default function Puestos() {
 
   // Filtra en MEMORIA y no contra la API: `GET /puestos` no acepta ningún `?q=`
   // y el catálogo entero ya está cargado igual (hace falta completo para el
-  // contador y para poder seguir nombrando un puesto dado de baja). Con 90
+  // contador y para poder seguir nombrando un puesto dado de baja). Con 88
   // filas, mandar un request por tecla sería trabajo de más para el mismo
   // resultado.
   const visibles = useMemo(() => {

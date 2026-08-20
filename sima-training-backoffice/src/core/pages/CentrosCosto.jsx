@@ -86,7 +86,7 @@ export default function CentrosCosto() {
   // Mismo criterio que Puestos: filtra en MEMORIA porque `GET /centros-costo`
   // no acepta ningún `?q=` y el catálogo entero ya está cargado igual.
   //
-  // Acá son 19 filas y no 90, así que el buscador no lo pide el tamaño: lo pide
+  // Acá son 16 filas y no 88, así que el buscador no lo pide el tamaño: lo pide
   // la CONSISTENCIA. Son dos pantallas gemelas, y que en una se pueda buscar y
   // en la otra no se lee como que algo falta, no como una decisión.
   const visibles = useMemo(() => {

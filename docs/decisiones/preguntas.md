@@ -207,7 +207,7 @@ Hay además un puñado de correcciones **por pregunta** (`CORRECCIONES_POR_PREGU
 
 ### El generador se versiona aunque los Excel no
 
-Los Excel **no entran al repo**: el archivo hermano de nómina lleva PII (legajo, DNI y nombre de 530 empleados) y el `.gitignore` bloquea `docs/*.xlsx` entero. Lo versionado es la **salida** — `prisma/seed-data/preguntas-sima-check.ts` y las 73 imágenes de `prisma/seed-assets/preguntas/` — más los scripts que la producen, en `scripts/contenido/`.
+Los Excel **no entran al repo**: el archivo hermano de nómina lleva PII (legajo, DNI y nombre de 264 empleados) y el `.gitignore` bloquea `docs/*.xlsx` entero. Lo versionado es la **salida** — `prisma/seed-data/preguntas-sima-check.ts` y las 73 imágenes de `prisma/seed-assets/preguntas/` — más los scripts que la producen, en `scripts/contenido/`.
 
 Los scripts se versionan igual sin poder correr en un clone limpio, y no es contradictorio: son la **explicación ejecutable** de las convenciones de arriba. Un archivo generado de 1700 líneas sin el generador al lado no dice de dónde salió ni qué significa el verde, y la próxima revisión de los Excel arrancaría de cero.
 

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Genera prisma/seed-data/catalogos-nomina.ts desde el Excel de nomina.
 
-Solo se lleva los CATALOGOS (nombres de puestos y de centros de costo). Los 530
+Solo se lleva los CATALOGOS (nombres de puestos y de centros de costo). Los 264
 empleados con nombre y DNI NO se tocan: son PII y los carga el admin desde el
 import de Excel del backoffice.
 """
@@ -19,7 +19,7 @@ CABECERA = """// ARCHIVO GENERADO — no editar a mano.
 // valores distintos de la columna "Dependencia" de la hoja de nómina (que es
 // como la empresa llama a lo que acá es centro de costo).
 //
-// Del Excel de nómina se lleva SOLO esto. Las 530 filas de personas —legajo,
+// Del Excel de nómina se lleva SOLO esto. Las 264 filas de personas —legajo,
 // DNI y apellido y nombre— son PII y no entran a ningún archivo versionado:
 // se cargan desde el import de Excel del backoffice.
 
