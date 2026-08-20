@@ -3,8 +3,14 @@
 #   1. Crear cuenta en Render y conectar el repo de GitHub.
 #   2. Render detecta este render.yaml y provisiona el servicio web + la base Postgres.
 #   3. La variable DATABASE_URL se inyecta automáticamente desde la base gestionada.
-#   4. Setear JWT_SECRET y las 4 variables R2_* como secretos en el dashboard
-#      de Render (ver .env.example para de dónde sale cada una).
+#   4. Setear JWT_SECRET, AUTH_PASSWORD y las 4 variables R2_* como secretos en
+#      el dashboard de Render (ver .env.example para de dónde sale cada una).
+#
+# AUTH_USER y AUTH_PASSWORD son las credenciales del backoffice (Sprint 1: login
+# contra entorno, sin roles). Van acá y no sólo en el dashboard porque
+# auth.service.ts compara el login contra ellas directo: sin setear, el valor
+# esperado es undefined y TODO intento de login responde 401 — el servicio
+# levanta sano y no entra nadie, que es la peor forma de fallar.
 #
 # STORAGE_DRIVER=r2 va FIJO acá, no como default en el código: el contenedor
 # de Render es efímero (sin disco persistente en el plan free), así que un
@@ -29,6 +35,10 @@ services:
           name: sima-training-db
           property: connectionString
       - key: JWT_SECRET
+        sync: false
+      - key: AUTH_USER
+        value: 'admin@sima.com'
+      - key: AUTH_PASSWORD
         sync: false
       - key: CORS_ORIGINS
         value: 'http://localhost:5173,http://localhost:5174'
