@@ -8,7 +8,7 @@
 // preguntas clasificadas por tema y dificultad — para que crear el módulo sea
 // elegir un criterio y ver cómo se llena solo.
 //
-// Reusa los services de Nest (mismo criterio que `sembrarDemo()`): así corren
+// Reusa los services de Nest (mismo criterio que `sembrarSimaCheck()`): así corren
 // `resolverFuente` (que copia la fuente de la base y la congela en cada
 // pregunta) y el appendeo de `orden` de los niveles, en vez de saltearlos con
 // inserts crudos.

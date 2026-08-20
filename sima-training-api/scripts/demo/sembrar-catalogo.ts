@@ -10,7 +10,7 @@
 // script sobra.
 //
 // Reusa los services de Nest en vez de escribir con Prisma directo, mismo
-// criterio que `sembrarDemo()`: un insert crudo se saltea las validaciones que
+// criterio que `sembrarSimaCheck()`: un insert crudo se saltea las validaciones que
 // viven en el service (acá, la unicidad de nombre).
 //
 // Es idempotente: los que ya existen se saltean. Nada se borra — el catálogo es

@@ -1,13 +1,17 @@
+// Type-only: se borra al compilar, no arrastra Nest al runtime del seed base.
+import type { INestApplicationContext } from '@nestjs/common';
 import {
   OrigenPregunta,
   PrismaClient,
-  RolUsuario,
   TipoOrganizacion,
   TipoPregunta,
 } from '@prisma/client';
-// `import type` se borra al compilar: el tipo del DTO no arrastra a src/ al
-// runtime del seed base (ver el import dinámico de sembrarDemo).
-import type { CreatePreguntaDto } from '../src/preguntas/dto/create-pregunta.dto';
+// Los dos son datos GENERADOS desde los Excel de docs/ (ver la cabecera de cada
+// archivo). Son data pura, sin dependencias de src/: importarlos estáticamente
+// no arrastra Nest al seed base, a diferencia de los services, que siguen
+// entrando por import dinámico dentro de sembrarSimaCheck().
+import { CENTROS_COSTO, PUESTOS } from './seed-data/catalogos-nomina';
+import { PREGUNTAS } from './seed-data/preguntas-sima-check';
 
 const prisma = new PrismaClient();
 
@@ -16,9 +20,10 @@ const prisma = new PrismaClient();
 // "Limpiar usuarios mockeados" — quedaban persistidos en la base y ensuciaban las
 // pruebas de las siguientes stories de usuarios).
 //
-// El escenario de demo navegable (organizaciones, alumnos, banco clasificado,
-// módulo publicado y asignaciones) NO va acá: vive detrás de SEED_DEMO=true.
-// Ver sembrarDemo() al final del archivo.
+// El contenido de SIMA CHECK (catálogos de nómina, bases con su escala, las
+// 202 preguntas con sus imágenes, los cinco módulos publicados y las reglas de
+// asignación) NO va acá: vive detrás de SEED_SIMA_CHECK=true. Ver
+// sembrarSimaCheck() al final del archivo.
 
 // El seed base NO siembra módulos. Sembraba cuatro (`SIMA Básico`/`Intermedio`/
 // `Avanzado`/`Reglas de Oro`) con uuid fijo, que eran la contraparte real del
@@ -26,8 +31,8 @@ const prisma = new PrismaClient();
 // referenciaba por `backendId`. Ese campo ya no existe (la pantalla Módulos es
 // 100% backend), así que los cuatro quedaron como filas vacías que aparecen al
 // lado de cualquier módulo que se cree de verdad. El módulo es contenido, no
-// estructura: lo crea quien lo necesita — el escenario de demo el suyo
-// (`sembrarDemo`), y el admin los de producción desde el backoffice.
+// estructura: lo crea quien lo necesita — `sembrarSimaCheck` los cinco reales,
+// y el admin los suyos desde el backoffice.
 
 // Limpieza en orden de dependencia. TODAS las FK del schema son ON DELETE
 // RESTRICT salvo dos (ver abajo), así que hay que ir siempre de las hijas a las
@@ -46,7 +51,7 @@ const prisma = new PrismaClient();
 //                        o sea que bloquea las tres ramas de acá abajo, incluida
 //                        la de asignaciones, que hasta ahora arrancaba el orden.
 //                        Respuesta cuelga de Sesion y de Pregunta, así que además
-//                        desbloquea el pregunta.deleteMany() de limpiarDemo().
+//                        desbloquea el pregunta.deleteMany() de limpiarSimaCheck().
 //
 // Las dos FK que NO son RESTRICT: Asignacion.moduloVersionId (SET NULL) y la
 // self-FK Organizacion.organizacionPadreId (SET NULL, verificado en el SQL de
@@ -67,9 +72,10 @@ async function limpiar() {
 
   // Dos pasos: primero las hijas de la jerarquía, después el resto. La self-FK
   // es ON DELETE SET NULL, así que un deleteMany() único probablemente
-  // funcionaría — pero el demo introduce el primer par padre/hija que este seed
-  // haya tenido, y no vale la pena depender de cómo Postgres resuelve la acción
-  // RI sobre una fila que el mismo statement está borrando.
+  // funcionaría — pero en cuanto haya una organización con padre (cliente →
+  // subcontratista, que es el caso normal en producción) no vale la pena
+  // depender de cómo Postgres resuelve la acción RI sobre una fila que el mismo
+  // statement está borrando.
   await prisma.organizacion.deleteMany({
     where: { organizacionPadreId: { not: null } },
   });
@@ -78,10 +84,10 @@ async function limpiar() {
   // modulo_version_preguntas + modulo_version_criterios → modulo_versiones →
   // modulos. Los criterios son la tercera rama que cuelga de ModuloVersion y
   // TAMBIÉN son RESTRICT: sin este deleteMany, la segunda corrida del seed
-  // demo (que ahora siembra un criterio) moría con
+  // con contenido (que siembra un criterio por módulo) moría con
   // modulo_version_criterios_modulo_version_id_fkey. De paso desbloquea el
-  // baseConocimiento.deleteMany() de limpiarDemo(), que corre después y tiene
-  // el mismo problema por la FK criterio → base.
+  // baseConocimiento.deleteMany() de limpiarSimaCheck(), que corre después y
+  // tiene el mismo problema por la FK criterio → base.
   await prisma.moduloVersionPregunta.deleteMany();
   await prisma.moduloVersionCriterio.deleteMany();
   await prisma.moduloVersion.deleteMany();
@@ -90,12 +96,6 @@ async function limpiar() {
 
 async function main() {
   await limpiar();
-
-  // El clean del demo va DESPUÉS de limpiar(), que es quien vacía
-  // modulo_version_preguntas (Pregunta no se puede borrar antes que sus pivots).
-  if (demoActivado()) {
-    await limpiarDemo();
-  }
 
   // 1) Organización interna de Ingeniería SIMA — estructura mínima real para
   // poder dar de alta administradores desde el backoffice (no es un fixture).
@@ -113,31 +113,212 @@ async function main() {
 
   console.log(`Seed completo: ${orgs} organizaciones, ${usuarios} usuarios.`);
 
-  if (demoActivado()) {
-    await sembrarDemo();
+  // El clean del contenido corre DENTRO de sembrarSimaCheck(), con la app de
+  // Nest ya levantada: hay imágenes que borrar del storage y eso necesita el
+  // StorageService. limpiar() (arriba) ya vació modulo_version_preguntas, que
+  // es lo que bloquea el borrado de las preguntas.
+  if (simaCheckActivado()) {
+    await sembrarSimaCheck();
   }
 }
 
 // ---------------------------------------------------------------------------
-// Escenario de demo (SEED_DEMO=true)
+// Contenido de SIMA CHECK (SEED_SIMA_CHECK=true)
 // ---------------------------------------------------------------------------
-// Base navegable de punta a punta: jerarquía cliente → subcontratista, alumnos
-// con pares (puesto, centro), banco clasificado, un módulo publicado con número
-// real y asignaciones AUTOMATICA derivadas de reglas.
+// Carga el contenido REAL de evaluación de Ingeniería SIMA: los catálogos de
+// nómina, las tres bases de conocimiento con su escala, las 202 preguntas de
+// los cinco Excel (con sus imágenes) y los cinco módulos publicados, más las
+// reglas de asignación que dicen qué módulo rinde cada centro/puesto.
+//
+// Lo que NO carga: personas. Los alumnos entran por el import de Excel del
+// backoffice contra la organización `Ingeniería SIMA` que crea el seed base —
+// la nómina es PII y no vive en ningún archivo versionado. Mientras no haya
+// usuarios, las reglas de acá no derivan ninguna Asignacion: recién al importar
+// la nómina el motor de recálculo las materializa.
 //
 // Apagado por defecto a propósito: el seed base es la estructura mínima que
-// necesita cualquier entorno, y esto son datos de demostración.
+// necesita cualquier entorno, y esto es contenido.
 //
-//   PowerShell:  $env:SEED_DEMO='true'; npx prisma db seed
-//   bash:        SEED_DEMO=true npx prisma db seed
+//   PowerShell:  $env:SEED_SIMA_CHECK='true'; npx prisma db seed
+//   bash:        SEED_SIMA_CHECK=true npx prisma db seed
 
-function demoActivado() {
-  return process.env.SEED_DEMO === 'true';
+function simaCheckActivado() {
+  return process.env.SEED_SIMA_CHECK === 'true';
 }
 
-// Borrado extra del demo. Puestos y CentroCosto NO se borran nunca: son
-// catálogo de nómina y el demo los reusa por nombre (ver resolverCatalogo).
-async function limpiarDemo() {
+// Las tres bases y su escala de niveles. La base es el PROGRAMA de evaluación
+// (no se versiona: es taxonomía) y el nivel es la dificultad dentro de él.
+//
+// Por qué los tres Excel de SIMA caen en UNA sola base con tres niveles y no en
+// tres bases: Básico, Intermedio y Avanzado son la misma materia —la inducción
+// SSMAC de Ingeniería SIMA— tomada con distinta profundidad, que es exactamente
+// lo que `NivelBase` modela (una escala ORDINAL). Reglas de Oro y Phoenix sí son
+// bases aparte: son programas de terceros (la SRT y la operadora) con temario
+// propio, y separarlos es lo que permite medir "cómo le va a la gente en las
+// Reglas que Salvan Vidas" sin que se mezcle con la inducción propia.
+const BASES = [
+  {
+    slug: 'induccion',
+    nombre: 'Inducción SSMAC Ingeniería Sima',
+    codigo: 'IND',
+    descripcion:
+      'Inducción de Seguridad, Salud, Medio Ambiente y Calidad de Ingeniería SIMA: Reglas de Oro propias, gestión de residuos, EPP, ergonomía, seguridad vial, política del Sistema Integrado de Gestión y normas ISO. No incluye los programas de las operadoras.',
+    fuente: 'Evaluaciones SIMA CHECK — Ingeniería Sima (2026)',
+    color: '#2563eb',
+    niveles: ['Básico', 'Intermedio', 'Avanzado'],
+  },
+  {
+    slug: 'reglas-oro',
+    nombre: 'Reglas de Oro Industria Petrolera',
+    codigo: 'ORO',
+    descripcion:
+      'Las Reglas de Oro de la industria petrolera enmarcadas en la Resolución SRT N° 770/13: espacio confinado, aislamiento de energías, línea de fuego, permiso de trabajo, operaciones de izado, seguridad vial, trabajo en altura, excavaciones y manejo del cambio.',
+    fuente: 'Reglas de Oro de la Industria Petrolera — Resolución SRT N° 770/13',
+    color: '#ca8a04',
+    niveles: ['General'],
+  },
+  {
+    slug: 'phoenix',
+    nombre: 'Reglas que Salvan Vidas — Phoenix',
+    codigo: 'RSV',
+    descripcion:
+      'Reglas que Salvan Vidas (RSV) de Phoenix Global Resources: las nueve reglas del programa, barreras de control de riesgo, ATS y clasificación de residuos según el código de colores de la operadora. Aplica sólo al personal afectado a operaciones de PGR.',
+    fuente: 'Reglas que Salvan Vidas — Phoenix Global Resources (PGR)',
+    color: '#dc2626',
+    niveles: ['General'],
+  },
+] as const;
+
+// Los cinco módulos, uno por Excel. `preguntas` es la clave dentro de PREGUNTAS
+// y `base`/`nivel` dicen con qué CRITERIO se llena el módulo: no se le asignan
+// preguntas por id, se declara "todo lo clasificado como (base, nivel)" y
+// resolverCriterios() lo materializa. Es lo que hace que agregar una pregunta
+// nueva al banco entre sola al módulo en la próxima versión.
+//
+// preguntasPorExamen es MUY menor que el pool a propósito: el Excel en papel se
+// toma entero, pero acá cada intento sortea del pool, así que dos personas del
+// mismo puesto no rinden el mismo examen. `maxIntentos` va sin declarar (sin
+// tope) — es una decisión de negocio que el admin fija por módulo desde el
+// backoffice, y un tope puesto por el seed sería una regla inventada.
+const MODULOS = [
+  {
+    slug: 'basico',
+    nombre: 'SIMA Básico',
+    descripcion:
+      'Inducción básica de SSMAC: Reglas de Oro de Ingeniería SIMA, señalización, gestión de residuos, EPP, levantamiento manual de cargas y seguridad vial.',
+    base: 'induccion',
+    nivel: 'Básico',
+    preguntasPorExamen: 15,
+    umbralAprobacion: 70,
+    vigenciaMeses: 12,
+  },
+  {
+    slug: 'intermedio',
+    nombre: 'SIMA Intermedio',
+    descripcion:
+      'Segundo nivel de la inducción: trabajo en sistemas eléctricos sin tensión, espacios confinados, aislamiento de energías, productos químicos según SGA, ralentí y primeros auxilios.',
+    base: 'induccion',
+    nivel: 'Intermedio',
+    preguntasPorExamen: 12,
+    umbralAprobacion: 70,
+    vigenciaMeses: 12,
+  },
+  {
+    slug: 'avanzado',
+    nombre: 'SIMA Avanzado',
+    descripcion:
+      'Nivel de conducción: política del Sistema Integrado de Gestión, misión y visión, alcance certificado, normas ISO 9001/14001/45001, peligro y riesgo, e IPER.',
+    base: 'induccion',
+    nivel: 'Avanzado',
+    preguntasPorExamen: 12,
+    umbralAprobacion: 70,
+    vigenciaMeses: 12,
+  },
+  {
+    slug: 'reglas-oro',
+    nombre: 'Reglas de Oro Industria Petrolera',
+    descripcion:
+      'Las Reglas de Oro de la industria petrolera (Resolución SRT N° 770/13) y la autoridad para detener una tarea.',
+    base: 'reglas-oro',
+    nivel: 'General',
+    preguntasPorExamen: 12,
+    umbralAprobacion: 70,
+    vigenciaMeses: 12,
+  },
+  {
+    slug: 'phoenix',
+    nombre: 'Reglas que Salvan Vidas — Phoenix',
+    descripcion:
+      'Programa Reglas que Salvan Vidas de Phoenix Global Resources, para el personal afectado a operaciones de la operadora.',
+    base: 'phoenix',
+    nivel: 'General',
+    preguntasPorExamen: 15,
+    umbralAprobacion: 70,
+    vigenciaMeses: 12,
+  },
+] as const;
+
+// Centros donde se trabaja en campo/taller, o sea todos menos los dos de
+// oficina. Es el recorte que usan las reglas de Reglas de Oro más abajo.
+const CENTROS_OPERATIVOS = CENTROS_COSTO.filter(
+  (centro) => centro !== '1_ Administración' && centro !== 'Asistente Dirección',
+);
+
+// Qué módulo rinde quién. Dos alcances, los dos que soporta ReglaAsignacion:
+//
+//   - sin `puestos` = regla de CENTRO: le cae a TODOS los puestos de ese centro.
+//   - con `puestos` = regla de PAR: sólo a esos puestos DENTRO de esos centros
+//     (se genera una regla por cada combinación).
+//
+// El escalonamiento es por jerarquía: el Básico lo rinde todo el mundo, las
+// Reglas de Oro sólo quien pisa campo o taller, Phoenix sólo los servicios que
+// operan para esa operadora, y el Avanzado la línea de conducción.
+//
+// Esto es una PROPUESTA razonable, no un dato del Excel: los Excel no dicen qué
+// puesto rinde qué módulo. Se edita desde el backoffice sin tocar el seed.
+const REGLAS: {
+  modulo: string;
+  centros: readonly string[];
+  puestos?: readonly string[];
+}[] = [
+  // Todos, sin excepción.
+  { modulo: 'basico', centros: CENTROS_COSTO },
+  // Obra, taller y logística: el nivel intermedio profundiza justo lo que se
+  // toca ahí (eléctrico sin tensión, espacios confinados, químicos, ralentí).
+  {
+    modulo: 'intermedio',
+    centros: ['2_ Taller', 'LOG_Logística', 'OB308', 'OB_ Estructura Obras'],
+  },
+  // Todo el personal de campo y taller.
+  { modulo: 'reglas-oro', centros: CENTROS_OPERATIVOS },
+  // Servicios que operan para Phoenix Global Resources.
+  { modulo: 'phoenix', centros: ['S31', 'S49'] },
+  // Línea de conducción, en las dos estructuras que la concentran.
+  {
+    modulo: 'avanzado',
+    centros: ['OB_ Estructura Obras', 'Estructura Servicios'],
+    puestos: [
+      'Jefe de Obra',
+      'Jefe de Taller',
+      'Supervisor de Obras',
+      'Supervisor General',
+      'Supervisor Servicio',
+      'Coord. de Servicio',
+      'Coord. SSMAC',
+      'Representante Técnico',
+      'Project Manager',
+    ],
+  },
+];
+
+// Borrado extra del contenido. Puestos y CentroCosto NO se borran nunca: son
+// catálogo de nómina y el seed los reusa por nombre (ver resolverCatalogo).
+async function limpiarSimaCheck(app: INestApplicationContext) {
+  // Las imágenes van ANTES de borrar las preguntas: la clave de storage sólo
+  // se conoce leyéndolas, y sin esto cada corrida del seed dejaría 73 archivos
+  // huérfanos más en el bucket (o en ./uploads con el driver local).
+  await borrarImagenesDePreguntas(app);
+
   // Pregunta antes que la escala: tiene FK a bases_conocimiento y DOS a
   // niveles_base (la simple por nivel_id y la compuesta (nivel_id,
   // base_conocimiento_id) que garantiza la coherencia base↔nivel).
@@ -146,362 +327,193 @@ async function limpiarDemo() {
   await prisma.baseConocimiento.deleteMany();
 }
 
-async function sembrarDemo() {
-  // Import dinámico: sin SEED_DEMO el seed nunca carga Nest ni el módulo raíz
-  // de la app. Se reusan los services (en vez de escribir inserts crudos) para
-  // no saltearse las reglas que viven en ellos: la matriz rol↔organización, el
-  // appendeo de `orden` al asignar preguntas, el cálculo del número
-  // AÑO.MAYOR.MENOR al activar, resolverFuente y el motor de recálculo.
+// Una imagen puede estar referenciada desde el enunciado (columna `imagen`) o
+// desde una opción de OPCIONES_IMAGEN (dentro del jsonb `opciones`): hay que
+// mirar los dos lugares. Las rutas legacy del import de Excel (empiezan con
+// '/') no son claves de storage y se saltean.
+async function borrarImagenesDePreguntas(app: INestApplicationContext) {
+  const { StorageService } = await import('../src/storage/storage.service');
+  const storage = app.get(StorageService);
+
+  const preguntas = await prisma.pregunta.findMany({
+    select: { imagen: true, opciones: true },
+  });
+  const claves = new Set<string>();
+  for (const pregunta of preguntas) {
+    const candidatos = [
+      pregunta.imagen,
+      ...(Array.isArray(pregunta.opciones) ? pregunta.opciones : []),
+    ];
+    for (const candidato of candidatos) {
+      if (typeof candidato === 'string' && candidato.startsWith('preguntas/')) {
+        claves.add(candidato);
+      }
+    }
+  }
+  // borrar() es idempotente (que el archivo ya no exista es el resultado
+  // esperado), así que no hace falta chequear antes.
+  for (const clave of claves) await storage.borrar(clave);
+  if (claves.size) console.log(`Imágenes borradas del storage: ${claves.size}.`);
+}
+
+async function sembrarSimaCheck() {
+  // Import dinámico: sin SEED_SIMA_CHECK el seed nunca carga Nest ni el módulo
+  // raíz de la app. Se reusan los services (en vez de escribir inserts crudos)
+  // para no saltearse las reglas que viven en ellos: el appendeo de `orden` de
+  // los niveles, la validación de opciones de las preguntas, resolverFuente, la
+  // resolución de criterios y el cálculo del número AÑO.MAYOR.MENOR al activar.
   //
   // Lo que NO corre por esta vía: la ValidationPipe global, que vive en main.ts
   // y sólo se aplica a la capa HTTP. Acá el input es código propio, no de un
   // cliente, así que se acepta.
   const { NestFactory } = await import('@nestjs/core');
   const { AppModule } = await import('../src/app.module');
-  const { AsignacionesService } =
-    await import('../src/asignaciones/asignaciones.service');
-  const { ReglasAsignacionService } =
-    await import('../src/asignaciones/reglas-asignacion.service');
-  const { BasesConocimientoService } =
-    await import('../src/bases-conocimiento/bases-conocimiento.service');
-  const { CentrosCostoService } =
-    await import('../src/centros-costo/centros-costo.service');
+  const { ReglasAsignacionService } = await import(
+    '../src/asignaciones/reglas-asignacion.service'
+  );
+  const { BasesConocimientoService } = await import(
+    '../src/bases-conocimiento/bases-conocimiento.service'
+  );
+  const { CentrosCostoService } = await import(
+    '../src/centros-costo/centros-costo.service'
+  );
   const { ModulosService } = await import('../src/modulos/modulos.service');
-  const { OrganizacionesService } =
-    await import('../src/organizaciones/organizaciones.service');
-  const { PreguntasService } =
-    await import('../src/preguntas/preguntas.service');
+  const { PreguntasService } = await import(
+    '../src/preguntas/preguntas.service'
+  );
   const { PuestosService } = await import('../src/puestos/puestos.service');
-  const { UsuariosService } = await import('../src/usuarios/usuarios.service');
 
   const app = await NestFactory.createApplicationContext(AppModule, {
     logger: false,
   });
 
   try {
-    const organizaciones = app.get(OrganizacionesService);
-    const puestos = app.get(PuestosService);
-    const centrosCosto = app.get(CentrosCostoService);
+    // El clean va con la app levantada: borrar las imágenes del storage exige
+    // el StorageService, y con el driver `r2` no hay forma de hacerlo a mano.
+    await limpiarSimaCheck(app);
+
     const bases = app.get(BasesConocimientoService);
     const preguntas = app.get(PreguntasService);
     const modulos = app.get(ModulosService);
-    const usuarios = app.get(UsuariosService);
+    const puestos = app.get(PuestosService);
+    const centrosCosto = app.get(CentrosCostoService);
     const reglas = app.get(ReglasAsignacionService);
-    const asignaciones = app.get(AsignacionesService);
 
-    // 1) Organizaciones: la cadena "para quién trabaja" un subcontratista.
-    const cliente = await organizaciones.create({
-      nombre: 'Pan American Energy',
-      tipo: TipoOrganizacion.CLIENTE,
-    });
-    const subcontratista = await organizaciones.create({
-      nombre: 'Montajes del Sur S.R.L.',
-      tipo: TipoOrganizacion.SUBCONTRATISTA,
-      organizacionPadreId: cliente.id,
-    });
+    // 1) Catálogos de nómina. Se reusan los que ya estén cargados y se crean
+    // sólo los que falten (el nombre es @unique, así que create tiraría 409).
+    const puestoPorNombre = await resolverCatalogo(puestos, PUESTOS);
+    const centroPorNombre = await resolverCatalogo(centrosCosto, CENTROS_COSTO);
 
-    // 2) Catálogos: se reusan los que ya estén cargados y se crean sólo los que
-    // falten (el nombre es @unique, así que create tiraría 409).
-    const puestoPorNombre = await resolverCatalogo(puestos, [
-      'Soldador',
-      'Amolador',
-      'Electricista',
-    ]);
-    const centroPorNombre = await resolverCatalogo(centrosCosto, [
-      'Taller',
-      'Depósito',
-    ]);
-
-    // 3) Base de conocimiento con su fuente y su escala ordinal de 3 niveles.
-    // Los niveles se crean SIN `orden` explícito para ejercitar el appendeo
-    // (siguienteOrden = max + 1) → quedan 0, 1, 2.
-    const base = await bases.create({
-      nombre: 'Seguridad Operativa',
-      codigo: 'SEG',
-      descripcion:
-        'EPP, herramientas manuales y eléctricas, trabajo en altura, trabajo en caliente y aislamiento de energía. No incluye gestión de residuos ni manejo defensivo.',
-      fuente: 'Manual HSE Ingeniería SIMA — Rev. 3 (2026)',
-    });
-    const nivelBasico = await bases.crearNivel(base.id, { nombre: 'Básico' });
-    const nivelIntermedio = await bases.crearNivel(base.id, {
-      nombre: 'Intermedio',
-    });
-    const nivelAvanzado = await bases.crearNivel(base.id, {
-      nombre: 'Avanzado',
-    });
-
-    // 4) Banco de preguntas. La `fuente` NO se manda a propósito: resolverFuente
-    // la copia de la base y la congela en cada pregunta.
-    const clasificacion = (nivelId: string) => ({
-      baseConocimientoId: base.id,
-      nivelId,
-    });
-
-    // Las básicas no se guardan en una variable: al módulo NO entran por id
-    // sino por el criterio del paso 5, que las materializa por clasificación.
-    await crearPreguntas(preguntas, [
-      {
-        texto: 'Es obligatorio usar casco en todas las áreas de trabajo.',
-        tipo: TipoPregunta.VERDADERO_FALSO,
-        respuestaCorrecta: 'Verdadero',
-        ...clasificacion(nivelBasico.id),
-      },
-      {
-        texto: '¿Cuál es el EPP mínimo obligatorio para ingresar a planta?',
-        tipo: TipoPregunta.OPCION_MULTIPLE,
-        opciones: [
-          'Casco, guantes y botines de seguridad',
-          'Solo casco',
-          'Ropa de calle',
-          'Ninguno, es opcional',
-        ],
-        respuestaCorrecta: 'Casco, guantes y botines de seguridad',
-        ...clasificacion(nivelBasico.id),
-      },
-      {
-        texto:
-          'Está permitido remover la protección del disco de la amoladora para trabajar más rápido.',
-        tipo: TipoPregunta.VERDADERO_FALSO,
-        respuestaCorrecta: 'Falso',
-        ...clasificacion(nivelBasico.id),
-      },
-      {
-        texto:
-          '¿Qué elemento de protección es obligatorio al operar una amoladora?',
-        tipo: TipoPregunta.OPCION_MULTIPLE,
-        opciones: [
-          'Antiparras y protector facial',
-          'Solo guantes',
-          'Ninguno',
-          'Auriculares únicamente',
-        ],
-        respuestaCorrecta: 'Antiparras y protector facial',
-        ...clasificacion(nivelBasico.id),
-      },
-      {
-        texto:
-          'Un EPP dañado o vencido puede seguir usándose hasta terminar la jornada.',
-        tipo: TipoPregunta.VERDADERO_FALSO,
-        respuestaCorrecta: 'Falso',
-        ...clasificacion(nivelBasico.id),
-      },
-    ]);
-
-    const intermedias = await crearPreguntas(preguntas, [
-      {
-        texto: 'Antes de un trabajo en altura, ¿qué se debe verificar primero?',
-        tipo: TipoPregunta.OPCION_MULTIPLE,
-        opciones: [
-          'El anclaje y el arnés de seguridad',
-          'Solo el clima',
-          'Nada, es opcional',
-          'El horario de almuerzo',
-        ],
-        respuestaCorrecta: 'El anclaje y el arnés de seguridad',
-        ...clasificacion(nivelIntermedio.id),
-      },
-      {
-        texto:
-          'Un trabajo en caliente (soldadura, esmerilado) en zona con gases inflamables requiere permiso de trabajo previo.',
-        tipo: TipoPregunta.VERDADERO_FALSO,
-        respuestaCorrecta: 'Verdadero',
-        ...clasificacion(nivelIntermedio.id),
-      },
-      {
-        texto:
-          '¿A partir de qué altura se considera trabajo en altura y exige protección contra caídas?',
-        tipo: TipoPregunta.OPCION_MULTIPLE,
-        opciones: [
-          '1,80 metros',
-          '5 metros',
-          '10 metros',
-          'No hay una altura definida',
-        ],
-        respuestaCorrecta: '1,80 metros',
-        ...clasificacion(nivelIntermedio.id),
-      },
-    ]);
-
-    await crearPreguntas(preguntas, [
-      {
-        texto:
-          '¿Cuál de las siguientes NO es una Regla de Oro típica de la industria petrolera?',
-        tipo: TipoPregunta.OPCION_MULTIPLE,
-        opciones: [
-          'Aislamiento de energía (LOTO)',
-          'Trabajo en altura con protección',
-          'Espacios confinados con permiso',
-          'Estacionar en cualquier lugar',
-        ],
-        respuestaCorrecta: 'Estacionar en cualquier lugar',
-        ...clasificacion(nivelAvanzado.id),
-      },
-      {
-        texto:
-          'El aislamiento de energía (Lock Out Tag Out) es obligatorio antes de intervenir un equipo.',
-        tipo: TipoPregunta.VERDADERO_FALSO,
-        respuestaCorrecta: 'Verdadero',
-        ...clasificacion(nivelAvanzado.id),
-      },
-    ]);
-
-    // Dos preguntas SIN clasificar a propósito: son el backlog previo a las
-    // bases, y lo que ejercita el filtro "— Sin clasificar —" (?sinBase=true)
-    // y su badge ámbar en la tabla de Preguntas.
-    await crearPreguntas(preguntas, [
-      {
-        texto:
-          'Los residuos peligrosos se descartan en el mismo contenedor que los residuos comunes.',
-        tipo: TipoPregunta.VERDADERO_FALSO,
-        respuestaCorrecta: 'Falso',
-      },
-      {
-        texto: '¿Cuál es la velocidad máxima permitida dentro del yacimiento?',
-        tipo: TipoPregunta.OPCION_MULTIPLE,
-        opciones: ['40 km/h', '80 km/h', '100 km/h', 'No hay límite'],
-        respuestaCorrecta: '40 km/h',
-      },
-    ]);
-
-    // 5) Módulo publicado. El demo crea sus propios módulos con
-    // `modulos.create()` (que ya deja la ModuloVersion v1 en BORRADOR) en vez
-    // de poblar uno que sembrara el seed base: así esta rama es autocontenida y
-    // no depende de ningún uuid fijo compartido entre las dos.
-    //
-    // "Reglas de Oro" se crea y NO se publica a propósito: es el módulo al que
-    // apunta la regla de centro del paso 7, y es lo que ejercita el sufijo
-    // "(sin versión publicada)" del backoffice.
-    const moduloBasico = await modulos.create({ nombre: 'SIMA Básico' });
-    const moduloReglasDeOro = await modulos.create({
-      nombre: 'Reglas de Oro Industria Petrolera',
-    });
-
-    // El contenido se arma por los DOS caminos que conviven (Sprint 7), para que
-    // el módulo publicado ejercite los dos `origen` de pivot en vez de quedar
-    // 100% MANUAL como estaba antes:
-    //
-    //   a) un CRITERIO (Seguridad Operativa / Básico) que materializa su pool →
-    //      las 5 preguntas del nivel Básico entran con origen CRITERIO, por
-    //      clasificación y no por id;
-    //   b) dos preguntas agregadas a mano encima → quedan origen MANUAL (es el
-    //      default del pivot; asignarPreguntas no manda `origen`).
-    //
-    // Las manuales son del nivel INTERMEDIO a propósito: si matchearan el
-    // criterio, resolverCriterios las saltearía (una MANUAL nunca se reetiqueta
-    // CRITERIO) y el escenario mostraría un pool corto sin que se note. Con
-    // niveles distintos los dos conjuntos son disjuntos y las dos secciones del
-    // editor quedan llenas.
-    //
-    // ⚠️ ORDEN: setCriterios y asignarPreguntas exigen los dos que la versión esté
-    // en BORRADOR, así que van antes de activar(). Sobre un ACTIVO, setCriterios
-    // tira ConflictException (resolver criterios borra pivots y rompería la
-    // inmutabilidad del historial).
-    await modulos.setCriterios(moduloBasico.id, {
-      criterios: [{ baseConocimientoId: base.id, nivelId: nivelBasico.id }],
-    });
-    const manuales = intermedias.slice(0, 2);
-    await modulos.asignarPreguntas(
-      moduloBasico.id,
-      // Sin `orden`: se appendean después de las que trajo el criterio
-      // (siguienteOrden = max + 1).
-      manuales.map((pregunta) => ({ preguntaId: pregunta.id })),
-    );
-    // Sin `esNuevaLinea`: es la primera publicación del módulo, no hay un ACTIVO
-    // del cual derivar el número, así que calcularNumero cae en siguienteMayor
-    // y queda AÑO.01.00. Publica el snapshot tal cual: activar() NO vuelve a
-    // resolver los criterios.
-    const versionPublicada = await modulos.activar(moduloBasico.id);
-
-    // 6) Alumnos del subcontratista. UsuariosService.create valida la matriz
-    // (SUBCONTRATISTA sólo admite ALUMNO) y recalcula en la misma transacción.
-    // El primer par del array queda `principal` (lo deriva paresACrear de la
-    // posición 0).
-    const par = (puesto: string, centro: string) => ({
-      puestoId: puestoPorNombre[puesto],
-      centroCostoId: centroPorNombre[centro],
-    });
-
-    const carlos = await usuarios.create(
-      {
-        nombre: 'Carlos',
-        apellido: 'Ferreyra',
-        dni: '28444111',
-        vinculacion: {
-          organizacionId: subcontratista.id,
-          rol: RolUsuario.ALUMNO,
-          pares: [par('Soldador', 'Taller')],
-        },
-      },
-      'seed',
-    );
-
-    // Dos pares: es el caso que ejercita "el alumno rinde los módulos de TODOS
-    // sus pares". Cada par lo alcanza una regla distinta (ver más abajo).
-    const andrea = await usuarios.create(
-      {
-        nombre: 'Andrea',
-        apellido: 'Quiroga',
-        dni: '31555222',
-        vinculacion: {
-          organizacionId: subcontratista.id,
-          rol: RolUsuario.ALUMNO,
-          pares: [par('Soldador', 'Taller'), par('Electricista', 'Depósito')],
-        },
-      },
-      'seed',
-    );
-
-    const hernan = await usuarios.create(
-      {
-        nombre: 'Hernán',
-        apellido: 'Palacios',
-        dni: '33666333',
-        vinculacion: {
-          organizacionId: subcontratista.id,
-          rol: RolUsuario.ALUMNO,
-          pares: [par('Electricista', 'Depósito')],
-        },
-      },
-      'seed',
-    );
-
-    // 7) Reglas, una de cada alcance. Cada create abre su propia transacción y
-    // recalcula todo el centro, así que las Asignacion AUTOMATICA ya quedan
-    // creadas acá.
-    await reglas.create(
-      {
-        puestoId: puestoPorNombre['Soldador'],
-        centroCostoId: centroPorNombre['Taller'],
-        moduloId: moduloBasico.id,
-      },
-      'seed',
-    );
-    // Sin puestoId = regla de CENTRO: aplica a todos los puestos de Depósito.
-    // Apunta a un módulo sin versión publicada a propósito, para ejercitar el
-    // sufijo "(sin versión publicada)" del backoffice.
-    await reglas.create(
-      {
-        centroCostoId: centroPorNombre['Depósito'],
-        moduloId: moduloReglasDeOro.id,
-      },
-      'seed',
-    );
-
-    // 8) Recálculo explícito por persona. Es idempotente y las reglas de arriba
-    // ya derivaron todo: corre igual como reconciliación y para poder reportar.
-    for (const usuario of [carlos, andrea, hernan]) {
-      await asignaciones.recalcular(usuario.id, 'seed');
+    // 2) Bases de conocimiento con su escala. Los niveles se crean SIN `orden`
+    // explícito: siguienteOrden() los appendea en el orden del array.
+    const nivelPorClave = new Map<string, string>();
+    const basePorSlug = new Map<string, { id: string; nombre: string }>();
+    for (const { slug, niveles, ...datos } of BASES) {
+      const base = await bases.create({ ...datos });
+      basePorSlug.set(slug, base);
+      for (const nombre of niveles) {
+        const nivel = await bases.crearNivel(base.id, { nombre });
+        nivelPorClave.set(`${slug}/${nombre}`, nivel.id);
+      }
     }
 
-    await imprimirResumenDemo({
-      cliente,
-      subcontratista,
-      base,
-      niveles: [nivelBasico, nivelIntermedio, nivelAvanzado],
-      moduloBasico,
-      criterio: { base: base.nombre, nivel: nivelBasico.nombre },
-      versionPublicada,
-      usuariosDemo: [carlos, andrea, hernan],
+    // 3) Banco de preguntas. La `fuente` NO se manda a propósito:
+    // resolverFuente la copia de la base y la congela en cada pregunta.
+    const subir = await crearSubidorDeImagenes(app);
+    let creadas = 0;
+    for (const modulo of MODULOS) {
+      const base = basePorSlug.get(modulo.base)!;
+      const nivelId = nivelPorClave.get(`${modulo.base}/${modulo.nivel}`)!;
+      for (const pregunta of PREGUNTAS[modulo.slug]) {
+        const esImagen = pregunta.tipo === TipoPregunta.OPCIONES_IMAGEN;
+        await preguntas.create({
+          texto: pregunta.texto,
+          tipo: pregunta.tipo,
+          // En OPCIONES_IMAGEN tanto las opciones como la respuesta correcta
+          // son CLAVES de storage, no textos: el backend corrige comparando la
+          // clave cruda (ver corregir.ts). Por eso las dos pasan por `subir`,
+          // que devuelve la misma clave para el mismo archivo.
+          ...(pregunta.opciones
+            ? {
+                opciones: esImagen
+                  ? await Promise.all(pregunta.opciones.map(subir))
+                  : [...pregunta.opciones],
+              }
+            : {}),
+          respuestaCorrecta: esImagen
+            ? await subir(pregunta.respuestaCorrecta)
+            : pregunta.respuestaCorrecta,
+          ...(pregunta.imagen ? { imagen: await subir(pregunta.imagen) } : {}),
+          baseConocimientoId: base.id,
+          nivelId,
+        });
+        creadas += 1;
+      }
+    }
+
+    // 4) Los cinco módulos, cada uno lleno por su criterio y publicado.
+    //
+    // ⚠️ ORDEN: setCriterios exige que la versión esté en BORRADOR, así que va
+    // antes de activar(). Sobre un ACTIVO tira ConflictException (resolver
+    // criterios borra pivots y rompería la inmutabilidad del historial).
+    const moduloPorSlug = new Map<string, { id: string; nombre: string }>();
+    const versiones: {
+      nombre: string;
+      anio: number | null;
+      mayor: number | null;
+      menor: number | null;
+      id: string;
+    }[] = [];
+    for (const { slug, base, nivel, ...datos } of MODULOS) {
+      const modulo = await modulos.create({ ...datos });
+      moduloPorSlug.set(slug, modulo);
+      await modulos.setCriterios(modulo.id, {
+        criterios: [
+          {
+            baseConocimientoId: basePorSlug.get(base)!.id,
+            nivelId: nivelPorClave.get(`${base}/${nivel}`)!,
+          },
+        ],
+      });
+      // Sin `esNuevaLinea`: es la primera publicación, no hay un ACTIVO del cual
+      // derivar el número, así que calcularNumero cae en siguienteMayor y queda
+      // AÑO.01.00. Publica el snapshot tal cual: activar() NO vuelve a resolver
+      // los criterios.
+      const version = await modulos.activar(modulo.id);
+      versiones.push({ nombre: modulo.nombre, ...version });
+    }
+
+    // 5) Reglas de asignación. Cada create abre su propia transacción y
+    // recalcula el centro entero; como todavía no hay usuarios cargados, no
+    // deriva ninguna Asignacion — eso pasa recién al importar la nómina.
+    let reglasCreadas = 0;
+    for (const regla of REGLAS) {
+      const moduloId = moduloPorSlug.get(regla.modulo)!.id;
+      for (const centro of regla.centros) {
+        for (const puesto of regla.puestos ?? [undefined]) {
+          await reglas.create(
+            {
+              moduloId,
+              centroCostoId: centroPorNombre[centro],
+              ...(puesto ? { puestoId: puestoPorNombre[puesto] } : {}),
+            },
+            'seed',
+          );
+          reglasCreadas += 1;
+        }
+      }
+    }
+
+    await imprimirResumenSimaCheck({
+      bases: BASES.map((b) => ({
+        nombre: b.nombre,
+        codigo: b.codigo,
+        id: basePorSlug.get(b.slug)!.id,
+        niveles: b.niveles,
+      })),
+      versiones,
+      creadas,
+      reglasCreadas,
     });
   } finally {
     await app.close();
@@ -517,7 +529,7 @@ async function resolverCatalogo(
       nombre: string;
     }) => Promise<{ id: string; nombre: string }>;
   },
-  nombres: string[],
+  nombres: readonly string[],
 ): Promise<Record<string, string>> {
   const existentes = await service.findAll();
   const porNombre: Record<string, string> = {};
@@ -531,96 +543,96 @@ async function resolverCatalogo(
   return porNombre;
 }
 
-// Crea preguntas en serie y devuelve las creadas. En serie y no en paralelo
-// porque resolverFuente consulta la base por cada una.
-async function crearPreguntas(
-  service: { create: (dto: CreatePreguntaDto) => Promise<{ id: string }> },
-  dtos: CreatePreguntaDto[],
-): Promise<{ id: string }[]> {
-  const creadas: { id: string }[] = [];
-  for (const dto of dtos) {
-    creadas.push(await service.create(dto));
-  }
-  return creadas;
+// Sube un archivo de `seed-assets/preguntas/` al storage y devuelve su clave,
+// memorizando el resultado: la misma imagen se usa como opción de varias
+// preguntas (los tres tachos aparecen en seis) y subirla una vez por uso
+// dejaría seis copias distintas de un mismo pictograma.
+//
+// Va por StorageService y no escribiendo en ./uploads para que el seed funcione
+// igual con el driver `local` y con `r2` — el deploy usa r2 y ahí no hay disco.
+// El formato sale de los magic bytes, igual que en el upload real del
+// backoffice: la extensión del archivo es un nombre, no una garantía.
+async function crearSubidorDeImagenes(
+  app: INestApplicationContext,
+): Promise<(archivo: string) => Promise<string>> {
+  const { readFile } = await import('node:fs/promises');
+  const { resolve } = await import('node:path');
+  const { StorageService } = await import('../src/storage/storage.service');
+  const { detectarFormatoImagen } = await import(
+    '../src/storage/formato-imagen'
+  );
+
+  const storage = app.get(StorageService);
+  const carpeta = resolve(__dirname, 'seed-assets', 'preguntas');
+  const cache = new Map<string, string>();
+
+  return async (archivo: string) => {
+    const yaSubida = cache.get(archivo);
+    if (yaSubida) return yaSubida;
+
+    const buffer = await readFile(resolve(carpeta, archivo));
+    const formato = detectarFormatoImagen(buffer);
+    if (!formato) {
+      throw new Error(
+        `seed-assets/preguntas/${archivo} no es PNG, JPG ni WEBP (o está corrupto)`,
+      );
+    }
+    const clave = await storage.guardar(buffer, 'preguntas', formato);
+    cache.set(archivo, clave);
+    return clave;
+  };
 }
 
 // Resumen con los IDs de todo lo sembrado, para poder armar las llamadas de
 // verificación (Invoke-RestMethod) sin ir a buscarlos a Prisma Studio.
-async function imprimirResumenDemo(datos: {
-  cliente: { id: number; nombre: string };
-  subcontratista: { id: number; nombre: string };
-  base: { id: string; nombre: string; codigo: string | null };
-  niveles: { id: string; nombre: string; orden: number }[];
-  moduloBasico: { id: string; nombre: string };
-  criterio: { base: string; nivel: string };
-  versionPublicada: {
+async function imprimirResumenSimaCheck(datos: {
+  bases: { nombre: string; codigo: string; id: string; niveles: readonly string[] }[];
+  versiones: {
+    nombre: string;
     id: string;
     anio: number | null;
     mayor: number | null;
     menor: number | null;
-  };
-  usuariosDemo: { id: number; nombre: string; apellido: string; dni: string }[];
+  }[];
+  creadas: number;
+  reglasCreadas: number;
 }) {
-  const {
-    cliente,
-    subcontratista,
-    base,
-    niveles,
-    moduloBasico,
-    criterio,
-    versionPublicada,
-    usuariosDemo,
-  } = datos;
-
+  const { bases, versiones, creadas, reglasCreadas } = datos;
   const pad2 = (n: number | null) => String(n ?? 0).padStart(2, '0');
-  const numero = `${versionPublicada.anio}.${pad2(versionPublicada.mayor)}.${pad2(versionPublicada.menor)}`;
 
-  const totalPreguntas = await prisma.pregunta.count();
-  const sinClasificar = await prisma.pregunta.count({
-    where: { baseConocimientoId: null },
-  });
-  const vigentes = await prisma.asignacion.count({
-    where: { revocadaAt: null },
-  });
-
-  // Se cuentan los pivots REALES de la versión publicada, no lo que el seed
-  // creyó sembrar: es la evidencia de que el snapshot quedó con los dos
-  // orígenes conviviendo (y de que activar() lo publicó sin re-resolver).
-  const contarPivots = (origen: OrigenPregunta) =>
-    prisma.moduloVersionPregunta.count({
-      where: { moduloVersionId: versionPublicada.id, origen },
+  // Se cuentan los pivots REALES de cada versión publicada, no lo que el seed
+  // creyó sembrar: es la evidencia de que el criterio resolvió el pool entero.
+  const contenido: string[] = [];
+  for (const version of versiones) {
+    const preguntas = await prisma.moduloVersionPregunta.count({
+      where: { moduloVersionId: version.id, origen: OrigenPregunta.CRITERIO },
     });
-  const preguntasPorCriterio = await contarPivots(OrigenPregunta.CRITERIO);
-  const preguntasManuales = await contarPivots(OrigenPregunta.MANUAL);
+    const numero = `${version.anio}.${pad2(version.mayor)}.${pad2(version.menor)}`;
+    contenido.push(
+      `  ${version.nombre.padEnd(34)} ${numero}  ${String(preguntas).padStart(3)} preguntas  ${version.id}`,
+    );
+  }
 
   const lineas = [
     '',
-    '--- Escenario de demo sembrado (SEED_DEMO=true) ---',
+    '--- Contenido de SIMA CHECK sembrado (SEED_SIMA_CHECK=true) ---',
     '',
-    'Organizaciones:',
-    `  ${cliente.id}  ${cliente.nombre} (CLIENTE)`,
-    `  ${subcontratista.id}  ${subcontratista.nombre} (SUBCONTRATISTA → ${cliente.nombre})`,
-    '',
-    `Base de conocimiento [${base.codigo}] ${base.nombre}:`,
-    `  ${base.id}`,
-    ...niveles.map(
-      (n) => `    nivel ${n.orden} ${n.nombre.padEnd(10)} ${n.id}`,
+    'Bases de conocimiento:',
+    ...bases.map(
+      (b) =>
+        `  [${b.codigo}] ${b.nombre.padEnd(34)} ${b.id}\n      niveles: ${b.niveles.join(' · ')}`,
     ),
     '',
-    `Módulo publicado — ${moduloBasico.nombre}:`,
-    `  modulo   ${moduloBasico.id}`,
-    `  version  ${versionPublicada.id}  (${numero})`,
-    `  criterio ${criterio.base} / ${criterio.nivel}`,
-    `  contenido: ${preguntasPorCriterio} por criterio + ${preguntasManuales} manuales`,
+    'Módulos publicados:',
+    ...contenido,
     '',
-    'Usuarios:',
-    ...usuariosDemo.map(
-      (u) =>
-        `  ${u.id}  ${`${u.nombre} ${u.apellido}`.padEnd(18)} DNI ${u.dni}`,
-    ),
+    `Banco: ${creadas} preguntas, todas clasificadas.`,
+    `Catálogos: ${PUESTOS.length} puestos, ${CENTROS_COSTO.length} centros de costo.`,
+    `Reglas de asignación: ${reglasCreadas}.`,
     '',
-    `Banco: ${totalPreguntas} preguntas (${sinClasificar} sin clasificar).`,
-    `Asignaciones vigentes: ${vigentes}.`,
+    'Falta cargar las personas: importá la nómina desde el backoffice contra la',
+    'organización "Ingeniería SIMA". Al crearlas, las reglas de arriba derivan',
+    'solas las asignaciones de cada una.',
     '',
   ];
 

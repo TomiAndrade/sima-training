@@ -34,7 +34,7 @@ export class RespuestaSesionDto {
 // array y un item podría colar campos de más.
 //
 // Segunda línea de defensa: la pipe es global de main.ts y no corre cuando se llama
-// al service directo (mismo hueco ya documentado para sembrarDemo()). Por eso el tipo
+// al service directo (mismo hueco ya documentado para sembrarSimaCheck()). Por eso el tipo
 // simplemente no tiene esos campos y el service nunca los lee.
 export class RegistrarSesionDto {
   @Type(() => Number)
