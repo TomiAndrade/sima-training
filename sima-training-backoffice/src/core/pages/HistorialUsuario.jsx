@@ -121,6 +121,10 @@ const CAMPO = {
 
 const fecha = (v) => (v ? new Date(v).toLocaleDateString('es-AR') : '—')
 const fechaHora = (v) => (v ? new Date(v).toLocaleString('es-AR') : '—')
+// Sólo la hora, para ponerla al lado de la fecha en una celda. Sin segundos, a
+// diferencia de `fechaHora`: en una columna de tabla no aportan y alargan.
+const hora = (v) =>
+  v ? new Date(v).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }) : null
 const capitalizar = (s) => s.charAt(0) + s.slice(1).toLowerCase()
 
 const chip = (cls) => `px-2.5 py-1 rounded-full text-xs font-semibold ${cls}`
@@ -340,12 +344,21 @@ export default function HistorialUsuario({
   const sesionesColumns = [
     {
       key: 'createdAt',
-      label: 'Fecha',
+      label: 'Fecha y hora',
       // createdAt (reloj del SERVIDOR) y no finalizadaEn (reloj del
       // dispositivo): con el modo offline el POST puede llegar horas después y
       // la tablet puede tener la hora desfasada. Es el mismo criterio con el
       // que el backend calcula la vigencia.
-      render: (val) => <span className="text-slate-500 text-sm">{fecha(val)}</span>,
+      //
+      // La hora importa porque varios intentos del mismo módulo caen el mismo
+      // día: sin ella, tres filas idénticas en fecha no dicen en qué orden se
+      // rindieron ni cuánto pasó entre una y otra.
+      render: (val) => (
+        <span className="text-slate-500 text-sm whitespace-nowrap">
+          {fecha(val)}
+          {hora(val) && <span className="text-slate-400 font-mono ml-1.5">{hora(val)}</span>}
+        </span>
+      ),
     },
     {
       key: 'modulo',
