@@ -8,7 +8,7 @@ import { preguntasApi } from '../../core/api/preguntas'
 import { basesConocimientoApi } from '../../core/api/basesConocimiento'
 import { useBancoModulo, estadoVersionBadge } from '../components/bancoModulo'
 import { backendTypeBadge } from '../../core/format/tipoPregunta'
-import { BancoAcciones, NuevaPreguntaModal, EditarModulosModal } from '../components/BancoPreguntas'
+import { BancoAcciones, NuevaPreguntaModal, EditarModulosModal, VerPreguntaModal } from '../components/BancoPreguntas'
 import ImportPreguntasModal from '../../core/components/ImportPreguntasModal'
 
 // Opción sintética del multi-select de módulos: no es un id real de Modulo,
@@ -91,6 +91,7 @@ function QuestionsTableModulo({ moduleId }) {
   const banco = useBancoModulo(moduleId)
   const [togglingId, setTogglingId] = useState(null)
   const [toggleError, setToggleError] = useState(null)
+  const [verPregunta, setVerPregunta] = useState(null)
 
   const rows = [...banco.asignadas].sort((a, b) => a.orden - b.orden)
 
@@ -137,16 +138,20 @@ function QuestionsTableModulo({ moduleId }) {
       <Table
         columns={columns}
         data={rows}
-        actions={(row) =>
-          row.pregunta.activa === false ? (
-            <span className="text-slate-400 text-xs">Recuperala desde Preguntas</span>
-          ) : (
-            <Button variant={row.activa ? 'danger' : 'secondary'} size="sm" disabled={togglingId === row.preguntaId} onClick={() => handleToggle(row)}>
-              {togglingId === row.preguntaId ? '...' : row.activa ? 'Desactivar' : 'Activar'}
-            </Button>
-          )
-        }
+        actions={(row) => (
+          <>
+            <Button variant="ghost" size="sm" onClick={() => setVerPregunta(row.pregunta)}>Ver</Button>
+            {row.pregunta.activa === false ? (
+              <span className="text-slate-400 text-xs">Recuperala desde Preguntas</span>
+            ) : (
+              <Button variant={row.activa ? 'danger' : 'secondary'} size="sm" disabled={togglingId === row.preguntaId} onClick={() => handleToggle(row)}>
+                {togglingId === row.preguntaId ? '...' : row.activa ? 'Desactivar' : 'Activar'}
+              </Button>
+            )}
+          </>
+        )}
       />
+      {verPregunta && <VerPreguntaModal pregunta={verPregunta} onClose={() => setVerPregunta(null)} />}
     </div>
   )
 }
@@ -159,6 +164,7 @@ function QuestionsTableGlobal({ selectedModuleIds, sinAsignar, showActivas, show
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [togglingId, setTogglingId] = useState(null)
+  const [verRow, setVerRow] = useState(null)
   const [editRow, setEditRow] = useState(null)
   const [trashModal, setTrashModal] = useState(null)
   const [trashing, setTrashing] = useState(false)
@@ -318,6 +324,7 @@ function QuestionsTableGlobal({ selectedModuleIds, sinAsignar, showActivas, show
         data={preguntas}
         actions={(row) => (
           <>
+            <Button variant="ghost" size="sm" onClick={() => setVerRow(row)}>Ver</Button>
             <Button variant="ghost" size="sm" onClick={() => setEditRow(row)}>Editar módulos</Button>
             <Button variant={row.activa ? 'danger' : 'secondary'} size="sm" disabled={togglingId === row.id} onClick={() => handleToggle(row)}>
               {togglingId === row.id ? '...' : row.activa ? 'Enviar a papelera' : 'Recuperar'}
@@ -325,6 +332,8 @@ function QuestionsTableGlobal({ selectedModuleIds, sinAsignar, showActivas, show
           </>
         )}
       />
+
+      {verRow && <VerPreguntaModal pregunta={verRow} onClose={() => setVerRow(null)} />}
 
       {editRow && (
         <EditarModulosModal

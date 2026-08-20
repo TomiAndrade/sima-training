@@ -169,7 +169,10 @@ function ImagenEnunciado({ imagen, className = 'w-8 h-8' }) {
 // con 409 porque la próxima resolución la vuelve a materializar — la vía es
 // "Desactivar"). `mostrarBadge` es aparte: en la pestaña "Por criterio" todas
 // las filas lo son, así que repetir el badge en cada una no distingue nada.
-function FilaPregunta({ mvp, porCriterio, mostrarBadge, onToggle, onRemove, togglingId }) {
+// `onVer` va siempre (también en las vistas de solo lectura de una versión
+// publicada o archivada): ver el contenido de una pregunta no es editarla, y es
+// justo lo que hace falta para revisar una versión ya congelada.
+function FilaPregunta({ mvp, porCriterio, mostrarBadge, onVer, onToggle, onRemove, togglingId }) {
   const enPapelera = mvp.pregunta.activa === false
   return (
     <div className={`px-4 py-2.5 flex items-center gap-3 ${mvp.activa === false ? 'opacity-50' : ''}`}>
@@ -194,8 +197,11 @@ function FilaPregunta({ mvp, porCriterio, mostrarBadge, onToggle, onRemove, togg
           Inactiva
         </span>
       )}
-      {(onToggle || onRemove) && (
+      {(onVer || onToggle || onRemove) && (
         <div className="flex items-center gap-2 flex-shrink-0">
+          {onVer && (
+            <Button variant="ghost" size="sm" onClick={() => onVer(mvp.pregunta)}>Ver</Button>
+          )}
           {onToggle && (
             enPapelera ? (
               <span className="text-slate-400 text-[11px]">Recuperala desde Preguntas</span>
@@ -256,6 +262,10 @@ function TabPreguntas({ activa, label, cantidad, onClick }) {
 // orden real de la versión.
 export function PreguntasAsignadasPanel({ asignadas, error, onToggle, onRemove, togglingId }) {
   const [tab, setTab] = useState('todas')
+  // El modal de "Ver" vive acá y no en cada llamador: es solo lectura, no
+  // depende de nada del padre, y así lo tienen las cuatro pantallas que montan
+  // este panel sin que ninguna tenga que cablear un callback.
+  const [verPregunta, setVerPregunta] = useState(null)
 
   const ordenadas = [...asignadas].sort((a, b) => a.orden - b.orden)
   const porCriterio = ordenadas.filter((mvp) => mvp.origen === 'CRITERIO')
@@ -313,6 +323,7 @@ export function PreguntasAsignadasPanel({ asignadas, error, onToggle, onRemove, 
               mvp={mvp}
               porCriterio={mvp.origen === 'CRITERIO'}
               mostrarBadge={tab === 'todas'}
+              onVer={setVerPregunta}
               onToggle={onToggle}
               onRemove={onRemove}
               togglingId={togglingId}
@@ -320,6 +331,7 @@ export function PreguntasAsignadasPanel({ asignadas, error, onToggle, onRemove, 
           ))}
         </div>
       )}
+      {verPregunta && <VerPreguntaModal pregunta={verPregunta} onClose={() => setVerPregunta(null)} />}
     </div>
   )
 }
@@ -932,6 +944,174 @@ export function NuevaPreguntaModal({ onClose, backendId, onAssigned, onAssign })
             placeholder="Asignar a módulos..."
           />
         </div>
+      </div>
+    </Modal>
+  )
+}
+
+// Letras de las opciones tal cual las pinta la tablet (`QuestionCard`), para que
+// "la B" signifique lo mismo mirando el backoffice que mirando el atril.
+const LETRAS_OPCION = ['A', 'B', 'C', 'D']
+
+// Las dos opciones de VERDADERO_FALSO no están en `opciones` (el jsonb viene
+// vacío): las pone el frontend. Son estos dos strings exactos, que es contra lo
+// que el backend corrige — ver `corregir.ts`.
+const OPCIONES_VF = ['Verdadero', 'Falso']
+
+// Recuadro de una opción correcta. Se usa igual para texto y para imagen: es el
+// único lugar del backoffice donde se ve cuál es la respuesta buena, así que
+// tiene que leerse de un vistazo y no depender sólo del color (de ahí el ✓ y la
+// palabra "Correcta", no un borde verde a secas).
+function marcaCorrecta(esCorrecta) {
+  return esCorrecta
+    ? 'border-emerald-400 bg-emerald-50 ring-1 ring-emerald-400'
+    : 'border-slate-200 bg-white'
+}
+
+// Modal "Ver pregunta": lo único del backoffice que muestra el CONTENIDO de una
+// pregunta ya creada — la imagen del enunciado en grande, las opciones y cuál es
+// la correcta.
+//
+// Existe porque sin esto las preguntas de tipo OPCIONES_IMAGEN no se pueden
+// revisar: las tablas de Preguntas sólo ponen un 🖼 al lado del texto, y las
+// imágenes de las opciones no aparecían en ninguna pantalla (sólo como preview
+// local mientras se subían en el alta). En un banco donde el enunciado dice
+// "Indique qué Regla corresponde a Excavación" y las opciones son tres
+// pictogramas, el texto solo no alcanza para saber si la pregunta está bien.
+//
+// Es de SOLO LECTURA, y no por falta de tiempo: las preguntas no se editan (ver
+// decisiones/preguntas.md), y la imagen es inmutable una vez creada.
+export function VerPreguntaModal({ pregunta, onClose }) {
+  const esImagen = pregunta.tipo === 'OPCIONES_IMAGEN'
+  const esVF = pregunta.tipo === 'VERDADERO_FALSO'
+  // En VERDADERO_FALSO el jsonb `opciones` está vacío a propósito.
+  const opciones = esVF ? OPCIONES_VF : (pregunta.opciones ?? [])
+
+  return (
+    <Modal open onClose={onClose} title="Ver pregunta" size="lg" footer={<Button variant="secondary" onClick={onClose}>Cerrar</Button>}>
+      <div className="space-y-4">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {backendTypeBadge(pregunta.tipo)}
+          {/* `base`/`nivel` vienen resueltos desde GET /preguntas, pero NO desde
+              GET /modulos/:id, que hace `include: { pregunta: true }` y trae sólo
+              las columnas. Por eso el "Sin clasificar" se decide con
+              `baseConocimientoId` (que sí es columna y viene siempre) y no con la
+              ausencia de `base`: si no, la misma pregunta se vería clasificada
+              desde Preguntas y sin clasificar desde el editor del módulo. */}
+          {pregunta.base && (
+            <>
+              <span className="px-1.5 py-0.5 rounded text-[10px] bg-indigo-50 text-indigo-600 font-medium">
+                {pregunta.base.nombre}
+              </span>
+              {pregunta.nivel && (
+                <span className="px-1.5 py-0.5 rounded text-[10px] bg-slate-100 text-slate-500">
+                  {pregunta.nivel.nombre}
+                </span>
+              )}
+            </>
+          )}
+          {pregunta.baseConocimientoId == null && (
+            <span className="text-amber-600 text-[11px]">Sin clasificar</span>
+          )}
+          {pregunta.activa === false && (
+            <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-amber-50 text-amber-600">
+              En papelera
+            </span>
+          )}
+        </div>
+
+        {pregunta.imagen && (
+          <div className="rounded border border-slate-200 bg-slate-50 p-3 flex justify-center">
+            <img
+              src={imagenUrl(pregunta.imagen)}
+              alt="Imagen del enunciado"
+              className="max-h-64 object-contain"
+            />
+          </div>
+        )}
+
+        {/* whitespace-pre-line: cuatro enunciados traen los pasos numerados en
+            líneas aparte (las 5 reglas de oro para trabajo sin tensión, la regla
+            de las cuatro "M", las cuatro prohibiciones del vehículo). Sin esto
+            se leen como un párrafo corrido. */}
+        <p className="text-slate-800 text-sm leading-relaxed whitespace-pre-line">{pregunta.texto}</p>
+
+        <div>
+          <label className="block text-slate-600 text-xs font-semibold uppercase tracking-widest mb-2">
+            {esImagen ? 'Opciones (imágenes)' : 'Opciones'}
+          </label>
+
+          {opciones.length === 0 ? (
+            <p className="text-slate-400 text-xs">
+              Sin opciones: esta pregunta se responde con texto libre.
+            </p>
+          ) : esImagen ? (
+            <div className="grid grid-cols-4 gap-3">
+              {opciones.map((clave, i) => {
+                // La correcta se compara por CLAVE de storage, igual que
+                // corregir.ts en el backend. Comparar la URL armada daría
+                // siempre falso el día que imagenUrl() cambie de forma.
+                const esCorrecta = clave === pregunta.respuestaCorrecta
+                return (
+                  <div key={clave} className="space-y-1.5">
+                    <div className={`rounded border p-1 ${marcaCorrecta(esCorrecta)}`}>
+                      <img
+                        src={imagenUrl(clave)}
+                        alt={`Opción ${LETRAS_OPCION[i] ?? i + 1}`}
+                        className="w-full aspect-square object-contain"
+                      />
+                    </div>
+                    <p className={`text-[11px] font-mono ${esCorrecta ? 'text-emerald-700 font-semibold' : 'text-slate-400'}`}>
+                      {LETRAS_OPCION[i] ?? i + 1}) {esCorrecta && '✓ Correcta'}
+                    </p>
+                  </div>
+                )
+              })}
+            </div>
+          ) : (
+            <div className="space-y-1.5">
+              {opciones.map((opcion, i) => {
+                const esCorrecta = opcion === pregunta.respuestaCorrecta
+                return (
+                  <div
+                    key={`${opcion}-${i}`}
+                    className={`flex items-start gap-2 rounded border px-3 py-2 text-sm ${marcaCorrecta(esCorrecta)}`}
+                  >
+                    <span className="text-slate-400 text-xs font-mono mt-0.5 w-4 flex-shrink-0">
+                      {LETRAS_OPCION[i] ?? i + 1})
+                    </span>
+                    <span className={esCorrecta ? 'text-emerald-800 font-medium flex-1' : 'text-slate-700 flex-1'}>
+                      {opcion}
+                    </span>
+                    {esCorrecta && (
+                      <span className="text-emerald-700 text-[11px] font-semibold uppercase tracking-wide flex-shrink-0 mt-0.5">
+                        ✓ Correcta
+                      </span>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
+          {/* Red de seguridad: si la correcta no matchea ninguna opción, la
+              pregunta es irrendible (nadie la puede acertar) y no se nota
+              mirando la lista de arriba, que simplemente no marca nada. El
+              backend lo valida al crear, así que llegar acá significa que entró
+              por otra vía — vale avisarlo en vez de mostrar un modal prolijo. */}
+          {opciones.length > 0 && !opciones.includes(pregunta.respuestaCorrecta) && (
+            <div className="mt-2 bg-red-50 border border-red-200 text-red-700 text-xs rounded px-3 py-2">
+              La respuesta correcta guardada no coincide con ninguna de las opciones: nadie puede
+              aprobar esta pregunta. Mandala a papelera y cargala de nuevo.
+            </div>
+          )}
+        </div>
+
+        {pregunta.fuente && (
+          <p className="text-slate-400 text-xs border-t border-slate-100 pt-3">
+            Fuente: <span className="text-slate-500">{pregunta.fuente}</span>
+          </p>
+        )}
       </div>
     </Modal>
   )
