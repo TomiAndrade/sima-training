@@ -38,24 +38,37 @@ npx prisma db seed
 npm run start:dev
 ```
 
-### Escenario de demo (`SEED_DEMO`)
+### Contenido de SIMA CHECK (`SEED_SIMA_CHECK`)
 
-El seed base deja la estructura mínima: la organización Ingeniería SIMA, y nada más (ya no siembra módulos — ver `CLAUDE.md`). Para tener una base **navegable de punta a punta** (organización cliente → subcontratista, alumnos con pares puesto/centro, banco clasificado por base y nivel, un módulo publicado con su número `AÑO.MAYOR.MENOR` y asignaciones automáticas derivadas de reglas):
+El seed base deja la estructura mínima: la organización Ingeniería SIMA, y nada más (no siembra módulos — ver `CLAUDE.md`). Para cargar el **contenido real de evaluación**:
 
 ```powershell
-$env:SEED_DEMO='true'; npx prisma db seed   # PowerShell
+$env:SEED_SIMA_CHECK='true'; npx prisma db seed   # PowerShell
 ```
 
 ```bash
-SEED_DEMO=true npx prisma db seed           # bash
+SEED_SIMA_CHECK=true npx prisma db seed           # bash
 ```
 
-Al terminar imprime los IDs de todo lo sembrado (organizaciones, base y niveles, módulo publicado, usuarios) para poder armar las llamadas de verificación sin abrir Prisma Studio.
+Qué siembra:
 
-Dos cosas a tener en cuenta:
+| | |
+|---|---|
+| Catálogos de nómina | 88 puestos y 16 centros de costo |
+| Bases de conocimiento | `[IND] Inducción SSMAC Ingeniería Sima` (niveles Básico/Intermedio/Avanzado), `[ORO] Reglas de Oro Industria Petrolera` y `[RSV] Reglas que Salvan Vidas — Phoenix` |
+| Banco | **202 preguntas** con sus **73 imágenes**, todas clasificadas |
+| Módulos | los 5, publicados en `2026.01.00`, cada uno llenado por un criterio (base + nivel) |
+| Reglas de asignación | 54, escalonadas por jerarquía |
 
-- **Es destructivo y wholesale**, igual que el seed base: además de usuarios, organizaciones y módulos, la rama demo borra **todas** las preguntas, niveles y bases de conocimiento antes de sembrar. Es lo que la hace re-ejecutable.
-- **Reusa los services** (`UsuariosService`, `ModulosService`, `ReglasAsignacionService`…) levantando un application context de Nest, en vez de escribir inserts crudos, para no saltearse la matriz rol↔organización, el appendeo de `orden`, el cálculo del número de versión ni el motor de recálculo. Lo único que no corre por esa vía es la `ValidationPipe` global, que es de la capa HTTP.
+**No siembra personas**: la nómina es PII y se importa desde el backoffice contra la organización Ingeniería SIMA. Mientras no haya usuarios, las reglas no derivan ninguna `Asignacion` — se materializan solas al importarlos.
+
+Al terminar imprime los IDs de todo lo sembrado (bases con sus niveles, versiones publicadas con su número y su cantidad de preguntas) para poder armar las llamadas de verificación sin abrir Prisma Studio.
+
+Tres cosas a tener en cuenta:
+
+- **Es destructivo y wholesale**, igual que el seed base: borra **todas** las preguntas, niveles y bases de conocimiento antes de sembrar, más las **imágenes** que esas preguntas referenciaban en el storage. Es lo que lo hace re-ejecutable sin acumular archivos huérfanos.
+- **Reusa los services** (`PreguntasService`, `ModulosService`, `ReglasAsignacionService`…) levantando un application context de Nest, en vez de escribir inserts crudos, para no saltearse `resolverFuente`, la validación de opciones, la resolución de criterios, el cálculo del número de versión ni el motor de recálculo. Lo único que no corre por esa vía es la `ValidationPipe` global, que es de la capa HTTP.
+- **Las preguntas y las imágenes son datos generados** desde los cinco Excel de evaluación (`prisma/seed-data/` y `prisma/seed-assets/`), con los scripts de [`scripts/contenido/`](../scripts/contenido/README.md). Los Excel no están versionados: llevan PII en el archivo hermano de nómina.
 
 La API queda en **http://localhost:3000**. Verificá con:
 
@@ -86,7 +99,7 @@ Ver [`.env.example`](.env.example). Las principales:
 | `npm run lint` | ESLint |
 | `npm test` | Tests unitarios (Jest) |
 | `npx prisma migrate dev` | Crea/aplica migraciones en dev |
-| `npx prisma db seed` | Carga los datos base (agregar `SEED_DEMO=true` para el escenario de demo) |
+| `npx prisma db seed` | Carga los datos base (agregar `SEED_SIMA_CHECK=true` para el contenido real de SIMA CHECK) |
 | `npx prisma studio` | Explorador visual de la base |
 
 ## Endpoints
@@ -235,8 +248,13 @@ prisma/
 │                    Modulo, ModuloVersion, ModuloVersionCriterio,
 │                    ReglaAsignacion, Asignacion, Sesion, Respuesta + pivots
 ├── seed.ts          Organización interna (Ingeniería SIMA) y nada más, más el
-│                    escenario de demo detrás de SEED_DEMO=true.
+│                    contenido de SIMA CHECK detrás de SEED_SIMA_CHECK=true.
 │                    Limpia en orden de dependencia (las FK son ON DELETE RESTRICT)
+├── seed-data/       Datos GENERADOS desde los Excel de docs/ (ver
+│                    scripts/contenido/): las 202 preguntas y los catálogos
+│                    de nómina. No se editan a mano
+├── seed-assets/     Las 73 imágenes de esas preguntas. El seed las sube por
+│                    StorageService, no las copia a uploads/
 └── migrations/      Migraciones versionadas
 ```
 

@@ -105,7 +105,9 @@ Sembraba además **cuatro módulos con uuid hardcodeado** (`SIMA Básico`/`Inter
 
 La línea es: **estructura la siembra el seed, contenido lo crea quien lo necesita.** Un módulo es una decisión de negocio (qué se capacita, con qué preguntas, cada cuánto se recertifica), no un prerrequisito técnico.
 
-El beneficio de fondo es que se fue el **acoplamiento por uuid entre los dos modos del seed**, que estaba marcado con una advertencia en el propio código: `sembrarDemo()` poblaba el `SIMA Básico` del seed base por su uuid literal, así que tocar la lista de módulos de un modo rompía el otro con un `NotFoundException` a distancia. Ahora `sembrarDemo()` crea sus dos módulos con `modulos.create()` (que ya deja la `ModuloVersion` v1 en BORRADOR) y usa los ids devueltos: la rama demo es autocontenida.
+El beneficio de fondo es que se fue el **acoplamiento por uuid entre los dos modos del seed**, que estaba marcado con una advertencia en el propio código: la rama opcional poblaba el `SIMA Básico` del seed base por su uuid literal, así que tocar la lista de módulos de un modo rompía el otro con un `NotFoundException` a distancia. Hoy `sembrarSimaCheck()` crea sus cinco módulos con `modulos.create()` (que ya deja la `ModuloVersion` v1 en BORRADOR) y usa los ids devueltos: la segunda rama es autocontenida.
+
+Ojo con la palabra "contenido" acá: los cinco módulos de SIMA CHECK **sí** los siembra el repo, pero por la **segunda** rama (`SEED_SIMA_CHECK=true`, ver más abajo) y no por el seed base. La línea no se movió — se movió qué tan cómodo es cruzarla a propósito.
 
 ### Toda entidad nueva con FK RESTRICT tiene que entrar a `limpiar()`, en orden
 
@@ -129,27 +131,40 @@ organizacion (hijas de la jerarquía primero, después el resto)
 moduloVersionPregunta → moduloVersionCriterio → moduloVersion → modulo
 ```
 
-Y en la rama demo, que corre después: `pregunta → nivelBase → baseConocimiento`.
+Y en `limpiarSimaCheck()`, que corre después: `pregunta → nivelBase → baseConocimiento`, precedido del borrado de las **imágenes en el storage** (ver más abajo).
 
 Por qué cada tramo está donde está:
 
-- **`Sesion` y `Respuesta` van primeras** porque son las más hijas: `Sesion` cuelga de `Usuario`, `ModuloVersion` **y** `Asignacion`, o sea que bloquea las tres ramas de abajo —incluida la de asignaciones, que antes arrancaba el orden—. `Respuesta` cuelga de `Sesion` y de `Pregunta`, así que además desbloquea el borrado de preguntas del demo.
+- **`Sesion` y `Respuesta` van primeras** porque son las más hijas: `Sesion` cuelga de `Usuario`, `ModuloVersion` **y** `Asignacion`, o sea que bloquea las tres ramas de abajo —incluida la de asignaciones, que antes arrancaba el orden—. `Respuesta` cuelga de `Sesion` y de `Pregunta`, así que además desbloquea el borrado de preguntas de la segunda rama.
 - **`Asignacion` es su propia rama** porque tiene FK **directa** a `Usuario`, sin pasar por `Vinculacion`.
 - **`ReglaAsignacion`** tiene FK a `Modulo`, `Puesto` y `CentroCosto`: sin ella, el borrado de módulos falla con `reglas_asignacion_modulo_id_fkey`.
-- **`ModuloVersionCriterio`** es la tercera rama que cuelga de `ModuloVersion`, y también desbloquea el borrado de bases del demo por la FK criterio → base.
+- **`ModuloVersionCriterio`** es la tercera rama que cuelga de `ModuloVersion`, y también desbloquea el borrado de bases de la segunda rama por la FK criterio → base.
 - **`Organizacion` se borra en dos pasos** (primero las hijas de la jerarquía, después el resto). Con la self-FK en `SET NULL` un `deleteMany()` único probablemente funcionaría, pero no vale la pena depender de cómo Postgres resuelve la acción RI sobre una fila que el mismo statement está borrando.
 
 Las **únicas dos FK que no son RESTRICT** son `Asignacion.moduloVersionId` y la self-FK `Organizacion.organizacionPadreId`, las dos `SET NULL`. Ojo con la segunda: **el `onDelete` no figura en `schema.prisma`**, hay que leerlo en el SQL de la migración inicial.
 
-### El escenario de demo reusa los services de Nest, no inserts crudos
+### La segunda rama del seed reusa los services de Nest, no inserts crudos
 
-`sembrarDemo()` levanta un application context con `NestFactory.createApplicationContext` y llama a los services reales, en vez de escribir en la base directo.
+`sembrarSimaCheck()` levanta un application context con `NestFactory.createApplicationContext` y llama a los services reales, en vez de escribir en la base directo.
 
-El motivo es que un insert crudo **se saltea las reglas que viven en los services**: la matriz rol↔organización, `resolverFuente`, el appendeo de `orden`, la resolución de criterios, el cálculo del número de versión y el motor de recálculo. Un escenario de demo sembrado por afuera de esas reglas puede quedar en un estado que la aplicación nunca produciría, y entonces no sirve para demostrar nada.
+El motivo es que un insert crudo **se saltea las reglas que viven en los services**: `resolverFuente`, el appendeo de `orden` de los niveles, la validación de que la `respuestaCorrecta` esté entre las opciones, la resolución de criterios, el cálculo del número de versión y el motor de recálculo. Contenido sembrado por afuera de esas reglas puede quedar en un estado que la aplicación nunca produciría, y entonces no demuestra nada.
 
 Lo único que no corre por esa vía es la `ValidationPipe` global, que vive en `main.ts` y sólo aplica a la capa HTTP.
 
-Va detrás de `SEED_DEMO=true` y apagado por defecto porque son **datos de demostración, no estructura**. Es destructivo y wholesale igual que el seed base: la rama demo borra todas las preguntas, niveles y bases antes de sembrar, y eso es lo que la hace re-ejecutable.
+Va detrás de `SEED_SIMA_CHECK=true` y apagado por defecto porque es **contenido, no estructura**. Es destructivo y wholesale igual que el seed base: borra todas las preguntas, niveles y bases antes de sembrar, y eso es lo que la hace re-ejecutable.
+
+### Las imágenes del contenido se borran ANTES que las preguntas, y con la app levantada
+
+`limpiarSimaCheck()` es la única parte del seed que no puede ser un `deleteMany()`: las imágenes viven en el **storage**, no en la base, y lo único que dice dónde están son las columnas `Pregunta.imagen` y `Pregunta.opciones` que el borrado está por eliminar. Si se limpiara después, cada corrida del seed dejaría 73 archivos huérfanos más — en `./uploads` con el driver local, y en el bucket de R2 en el deploy, donde no hay forma de barrerlos a mano.
+
+De ahí dos consecuencias que se ven en el código:
+
+- **El clean corre DENTRO de `sembrarSimaCheck()`**, con la app de Nest ya levantada, y no al lado de `limpiar()` como estaba la rama anterior: necesita el `StorageService`, que es la abstracción que hace que esto funcione igual con `local` y con `r2`.
+- **Hay que mirar los dos lugares donde una clave puede estar referenciada**: la columna `imagen` (el enunciado) y el jsonb `opciones` (las opciones de `OPCIONES_IMAGEN`). Mirar sólo la columna dejaría atrás las 45 preguntas de opciones con imagen.
+
+Por la misma razón el seed **sube las imágenes por `StorageService.guardar()`** en vez de copiar archivos a `./uploads`: la clave se la asigna el storage (`preguntas/<uuid>.png`) y el mismo seed corre contra R2 sin cambiar una línea. El formato sale de los magic bytes, igual que en el upload real del backoffice — la extensión del archivo es un nombre, no una garantía.
+
+El subidor **memoriza por nombre de archivo**: los tres tachos de residuos son opción de seis preguntas distintas, y subirlos una vez por uso dejaría seis copias del mismo pictograma con seis claves distintas.
 
 ---
 
