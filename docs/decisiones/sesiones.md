@@ -85,13 +85,35 @@ Las estadísticas por base salen por join `Respuesta → Pregunta → BaseConoci
 
 Se difirió a propósito, con una advertencia en [`../pendientes.md`](../pendientes.md): la ventana para agregar esas columnas sin perder información **se cierra con el primer endpoint que permita reclasificar una pregunta**. Hoy no existe —el único `PATCH /preguntas/:id` es el toggle de papelera—, así que la clasificación actual de cada pregunta *es* la histórica.
 
-## `SesionesModule` no importa `AsignacionesModule`, ni tiene controller propio
+## `GET /sesiones/:id` es la ÚNICA lectura con guard del proyecto
+
+La convención es **"lecturas abiertas; escrituras protegidas"**, y este endpoint la rompe a propósito. Es el único GET de toda la API que devuelve `Pregunta.respuestaCorrecta`.
+
+El backend **nunca** le manda la respuesta correcta a la tablet — `serializarPregunta()` la omite, y es lo que sostiene que el backend sea la única autoridad sobre el resultado (ver más arriba). Pero la app le devuelve al alumno el `sesionId` al terminar de rendir: con este endpoint abierto, alguien que desaprobó podía pedir el detalle de su propio intento, leer las correctas y reintentar sabiéndolas todas. El guard es lo que cierra eso.
+
+No es una defensa perfecta —el `id` es un uuid y el token del backoffice es compartido—, pero mueve el ataque de "un `curl` con un id que la app te dio" a "conseguir credenciales del backoffice", que es un umbral distinto.
+
+Corolario en el frontend: `api.get` no adjunta token (justamente porque los GET son abiertos), así que el backoffice tuvo que sumar un **`api.getAuth`** con un solo consumidor. Si aparece un segundo, conviene revisar si de verdad necesita la respuesta correcta antes de sumarlo.
+
+**El endpoint hermano SÍ es abierto**: `GET /estadisticas/sima-check` agrega sobre las mismas respuestas, pero su payload no incluye `respuestaCorrecta` en ningún lado — la distribución dice cuál de las opciones era la buena sin devolver el string. Hay un spec que lo fija (`expect(JSON.stringify(res)).not.toContain('respuestaCorrecta')`), para que agregarlo obligue a decidir el guard a propósito en vez de filtrarlo sin querer.
+
+## El ✓/✗ de un intento sale de `Respuesta.correcta`, no de comparar strings
+
+`detalle()` devuelve las dos cosas y **no son lo mismo**: `Respuesta.correcta` es la corrección *congelada* al momento de rendir, y `Pregunta.respuestaCorrecta` se lee *viva* del banco. Hoy coinciden siempre, porque no existe ningún endpoint que edite una pregunta.
+
+El modal pinta el resultado de cada pregunta con la **primera**. Comparar `respuestaDada === respuestaCorrecta` sería más corto y hoy daría idéntico, pero es exactamente el error que la persistencia de la corrección vino a evitar: el día que se corrija una pregunta, un intento viejo tiene que seguir diciendo lo que se decidió entonces. Mismo criterio que el `umbralAprobacion` congelado en la fila.
+
+La comparación de strings sí se usa, pero para otra cosa: decidir **qué opción** marcar en verde y cuál eligió la persona. Eso es presentación del contenido actual, no el veredicto.
+
+`detalle()` tampoco filtra por `Pregunta.activa`, misma doctrina que `crearSesion()`: una pregunta mandada a papelera después no puede desaparecer de un intento ya rendido. Se muestra con badge "En papelera", que explica por qué no está en el banco.
+
+## `SesionesModule` no importa `AsignacionesModule`, y su controller es mínimo
 
 Aunque escribe en `asignaciones`, lo hace **por Prisma directo**, igual que `ModulosService` consulta `pregunta`. Evita el ciclo, porque `modulosAprobados()` consulta `sesion` en la dirección contraria.
 
 Y **registrar una sesión no llama a `recalcular()`**: aprobar no crea ni revoca ninguna asignación.
 
-Sin controller propio a propósito: los endpoints que consume la tablet viven en `tablet/`, que delega toda esta lógica en `SesionesService` en vez de reimplementarla, y el historial de rendiciones de una persona cuelga de `/usuarios/:id/informe`.
+El módulo **sí tiene controller ahora**, pero con un solo endpoint: el `GET /sesiones/:id` de arriba, que es de backoffice. Todo lo que consume la **tablet** sigue viviendo en `tablet/`, que delega esta lógica en `SesionesService` en vez de reimplementarla, y el historial de rendiciones de una persona sigue colgando de `/usuarios/:id/informe`.
 
 ## `claveIdempotencia` la genera LA APP, no el backend
 
