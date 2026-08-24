@@ -85,6 +85,16 @@ async function upload(path, file) {
 
 export const api = {
   get: (path) => request('GET', path),
+  // GET AUTENTICADO — la excepción a "los GET no llevan token".
+  //
+  // Existe por un solo consumidor: GET /sesiones/:id, el detalle de un intento,
+  // que es la única lectura de toda la API que devuelve la respuesta correcta
+  // de cada pregunta. El backend nunca se la manda a la tablet (es lo que
+  // impide que un alumno que desaprobó las mire y reintente sabiéndolas), así
+  // que ese endpoint va con guard y necesita el Bearer.
+  //
+  // Cualquier otro GET que se agregue debería usar `get` a secas.
+  getAuth: (path) => request('GET', path, { auth: true }),
   post: (path, body) => request('POST', path, { body, auth: true }),
   // PUT se usa donde el body reemplaza un set completo (ej. el orden de los
   // niveles de una base), a diferencia de PATCH que actualiza campos sueltos.

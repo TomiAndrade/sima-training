@@ -10,6 +10,7 @@ import TrainingAssignments from './sima-check/pages/TrainingAssignments'
 import Questions from './sima-check/pages/Questions'
 import ReglasAsignacion from './sima-check/pages/ReglasAsignacion'
 import BasesConocimiento from './sima-check/pages/BasesConocimiento'
+import Estadisticas from './sima-check/pages/Estadisticas'
 
 const PAGES = {
   dashboard: Dashboard,
@@ -22,6 +23,7 @@ const PAGES = {
   'bases-conocimiento': BasesConocimiento,
   'assignment-rules': ReglasAsignacion,
   'training-assignments': TrainingAssignments,
+  'sima-check-estadisticas': Estadisticas,
 }
 
 // Las claves de PAGES son también los ids válidos del hash de la URL: agregar

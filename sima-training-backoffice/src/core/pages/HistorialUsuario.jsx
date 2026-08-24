@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import Table from '../../components/Table'
 import Button from '../../components/Button'
 import { usuariosApi } from '../api/usuarios'
+import VerIntentoModal from '../components/VerIntentoModal'
 import { roleBadge, origenBadge } from '../format/badges'
 import { formatVersionNumero } from '../format/version'
 
@@ -155,6 +156,11 @@ export default function HistorialUsuario({
   const [showRevocadas, setShowRevocadas] = useState(false)
   const [showSesiones, setShowSesiones] = useState(false)
   const [showAudit, setShowAudit] = useState(false)
+
+  // La sesión cuyo detalle se está mirando. El modal pide sus propias
+  // respuestas (GET /sesiones/:id): el informe trae el score de cada intento
+  // pero no qué se contestó en cada una.
+  const [verIntento, setVerIntento] = useState(null)
 
   const fetchInforme = async () => {
     const data = await usuariosApi.informe(usuarioId)
@@ -509,7 +515,17 @@ export default function HistorialUsuario({
 
       <div className="space-y-2">
         {seccionPlegable(showSesiones, () => setShowSesiones((s) => !s), 'Historial de rendiciones', sesiones.length)}
-        {showSesiones && <Table columns={sesionesColumns} data={sesiones} />}
+        {showSesiones && (
+          <Table
+            columns={sesionesColumns}
+            data={sesiones}
+            actions={(row) => (
+              <Button variant="ghost" size="sm" onClick={() => setVerIntento(row)}>
+                Ver intento
+              </Button>
+            )}
+          />
+        )}
       </div>
 
       <div className="space-y-2">
@@ -563,6 +579,13 @@ export default function HistorialUsuario({
           </div>
         )}
       </div>
+
+      {verIntento && (
+        <VerIntentoModal
+          sesionId={verIntento.id}
+          onClose={() => setVerIntento(null)}
+        />
+      )}
     </div>
   )
 }

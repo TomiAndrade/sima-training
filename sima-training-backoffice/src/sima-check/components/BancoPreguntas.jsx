@@ -6,13 +6,16 @@ import { imagenUrl, IMAGEN_MAX_BYTES, IMAGEN_MIME_TYPES, preguntasApi } from '..
 import { modulosApi } from '../../core/api/modulos'
 import { basesConocimientoApi } from '../../core/api/basesConocimiento'
 import { backendTypeBadge } from '../../core/format/tipoPregunta'
+import { LETRAS_OPCION, marcaOpcion, opcionesDe } from '../../core/format/opcionesPregunta'
 
 // Componentes compartidos para gestionar el banco de preguntas de un módulo
 // (versión BORRADOR) contra la API real. Los usan tanto la tab "Preguntas"
 // (Questions.jsx) como la vista de preguntas dentro de "Capacitaciones"
 // (TrainingModules.jsx), para no duplicar el flujo.
-// El hook `useBancoModulo` vive en ./bancoModulo; `backendTypeBadge`, en
-// core/format/tipoPregunta.jsx (lo comparten las dos capas).
+// El hook `useBancoModulo` vive en ./bancoModulo; `backendTypeBadge` y los
+// helpers de opciones (letras, V/F, el recuadro de la correcta), en
+// core/format/ — los comparten las dos capas, porque el modal "Ver intento" de
+// la hoja de vida los necesita y vive en core/, que no puede importar de acá.
 
 const inputCls = 'w-full bg-white border border-slate-300 rounded px-3 py-2 text-slate-900 text-sm focus:outline-none focus:border-red-600'
 
@@ -949,25 +952,6 @@ export function NuevaPreguntaModal({ onClose, backendId, onAssigned, onAssign })
   )
 }
 
-// Letras de las opciones tal cual las pinta la tablet (`QuestionCard`), para que
-// "la B" signifique lo mismo mirando el backoffice que mirando el atril.
-const LETRAS_OPCION = ['A', 'B', 'C', 'D']
-
-// Las dos opciones de VERDADERO_FALSO no están en `opciones` (el jsonb viene
-// vacío): las pone el frontend. Son estos dos strings exactos, que es contra lo
-// que el backend corrige — ver `corregir.ts`.
-const OPCIONES_VF = ['Verdadero', 'Falso']
-
-// Recuadro de una opción correcta. Se usa igual para texto y para imagen: es el
-// único lugar del backoffice donde se ve cuál es la respuesta buena, así que
-// tiene que leerse de un vistazo y no depender sólo del color (de ahí el ✓ y la
-// palabra "Correcta", no un borde verde a secas).
-function marcaCorrecta(esCorrecta) {
-  return esCorrecta
-    ? 'border-emerald-400 bg-emerald-50 ring-1 ring-emerald-400'
-    : 'border-slate-200 bg-white'
-}
-
 // Modal "Ver pregunta": lo único del backoffice que muestra el CONTENIDO de una
 // pregunta ya creada — la imagen del enunciado en grande, las opciones y cuál es
 // la correcta.
@@ -983,9 +967,9 @@ function marcaCorrecta(esCorrecta) {
 // decisiones/preguntas.md), y la imagen es inmutable una vez creada.
 export function VerPreguntaModal({ pregunta, onClose }) {
   const esImagen = pregunta.tipo === 'OPCIONES_IMAGEN'
-  const esVF = pregunta.tipo === 'VERDADERO_FALSO'
-  // En VERDADERO_FALSO el jsonb `opciones` está vacío a propósito.
-  const opciones = esVF ? OPCIONES_VF : (pregunta.opciones ?? [])
+  // En VERDADERO_FALSO el jsonb `opciones` está vacío a propósito: las dos
+  // opciones las resuelve opcionesDe().
+  const opciones = opcionesDe(pregunta)
 
   return (
     <Modal open onClose={onClose} title="Ver pregunta" size="lg" footer={<Button variant="secondary" onClick={onClose}>Cerrar</Button>}>
@@ -1054,7 +1038,7 @@ export function VerPreguntaModal({ pregunta, onClose }) {
                 const esCorrecta = clave === pregunta.respuestaCorrecta
                 return (
                   <div key={clave} className="space-y-1.5">
-                    <div className={`rounded border p-1 ${marcaCorrecta(esCorrecta)}`}>
+                    <div className={`rounded border p-1 ${marcaOpcion(esCorrecta)}`}>
                       <img
                         src={imagenUrl(clave)}
                         alt={`Opción ${LETRAS_OPCION[i] ?? i + 1}`}
@@ -1075,7 +1059,7 @@ export function VerPreguntaModal({ pregunta, onClose }) {
                 return (
                   <div
                     key={`${opcion}-${i}`}
-                    className={`flex items-start gap-2 rounded border px-3 py-2 text-sm ${marcaCorrecta(esCorrecta)}`}
+                    className={`flex items-start gap-2 rounded border px-3 py-2 text-sm ${marcaOpcion(esCorrecta)}`}
                   >
                     <span className="text-slate-400 text-xs font-mono mt-0.5 w-4 flex-shrink-0">
                       {LETRAS_OPCION[i] ?? i + 1})

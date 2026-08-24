@@ -35,6 +35,12 @@ function buildQuery(params) {
 
 export const preguntasApi = {
   list: (params = {}) => api.get(`/preguntas${buildQuery(params)}`),
+  // Una pregunta con TODO su contenido (opciones, respuesta correcta, imagen,
+  // base y nivel resueltos). Lo consume el tab Estadísticas, cuyo ranking sólo
+  // trae texto y conteos: para abrir el modal "Ver pregunta" hace falta el
+  // contenido completo, y pedirlo de a una es más barato que engordar el
+  // payload del reporte con las opciones de las 202.
+  findOne: (id) => api.get(`/preguntas/${id}`),
   create: (data) => api.post('/preguntas', data),
   // Papelera global: activa=false envía a papelera (cascada backend a los
   // pivots por módulo); activa=true recupera (no restaura pivots).
