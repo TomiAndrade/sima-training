@@ -5,6 +5,7 @@ import { AuditModule } from './audit/audit.module';
 import { AuthModule } from './auth/auth.module';
 import { BasesConocimientoModule } from './bases-conocimiento/bases-conocimiento.module';
 import { CentrosCostoModule } from './centros-costo/centros-costo.module';
+import { EstadisticasModule } from './estadisticas/estadisticas.module';
 import { HealthController } from './health/health.controller';
 import { ImportModule } from './import/import.module';
 import { ModulosModule } from './modulos/modulos.module';
@@ -37,6 +38,7 @@ import { UsuariosModule } from './usuarios/usuarios.module';
     SesionesModule,
     TabletModule,
     ResumenModule,
+    EstadisticasModule,
   ],
   controllers: [HealthController],
   providers: [],
