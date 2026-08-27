@@ -73,16 +73,25 @@ export default function Results({ usuario, module: mod, result, enviando, errorE
           <Button variant="primary" onClick={onGoToModules} fullWidth>
             Mis capacitaciones
           </Button>
-          {/* El estado de reintentos lo recalcula el backend DESPUÉS de
+          {/* Reintentar es SÓLO para quien desaprobó. Aprobado, el módulo ya
+              salió de pendientes y volver a rendirlo no cambia nada: la
+              asignación se cumple con la primera aprobación. El backend igual
+              lo dejaría pasar --el contador de intentos se resetea justamente
+              al aprobar-- así que si el botón estuviera, funcionaría, y lo
+              único que haría es sumar sesiones al historial de la persona y
+              darle la chance de "desaprobar" algo que ya tenía aprobado.
+
+              El estado de reintentos lo recalcula el backend DESPUÉS de
               registrar esta sesión. Si ya no se puede, se dice por qué en vez de
               ofrecer un botón que devuelve 409. */}
-          {bloqueoReintento ? (
-            <p className="text-slate-500 text-sm leading-relaxed text-center px-2">{bloqueoReintento}</p>
-          ) : (
-            <Button variant="secondary" onClick={onRetry} fullWidth>
-              Reintentar evaluación
-            </Button>
-          )}
+          {!aprobada &&
+            (bloqueoReintento ? (
+              <p className="text-slate-500 text-sm leading-relaxed text-center px-2">{bloqueoReintento}</p>
+            ) : (
+              <Button variant="secondary" onClick={onRetry} fullWidth>
+                Reintentar evaluación
+              </Button>
+            ))}
           <Button variant="secondary" onClick={onHome} fullWidth>
             Volver al inicio
           </Button>

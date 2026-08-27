@@ -33,6 +33,9 @@ pnpm-debug.log*
 .env.local
 .env.*.local
 
+# Valores reales armados a partir de .env.render.example — nunca se commitean
+.env.render
+
 # Prisma
 prisma/*.db
 

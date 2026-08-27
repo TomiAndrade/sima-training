@@ -38,24 +38,37 @@ npx prisma db seed
 npm run start:dev
 ```
 
-### Escenario de demo (`SEED_DEMO`)
+### Contenido de SIMA CHECK (`SEED_SIMA_CHECK`)
 
-El seed base deja la estructura mínima: la organización Ingeniería SIMA, y nada más (ya no siembra módulos — ver `CLAUDE.md`). Para tener una base **navegable de punta a punta** (organización cliente → subcontratista, alumnos con pares puesto/centro, banco clasificado por base y nivel, un módulo publicado con su número `AÑO.MAYOR.MENOR` y asignaciones automáticas derivadas de reglas):
+El seed base deja la estructura mínima: la organización Ingeniería SIMA, y nada más (no siembra módulos — ver `CLAUDE.md`). Para cargar el **contenido real de evaluación**:
 
 ```powershell
-$env:SEED_DEMO='true'; npx prisma db seed   # PowerShell
+$env:SEED_SIMA_CHECK='true'; npx prisma db seed   # PowerShell
 ```
 
 ```bash
-SEED_DEMO=true npx prisma db seed           # bash
+SEED_SIMA_CHECK=true npx prisma db seed           # bash
 ```
 
-Al terminar imprime los IDs de todo lo sembrado (organizaciones, base y niveles, módulo publicado, usuarios) para poder armar las llamadas de verificación sin abrir Prisma Studio.
+Qué siembra:
 
-Dos cosas a tener en cuenta:
+| | |
+|---|---|
+| Catálogos de nómina | 88 puestos y 16 centros de costo |
+| Bases de conocimiento | `[IND] Inducción SSMAC Ingeniería Sima` (niveles Básico/Intermedio/Avanzado), `[ORO] Reglas de Oro Industria Petrolera` y `[RSV] Reglas que Salvan Vidas — Phoenix` |
+| Banco | **202 preguntas** con sus **73 imágenes**, todas clasificadas |
+| Módulos | los 5, publicados en `2026.01.00`, cada uno llenado por un criterio (base + nivel) |
+| Reglas de asignación | 54, escalonadas por jerarquía |
 
-- **Es destructivo y wholesale**, igual que el seed base: además de usuarios, organizaciones y módulos, la rama demo borra **todas** las preguntas, niveles y bases de conocimiento antes de sembrar. Es lo que la hace re-ejecutable.
-- **Reusa los services** (`UsuariosService`, `ModulosService`, `ReglasAsignacionService`…) levantando un application context de Nest, en vez de escribir inserts crudos, para no saltearse la matriz rol↔organización, el appendeo de `orden`, el cálculo del número de versión ni el motor de recálculo. Lo único que no corre por esa vía es la `ValidationPipe` global, que es de la capa HTTP.
+**No siembra personas**: la nómina es PII y se importa desde el backoffice contra la organización Ingeniería SIMA. Mientras no haya usuarios, las reglas no derivan ninguna `Asignacion` — se materializan solas al importarlos.
+
+Al terminar imprime los IDs de todo lo sembrado (bases con sus niveles, versiones publicadas con su número y su cantidad de preguntas) para poder armar las llamadas de verificación sin abrir Prisma Studio.
+
+Tres cosas a tener en cuenta:
+
+- **Es destructivo y wholesale**, igual que el seed base: borra **todas** las preguntas, niveles y bases de conocimiento antes de sembrar, más las **imágenes** que esas preguntas referenciaban en el storage. Es lo que lo hace re-ejecutable sin acumular archivos huérfanos.
+- **Reusa los services** (`PreguntasService`, `ModulosService`, `ReglasAsignacionService`…) levantando un application context de Nest, en vez de escribir inserts crudos, para no saltearse `resolverFuente`, la validación de opciones, la resolución de criterios, el cálculo del número de versión ni el motor de recálculo. Lo único que no corre por esa vía es la `ValidationPipe` global, que es de la capa HTTP.
+- **Las preguntas y las imágenes son datos generados** desde los cinco Excel de evaluación (`prisma/seed-data/` y `prisma/seed-assets/`), con los scripts de [`scripts/contenido/`](../scripts/contenido/README.md). Los Excel no están versionados: llevan PII en el archivo hermano de nómina.
 
 La API queda en **http://localhost:3000**. Verificá con:
 
@@ -86,8 +99,37 @@ Ver [`.env.example`](.env.example). Las principales:
 | `npm run lint` | ESLint |
 | `npm test` | Tests unitarios (Jest) |
 | `npx prisma migrate dev` | Crea/aplica migraciones en dev |
-| `npx prisma db seed` | Carga los datos base (agregar `SEED_DEMO=true` para el escenario de demo) |
+| `npx prisma db seed` | Carga los datos base (agregar `SEED_SIMA_CHECK=true` para el contenido real de SIMA CHECK) |
 | `npx prisma studio` | Explorador visual de la base |
+| `npx ts-node scripts/sembrar-rendiciones.ts` | **Sólo dev.** Siembra rendiciones simuladas — ver abajo |
+
+### Rendiciones simuladas (`scripts/sembrar-rendiciones.ts`)
+
+⚠️ **Sólo para entornos de desarrollo.** Crea `Sesion` que nadie rindió: una base con esto adentro no sirve como registro de capacitación, y no hay que correrlo nunca contra producción.
+
+Existe porque el tab **Estadísticas** y el **"Ver intento"** de la hoja de vida no se pueden mirar sin datos, y llegar a un ranking con forma rindiendo a mano son cientos de exámenes.
+
+**Requiere la nómina importada**: sin asignaciones vigentes no hay a quién hacerle rendir nada, y el script avisa y sale. Importala desde el backoffice (Usuarios → Importar Excel) contra "Ingeniería SIMA" — las reglas de `SEED_SIMA_CHECK=true` materializan las asignaciones solas al importar.
+
+```powershell
+# PowerShell
+npx ts-node scripts/sembrar-rendiciones.ts
+
+# Acotado a 30 personas, y borrando antes lo ya sembrado
+$env:RENDICIONES_PERSONAS='30'; $env:RENDICIONES_LIMPIAR='true'; npx ts-node scripts/sembrar-rendiciones.ts
+```
+
+| Variable | Default | Qué hace |
+|---|---|---|
+| `RENDICIONES_PERSONAS` | todas | Cuántas personas rinden (se recorta por persona, no por asignación, para no dejar a nadie con la mitad de sus módulos) |
+| `RENDICIONES_INTENTOS` | `2` | Intentos máximos por asignación; se corta al aprobar |
+| `RENDICIONES_LIMPIAR` | — | `true` borra las sesiones sembradas antes de empezar |
+
+Dos detalles del diseño: **reusa `SesionesService.registrar()`** en vez de escribir `INSERT` crudos (igual que `sembrarSimaCheck()` reusa los services), así las sesiones pasan por la corrección real, el umbral congelado y el completado de `Asignacion.moduloVersionId` al aprobar; y las respuestas **no son azar uniforme** — cada pregunta recibe una dificultad determinística derivada del hash de su id, y los errores se concentran en una distractora. Con ruido uniforme el ranking de "más falladas" y la distribución de opciones saldrían planos, que es justo lo que esas pantallas tienen que mostrar.
+
+Es idempotente (`claveIdempotencia` derivada del par asignación-intento): correrlo dos veces no duplica.
+
+**No confundir con `scripts/demo/`**, que es otra cosa y está marcado como deuda en [`../docs/pendientes.md`](../docs/pendientes.md).
 
 ## Endpoints
 
@@ -153,13 +195,15 @@ Ver [`.env.example`](.env.example). Las principales:
 | `PATCH` | `/reglas-asignacion/:id` | JWT | `{ moduloId?, activo? }`, al menos uno. `activo` es la pausa reversible; `moduloId` corrige a qué módulo obliga la regla. **El alcance (puesto/centro) no se edita**: moverla de lugar es eliminarla y crear otra. Ojo: el backoffice **sólo manda `activo`** — `moduloId` está implementado y testeado pero hoy no tiene consumidor (la pantalla Reglas edita por diff alta+baja, para que el módulo anterior quede registrado; ver `CLAUDE.md`) |
 | `DELETE` | `/reglas-asignacion/:id` | JWT | Elimina la regla: **baja lógica** (`deletedAt`), la fila nunca se borra — es la única evidencia de por qué alguien tuvo que rendir un módulo. Eje distinto de `activo`: deja de listarse y de matchear, y no hay filtro para verla desde el backoffice. Volver a crear el mismo triple **revive esta misma fila** |
 | `POST` | `/tablet/login` | — | Login de la app tablet: sólo `dni`. **PROVISIONAL sin PIN**, gateado por `TABLET_LOGIN_SIN_PIN` (`501` si está en `'false'` — ver [`docs/autenticacion-tablet.md`](docs/autenticacion-tablet.md)). Devuelve `access_token` (JWT con `tipo: 'alumno'`, distinto del backoffice) + `{ id, nombre, apellido }` |
+| `GET` | `/estadisticas/sima-check` | — | Estadísticas de **contenido**: `totales`, `preguntas` (ranking por cantidad de errores, con `porcentajeAcierto` **`null`** si nadie la contestó, `enPoolActivo` y la `distribucion` de qué eligió cada uno), `porBase` (con sus `niveles` en el orden de la escala) y `porCentroCosto`/`porPuesto`. Abierto porque **el payload no incluye `respuestaCorrecta` en ningún lado** — hay un spec que lo fija |
+| `GET` | `/sesiones/:id` | **JWT** | Detalle de UN intento: la sesión con su usuario, su versión y sus respuestas, cada una con la pregunta entera **incluida `respuestaCorrecta`**. ⚠️ **La única lectura del proyecto con guard**: es el único GET que devuelve la respuesta correcta, y la app le da al alumno su `sesionId` al terminar de rendir. `Respuesta.correcta` (congelada) y `Pregunta.respuestaCorrecta` (viva) viajan por separado — el ✓/✗ se pinta con la primera |
 | `GET` | `/tablet/pendientes` | JWT alumno | Asignaciones vigentes del usuario del token que todavía no aprobó. Excluye módulos `activo: false` y sin ninguna versión `ACTIVO` publicada |
 | `GET` | `/tablet/modulos/:moduloId/examen` | JWT alumno | Resuelve la versión `ACTIVO` del módulo y sortea `PREGUNTAS_POR_EXAMEN` preguntas activas (pivot **y** pregunta). `respuestaCorrecta` nunca sale del `select` de Prisma |
 | `POST` | `/tablet/sesiones` | JWT alumno | Registra el resultado de una rendición — delega en `SesionesService.registrar()`. El `usuarioId` sale del token, nunca del body. `201` si crea la sesión, `200` si deduplica por `claveIdempotencia` |
 
 > Las **tres mutaciones** de `/reglas-asignacion` (`POST`/`PATCH`/`DELETE`) devuelven `{ regla, recalculo: { usuarios, creadas, revocadas } }`, no la regla pelada: recalculan en la misma transacción las `Asignacion` AUTOMATICA de toda la gente con un par activo en el centro de esa regla. La consecuencia no se ve en el listado de reglas — lo que cambia son las asignaciones de otras personas.
 
-Las **lecturas** (`GET`) son abiertas; las **escrituras** requieren `Authorization: Bearer <token>`.
+Las **lecturas** (`GET`) son abiertas y las **escrituras** requieren `Authorization: Bearer <token>` — **con una sola excepción: `GET /sesiones/:id`**, que lleva guard porque es el único GET que devuelve la respuesta correcta de cada pregunta (ver [`../docs/decisiones/sesiones.md`](../docs/decisiones/sesiones.md)).
 
 ### Forma de un usuario
 
@@ -216,7 +260,10 @@ src/
 ├── sesiones/        Sesion (un intento de rendición) + Respuesta (una por pregunta
 │                    contestada) + corregir.ts (funciones puras: umbral y corrección).
 │                    listarPorUsuario() devuelve TODAS las rendiciones de una
-│                    persona (aprobadas y no) para el informe de la Story 10
+│                    persona (aprobadas y no) para el informe de la Story 10, y
+│                    detalle() una sola con sus respuestas y sus preguntas enteras.
+│                    Su controller tiene UN endpoint (GET /sesiones/:id) y es el
+│                    único con guard del proyecto
 ├── tablet/          Namespace HTTP de la app tablet (Story 5): login de alumno
 │                    (JWT propio, `tipo: 'alumno'`) + TabletAuthGuard + los tres
 │                    endpoints (pendientes/examen/registrar resultado). Delega la
@@ -225,6 +272,10 @@ src/
 │                    N preguntas del pool, función pura)
 ├── storage/         StorageService abstracto + LocalDiskStorage (uploads/) +
 │                    formato-imagen.ts (detección por magic bytes)
+├── estadisticas/    Agregador de CONTENIDO (ranking de preguntas falladas con su
+│                    distribución, acierto por base/nivel y por centro/puesto).
+│                    Hermano de resumen/ y por los mismos motivos, otra pregunta:
+│                    resumen/ responde por la GENTE, éste por el CONTENIDO
 ├── prisma/          PrismaService + módulo global
 ├── health/          Health check
 ├── app.module.ts
@@ -235,8 +286,13 @@ prisma/
 │                    Modulo, ModuloVersion, ModuloVersionCriterio,
 │                    ReglaAsignacion, Asignacion, Sesion, Respuesta + pivots
 ├── seed.ts          Organización interna (Ingeniería SIMA) y nada más, más el
-│                    escenario de demo detrás de SEED_DEMO=true.
+│                    contenido de SIMA CHECK detrás de SEED_SIMA_CHECK=true.
 │                    Limpia en orden de dependencia (las FK son ON DELETE RESTRICT)
+├── seed-data/       Datos GENERADOS desde los Excel de docs/ (ver
+│                    scripts/contenido/): las 202 preguntas y los catálogos
+│                    de nómina. No se editan a mano
+├── seed-assets/     Las 73 imágenes de esas preguntas. El seed las sube por
+│                    StorageService, no las copia a uploads/
 └── migrations/      Migraciones versionadas
 ```
 

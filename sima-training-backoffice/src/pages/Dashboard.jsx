@@ -200,31 +200,18 @@ export default function Dashboard({ navigate }) {
             </Button>
           </div>
 
-          {[
-            { code: 'SI', name: 'SIMA INSPECTIONS', desc: 'Gestión de inspecciones en campo', eta: 'Q3 2026' },
-            { code: 'SA', name: 'SIMA AUDITS', desc: 'Auditorías de seguridad y calidad', eta: 'Q4 2026' },
-          ].map((prod) => (
-            <div key={prod.code} className="bg-slate-50 border border-slate-200 rounded p-5 flex flex-col gap-4 opacity-60">
-              <div className="flex items-start justify-between">
-                <div>
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-slate-600 font-semibold text-sm tracking-wide">{prod.name}</span>
-                    <span className="px-1.5 py-0.5 rounded bg-slate-100 border border-slate-300 text-slate-500 text-[10px] font-mono font-semibold uppercase tracking-wider">
-                      Roadmap
-                    </span>
-                  </div>
-                  <p className="text-slate-400 text-xs leading-relaxed">{prod.desc}</p>
-                </div>
-                <div className="w-8 h-8 bg-slate-100 border border-slate-200 rounded flex items-center justify-center flex-shrink-0">
-                  <span className="text-slate-400 font-bold text-[11px] font-mono">{prod.code}</span>
-                </div>
-              </div>
-              <div className="mt-auto">
-                <div className="text-slate-400 text-[10px] uppercase tracking-widest">Disponibilidad estimada</div>
-                <div className="text-slate-600 font-mono font-semibold text-sm mt-0.5">{prod.eta}</div>
-              </div>
-            </div>
-          ))}
+          {/* Los productos del roadmap van SIN nombre ni fecha a propósito: una
+              card con nombre y ETA es un compromiso público, y el roadmap todavía
+              no está cerrado. Una sola card, ocupando lo que dejan libre las tres
+              columnas, para que la grilla no quede con un hueco. */}
+          <div className="xl:col-span-2 bg-slate-50 border border-dashed border-slate-300 rounded p-5 flex flex-col items-center justify-center text-center gap-1.5">
+            <span className="px-1.5 py-0.5 rounded bg-slate-100 border border-slate-300 text-slate-500 text-[10px] font-mono font-semibold uppercase tracking-wider">
+              Próximamente
+            </span>
+            <p className="text-slate-500 text-xs leading-relaxed max-w-xs">
+              Nuevos productos de la plataforma SIMA TRAINING.
+            </p>
+          </div>
 
         </div>
       </div>

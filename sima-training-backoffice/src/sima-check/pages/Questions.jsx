@@ -8,7 +8,7 @@ import { preguntasApi } from '../../core/api/preguntas'
 import { basesConocimientoApi } from '../../core/api/basesConocimiento'
 import { useBancoModulo, estadoVersionBadge } from '../components/bancoModulo'
 import { backendTypeBadge } from '../../core/format/tipoPregunta'
-import { BancoAcciones, NuevaPreguntaModal, EditarModulosModal } from '../components/BancoPreguntas'
+import { BancoAcciones, NuevaPreguntaModal, EditarModulosModal, VerPreguntaModal } from '../components/BancoPreguntas'
 import ImportPreguntasModal from '../../core/components/ImportPreguntasModal'
 
 // Opción sintética del multi-select de módulos: no es un id real de Modulo,
@@ -18,6 +18,21 @@ const SIN_ASIGNAR_ID = '__sin_asignar__'
 // ?sinBase=true. Es el backlog de preguntas cargadas antes de que existieran
 // las bases de conocimiento.
 const SIN_CLASIFICAR_ID = '__sin_clasificar__'
+
+// Con qué filtro entró la pantalla, leído del tramo del hash que sigue a la
+// página: `#questions/base/<baseId>` o `#questions/base/<baseId>/nivel/<nivelId>`.
+// Lo escribe el "Ver preguntas" de la pantalla Bases.
+//
+// Los segmentos van ETIQUETADOS (`base`, `nivel`) y no posicionales: los dos
+// valores son uuid, así que con `#questions/<id>/<id>` un link recortado a la
+// mitad se leería como "base = el nivel" sin que nada chille. Cualquier cosa
+// que no matchee esta forma se ignora — un hash tipeado a mano no puede dejar
+// la pantalla en un estado raro.
+function filtroDeEntrada(sub) {
+  if (sub[0] !== 'base' || !sub[1]) return null
+  const nivelId = sub[2] === 'nivel' ? (sub[3] ?? '') : ''
+  return { baseId: sub[1], nivelId }
+}
 
 // Orden de los módulos de una pregunta para la columna "Módulos": primero
 // aquellos donde la pregunta está ACTIVA, y entre esos por nombre.
@@ -91,6 +106,7 @@ function QuestionsTableModulo({ moduleId }) {
   const banco = useBancoModulo(moduleId)
   const [togglingId, setTogglingId] = useState(null)
   const [toggleError, setToggleError] = useState(null)
+  const [verPregunta, setVerPregunta] = useState(null)
 
   const rows = [...banco.asignadas].sort((a, b) => a.orden - b.orden)
 
@@ -137,16 +153,20 @@ function QuestionsTableModulo({ moduleId }) {
       <Table
         columns={columns}
         data={rows}
-        actions={(row) =>
-          row.pregunta.activa === false ? (
-            <span className="text-slate-400 text-xs">Recuperala desde Preguntas</span>
-          ) : (
-            <Button variant={row.activa ? 'danger' : 'secondary'} size="sm" disabled={togglingId === row.preguntaId} onClick={() => handleToggle(row)}>
-              {togglingId === row.preguntaId ? '...' : row.activa ? 'Desactivar' : 'Activar'}
-            </Button>
-          )
-        }
+        actions={(row) => (
+          <>
+            <Button variant="ghost" size="sm" onClick={() => setVerPregunta(row.pregunta)}>Ver</Button>
+            {row.pregunta.activa === false ? (
+              <span className="text-slate-400 text-xs">Recuperala desde Preguntas</span>
+            ) : (
+              <Button variant={row.activa ? 'danger' : 'secondary'} size="sm" disabled={togglingId === row.preguntaId} onClick={() => handleToggle(row)}>
+                {togglingId === row.preguntaId ? '...' : row.activa ? 'Desactivar' : 'Activar'}
+              </Button>
+            )}
+          </>
+        )}
       />
+      {verPregunta && <VerPreguntaModal pregunta={verPregunta} onClose={() => setVerPregunta(null)} />}
     </div>
   )
 }
@@ -159,6 +179,7 @@ function QuestionsTableGlobal({ selectedModuleIds, sinAsignar, showActivas, show
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [togglingId, setTogglingId] = useState(null)
+  const [verRow, setVerRow] = useState(null)
   const [editRow, setEditRow] = useState(null)
   const [trashModal, setTrashModal] = useState(null)
   const [trashing, setTrashing] = useState(false)
@@ -318,6 +339,7 @@ function QuestionsTableGlobal({ selectedModuleIds, sinAsignar, showActivas, show
         data={preguntas}
         actions={(row) => (
           <>
+            <Button variant="ghost" size="sm" onClick={() => setVerRow(row)}>Ver</Button>
             <Button variant="ghost" size="sm" onClick={() => setEditRow(row)}>Editar módulos</Button>
             <Button variant={row.activa ? 'danger' : 'secondary'} size="sm" disabled={togglingId === row.id} onClick={() => handleToggle(row)}>
               {togglingId === row.id ? '...' : row.activa ? 'Enviar a papelera' : 'Recuperar'}
@@ -325,6 +347,8 @@ function QuestionsTableGlobal({ selectedModuleIds, sinAsignar, showActivas, show
           </>
         )}
       />
+
+      {verRow && <VerPreguntaModal pregunta={verRow} onClose={() => setVerRow(null)} />}
 
       {editRow && (
         <EditarModulosModal
@@ -379,15 +403,20 @@ function QuestionsTableGlobal({ selectedModuleIds, sinAsignar, showActivas, show
   )
 }
 
-export default function Questions() {
+export default function Questions({ sub = [], replaceSub }) {
+  // Con qué filtro se entró desde Bases. Se lee UNA vez, en el initializer de
+  // useState: de ahí en más los selects mandan y el sub se consume (ver el
+  // useEffect de abajo).
+  const [entrada] = useState(() => filtroDeEntrada(sub))
+
   const [modules, setModules] = useState([])
   const [bases, setBases] = useState([])
   // Filtro de clasificación. Es un select simple y no un MultiSelectFilter
   // porque la API toma un `baseId` único, y sobre todo porque un nivel sólo
   // existe dentro de una base: con varias bases elegidas el filtro de nivel no
   // significaría nada. El valor SIN_CLASIFICAR_ID es sintético → ?sinBase=true.
-  const [baseFiltro, setBaseFiltro] = useState('')
-  const [nivelFiltro, setNivelFiltro] = useState('')
+  const [baseFiltro, setBaseFiltro] = useState(entrada?.baseId ?? '')
+  const [nivelFiltro, setNivelFiltro] = useState(entrada?.nivelId ?? '')
   const [selectedModuleIds, setSelectedModuleIds] = useState(new Set())
   const [showActivas, setShowActivas] = useState(true)
   const [showPapelera, setShowPapelera] = useState(false)
@@ -402,6 +431,17 @@ export default function Questions() {
     // Catálogo completo (no ?activa=true): hace falta para poder seguir
     // filtrando por una base que se dio de baja pero cuyas preguntas siguen ahí.
     basesConocimientoApi.list().then(setBases).catch(() => {})
+  }, [])
+
+  // Se consume el sub apenas se aplicó: con `replaceSub` la URL vuelve a
+  // `#questions` sin sumar una entrada al historial, así "atrás" vuelve a Bases
+  // y no a esta misma pantalla. Es lo que evita que la barra de direcciones
+  // siga diciendo `base/<id>` después de que el usuario cambie el select —
+  // acá los filtros no viven en la URL (ver decisiones/navegacion.md).
+  useEffect(() => {
+    if (entrada) replaceSub?.([])
+    // Sólo al montar: `entrada` se congela en su initializer y no vuelve a cambiar.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const baseFiltroObj = useMemo(

@@ -42,6 +42,7 @@ Los ids válidos salen de las claves de `PAGES` en `App.jsx` y se pasan **por pa
 | El historial de una persona | **El mismo historial** ✅ |
 | Editando el contenido de un módulo | La lista de Módulos (a propósito, ver abajo) |
 | Usuarios con el filtro "Soldador" puesto | Usuarios sin filtros |
+| Preguntas abierta desde Bases, filtrada por base y nivel | Preguntas sin filtros (el sub se consumió al entrar, ver abajo) |
 
 Los filtros, las búsquedas y los grupos desplegados **se pierden**, y eso es deliberado: persistirlos obliga a tocar cada pantalla una por una serializando su estado, y el valor cae rápido — perder un filtro molesta bastante menos que perder la pantalla entera, que era el problema real.
 
@@ -58,6 +59,24 @@ Un id no numérico (alguien editando la URL a mano) cae a `null` y muestra el li
 **El early return sigue haciendo lo que hacía**, y esto es lo que había que no romper: `#usuarios` y `#usuarios/historial/42` son **la misma página** para `App.jsx`, que renderiza el mismo componente en los dos casos. `Usuarios.jsx` nunca se desmonta al entrar o salir del historial, así que volver conserva la tab, la búsqueda y los usuarios ya cargados — que es exactamente para lo que ese early return existe.
 
 De yapa se arregló una molestia preexistente: estando en el historial, tocar "Usuarios" en el sidebar **antes no hacía nada** (navegar a la página en la que ya estás no dispara ningún cambio). Ahora el hash sí cambia —`#usuarios/historial/42` → `#usuarios`— así que vuelve al listado.
+
+### El sub sirve para dos cosas distintas: un LUGAR y una INTENCIÓN de entrada
+
+El historial de una persona es un **lugar**: `#usuarios/historial/42` es una pantalla, se comparte, sobrevive a un F5, y "atrás" sale de ahí. Se maneja con `setSub`, que escribe el hash y **apila** una entrada en el historial.
+
+El "Ver preguntas" de la pantalla Bases es otra cosa. `#questions/base/<baseId>/nivel/<nivelId>` no es un lugar: es *"abrí Preguntas ya filtrada por esto"*. Se aplica al montar y **se consume** — la URL vuelve a `#questions` y desde ahí la pantalla se comporta igual que si hubieras entrado por el sidebar.
+
+Se consume por una razón concreta: **los filtros no viven en la URL** (ver la tabla de arriba), así que si el sub se quedara, bastaría con que el usuario cambiara el select de base para que la barra de direcciones dijera una cosa y la pantalla mostrara otra. Eso es justo lo que la sección "El hash es la única fuente de verdad" existe para evitar.
+
+La alternativa era sincronizar los dos selects con el hash. Se descartó por dos motivos: cada cambio de filtro apilaría una entrada en el historial (y "atrás" pasaría a significar "deshacé el último filtro" en vez de "volvé a Bases"), y dejaría a Preguntas con dos filtros que sobreviven al F5 y cinco que no, dentro de la misma barra.
+
+Consumir necesitó **`replaceSub`**, la única función del hook que escribe el estado a mano en vez de dejar que lo haga el `hashchange` — `history.replaceState` no lo dispara. Vale la excepción a la regla de la fuente única justamente porque **reemplaza en vez de apilar**: no toca el historial, así que no puede desincronizar el botón "atrás", que es lo que esa regla protege. Es el mismo mecanismo que ya usaba la normalización al montar.
+
+Y necesitó que **`navigate` acepte un sub** (`navigate('questions', ['base', id])`). Sin eso el salto serían dos escrituras del hash —`navigate()` y después `setSub()`— o sea dos entradas en el historial para un solo click.
+
+**Los segmentos van etiquetados** (`base/<id>/nivel/<id>`) y no posicionales. Los dos valores son uuid: con `#questions/<id>/<id>`, un link recortado a la mitad se leería como "base = el nivel" sin que nada chille. Cualquier cosa que no matchee esa forma se ignora, así que un hash tipeado a mano no deja la pantalla en un estado raro.
+
+Efecto lateral lindo: como el sub se aplica al montar, un link pegado a mano **funciona** aunque después la URL se limpie sola. Se puede entrar por deep link, pero no salir con uno.
 
 ### ⚠️ El editor de contenido de un módulo NO se restaura, y no es por falta de ganas
 

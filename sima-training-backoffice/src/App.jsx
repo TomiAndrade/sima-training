@@ -1,7 +1,8 @@
+import * as Sentry from '@sentry/react'
 import useNavigation from './hooks/useNavigation'
 import BackofficeLayout from './pages/BackofficeLayout'
+import ErrorFallback from './components/ErrorFallback'
 import Dashboard from './pages/Dashboard'
-import Clients from './core/pages/Clients'
 import Usuarios from './core/pages/Usuarios'
 import Puestos from './core/pages/Puestos'
 import CentrosCosto from './core/pages/CentrosCosto'
@@ -11,10 +12,10 @@ import TrainingAssignments from './sima-check/pages/TrainingAssignments'
 import Questions from './sima-check/pages/Questions'
 import ReglasAsignacion from './sima-check/pages/ReglasAsignacion'
 import BasesConocimiento from './sima-check/pages/BasesConocimiento'
+import Estadisticas from './sima-check/pages/Estadisticas'
 
 const PAGES = {
   dashboard: Dashboard,
-  clients: Clients,
   usuarios: Usuarios,
   puestos: Puestos,
   'centros-costo': CentrosCosto,
@@ -24,6 +25,7 @@ const PAGES = {
   'bases-conocimiento': BasesConocimiento,
   'assignment-rules': ReglasAsignacion,
   'training-assignments': TrainingAssignments,
+  'sima-check-estadisticas': Estadisticas,
 }
 
 // Las claves de PAGES son también los ids válidos del hash de la URL: agregar
@@ -33,16 +35,24 @@ const PAGES = {
 const PAGE_IDS = Object.keys(PAGES)
 
 export default function App() {
-  const { page, sub, navigate, setSub } = useNavigation('dashboard', PAGE_IDS)
+  const { page, sub, navigate, setSub, replaceSub } = useNavigation('dashboard', PAGE_IDS)
   const PageComponent = PAGES[page] ?? Dashboard
 
   return (
     <BackofficeLayout page={page} navigate={navigate}>
-      {/* `sub`/`setSub` son el tramo del hash que sigue a la página
-          (`#usuarios/historial/42`). Sólo lo usan las pantallas con una
-          sub-vista que vale la pena sobrevivir a un F5 — hoy Usuarios; el
-          resto los ignora. */}
-      <PageComponent navigate={navigate} sub={sub} setSub={setSub} />
+      {/* `sub` es el tramo del hash que sigue a la página, y se usa para dos
+          cosas distintas: una sub-vista que vale la pena sobrevivir a un F5
+          (`#usuarios/historial/42`, con `setSub`) y una intención de entrada que
+          la pantalla consume al montar (`#questions/base/<id>/nivel/<id>`, con
+          `replaceSub`). El resto de las pantallas los ignora. */}
+      {/* Solo la pantalla se envuelve, no todo App: si una explota, el sidebar
+          de BackofficeLayout sigue vivo y se puede navegar a otra. `key={page}`
+          fuerza el remount del boundary al cambiar de pantalla — Sentry.ErrorBoundary
+          no tiene `resetKeys`, así que sin esto el fallback de una pantalla rota
+          quedaría pegado al navegar a una que anda bien. */}
+      <Sentry.ErrorBoundary key={page} fallback={ErrorFallback}>
+        <PageComponent navigate={navigate} sub={sub} setSub={setSub} replaceSub={replaceSub} />
+      </Sentry.ErrorBoundary>
     </BackofficeLayout>
   )
 }

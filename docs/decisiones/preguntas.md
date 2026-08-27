@@ -1,6 +1,6 @@
 # Decisiones — Banco de preguntas y clasificación
 
-Cubre `Pregunta` (el banco único), sus dos bajas lógicas, las imágenes del enunciado y de las opciones, la detección de duplicados, el import desde Excel, y la clasificación del banco en `BaseConocimiento` / `NivelBase`.
+Cubre `Pregunta` (el banco único), sus dos bajas lógicas, las imágenes del enunciado y de las opciones, la detección de duplicados, el import desde Excel, la clasificación del banco en `BaseConocimiento` / `NivelBase`, y de dónde sale el contenido real de SIMA CHECK.
 
 **No cubre**: cómo se arma una evaluación con esas preguntas ([modulos.md](./modulos.md)) — el pivot `ModuloVersionPregunta`, el versionado y los criterios viven allá. Tampoco el `StorageService` que guarda el binario de una imagen ([infraestructura.md](./infraestructura.md)); acá va sólo qué significa esa imagen para una pregunta.
 
@@ -162,6 +162,63 @@ El índice `(base_conocimiento_id, orden)` **no es diferible**, así que mover n
 
 ---
 
+## El contenido real: los cinco Excel de SIMA CHECK
+
+Las 202 preguntas que siembra `SEED_SIMA_CHECK=true` no se tipearon: se **extraen** de los cinco Excel con los que Ingeniería SIMA venía tomando las evaluaciones en papel (`SIMA - Básico`, `- Intermedio`, `- Avanzado`, `Sima Check - Reglas de Oro Industria Petrolera` y `- Módulo Phoenix`).
+
+### La respuesta correcta está pintada de verde, y en dos lugares distintos
+
+El Excel no tiene una columna "correcta": la marca es el **relleno verde** (`FF00B050`). Y hay dos casos, porque en el segundo la opción no es texto:
+
+- **Opciones de texto** — la celda con el texto de la opción está pintada. Grilla de 2×2 en las columnas D y G, o una sola columna E para Verdadero/Falso.
+- **Opciones con imagen** — la imagen es un objeto flotante y no se puede pintar, así que lo que está pintada es la **celda vacía que queda debajo**. La correcta se resuelve por **columna**: cada columna donde hay una imagen es una opción, y la correcta es la columna del verde. Es por columna y no por celda exacta porque el ancla de la imagen y la celda pintada difieren en una fila en varias preguntas.
+
+Sin esa segunda regla se pierden 45 de las 202 preguntas —las de tipo `OPCIONES_IMAGEN`—, que son justo las más caras de recuperar a mano.
+
+### Hay que respetar el recorte que Excel le hace a la imagen, no sólo extraer el archivo
+
+Cinco imágenes están **recortadas dentro del Excel** (`<a:srcRect>` en el drawing), y en una de ellas el recorte es lo único que hace que la pregunta tenga sentido: la 42 del Básico ("indique cuál es la posición correcta para el levantamiento manual de cargas") usa como opción A un archivo de dos paneles recortado al 50% desde la izquierda, o sea **sólo el panel de la postura incorrecta**. Extrayendo el archivo entero, las dos opciones muestran la postura correcta y la pregunta no se puede contestar.
+
+Las etiquetas "A" y "B" de esas preguntas tampoco están en celdas: son cuadros de texto, y cuál imagen es cuál se decide por su **posición horizontal** dentro del grupo (A la de la izquierda).
+
+### Tres cosas quedan ambiguas en el origen, y se resuelven a mano
+
+Están en el `CORRECCIONES` de `scripts/contenido/generar.py`, con el porqué al lado. Es la parte que **no** se puede derivar y que hay que revisar si algún día llega una revisión nueva de los Excel:
+
+| Dónde | Qué pasa | Qué se hizo |
+|---|---|---|
+| Phoenix #14 | Es la única pregunta de opciones con imagen **sin ningún verde** | Se marca el tacho azul: es el de metales en el mismo código de colores que usan las preguntas 10 a 13 (amarillo plástico, verde biodegradable, blanco vidrio, rojo hidrocarburos), y es el único de los tres que no quedó tomado |
+| Reglas de Oro #4 | Tiene **dos** opciones pintadas de verde ("Trabajo en altura" y "Permiso de trabajo") y dos imágenes de enunciado que no se corresponden entre sí | Se deja "Trabajo en altura" con la imagen de trabajo en altura, y se descarta la de excavaciones |
+| Reglas de Oro #1 | El enunciado arrastra la tira de los diez pictogramas de portada | Se descartan: son decoración del Excel, no la imagen de esa pregunta |
+
+### El texto se corrige en el GENERADOR, no en el archivo generado
+
+Los Excel se escribieron a mano y arrastran erratas ("broce" por bronce, "cunado" por cuando, "Espacios Confiados" por Confinados, "un residuos METALICOS limpios"), faltas de acento y signos de interrogación que no están. Es contenido que se muestra en una tablet a personal de clientes de Oil & Gas, así que se corrige — pero **en `scripts/contenido/correcciones.py`**, no editando `preguntas-sima-check.ts`, que dice "no editar a mano" y se pisa en la próxima regeneración.
+
+Qué se corrige: ortografía, acentuación, concordancia y redacciones que no se entienden. Qué **no**: la terminología del cliente. "Reglas que Salvan Vidas", "Ref. SSMAC" y "tacho" quedan como están.
+
+Tres decisiones del mecanismo:
+
+- **Es un mapa de cadena COMPLETA, no reemplazos de palabra.** Un reemplazo de palabra ("que" → "qué") es imposible de acotar sin romper la media docena de frases donde ese "que" no es interrogativo. Escribir la cadena entera es más largo pero deja ver exactamente cómo queda cada pregunta.
+- **El MISMO mapa se aplica al enunciado, a las opciones y a la respuesta correcta.** En `OPCION_MULTIPLE` la correcta *es* una de las opciones, comparada por igualdad de string. Corregir la opción y no la respuesta dejaría la pregunta sin ninguna correcta y **nadie podría aprobarla** — y no se notaría hasta que alguien la rindiera. Con el mismo mapa las dos reciben la misma corrección y no se pueden desincronizar; encima el generador valida que la correcta siga entre las opciones y aborta si no.
+- **Una clave que no matchea nada aborta la generación.** Es el único síntoma de una clave mal tipeada: sin ese chequeo, la corrección se perdería en silencio y el texto viejo seguiría publicado.
+
+Hay además un puñado de correcciones **por pregunta** (`CORRECCIONES_POR_PREGUNTA`), para lo que depende del contexto: `"del Supervisor"` está bien como respuesta a *"…es responsabilidad…"* y mal como respuesta a *"¿Quién debe asegurarse…?"*, así que la misma cadena no puede corregirse igual en todos lados. La clave es `(slug, posición dentro del módulo)` — **la posición, no el `n` del Excel**, porque el Intermedio numera 1..24 y después 31 dos veces.
+
+### El generador se versiona aunque los Excel no
+
+Los Excel **no entran al repo**: el archivo hermano de nómina lleva PII (legajo, DNI y nombre de 264 empleados) y el `.gitignore` bloquea `docs/*.xlsx` entero. Lo versionado es la **salida** — `prisma/seed-data/preguntas-sima-check.ts` y las 73 imágenes de `prisma/seed-assets/preguntas/` — más los scripts que la producen, en `scripts/contenido/`.
+
+Los scripts se versionan igual sin poder correr en un clone limpio, y no es contradictorio: son la **explicación ejecutable** de las convenciones de arriba. Un archivo generado de 1700 líneas sin el generador al lado no dice de dónde salió ni qué significa el verde, y la próxima revisión de los Excel arrancaría de cero.
+
+Están en Python y no en TypeScript, que es lo raro del repo, por una razón concreta: hace falta leer el **relleno de las celdas**, los **cuadros de texto y las imágenes de la capa de drawing** y los **recortes `srcRect`** — `exceljs` (la librería que ya usa el import de Excel) no expone la capa de drawing, así que las opciones con imagen serían inaccesibles.
+
+### Las imágenes se deduplican por contenido y se reencodean
+
+Del Excel salen 84 imágenes y quedan **73**: el mismo pictograma aparece en varios de los cinco archivos y se deduplica por hash del binario ya procesado. Además se limitan a 800 px de lado y las que resultan ser **fotos** (alfa 100% opaco) se guardan en JPEG en vez de PNG. Los 3,5 MB iniciales quedan en 1,2 MB, que es lo que se versiona; los pictogramas con fondo transparente siguen siendo PNG.
+
+---
+
 ## Frontend
 
 ### La pantalla de Preguntas alterna entre vista global y vista por módulo
@@ -189,6 +246,22 @@ La tabla pasa a llevar `alignTop`, por el mismo motivo que la de Usuarios: la ce
 A diferencia del de módulos, y por dos motivos: `?baseId=` es único, y sobre todo **un nivel sólo existe dentro de una base** — con varias bases tildadas, el filtro de nivel no significaría nada. Incluye la opción sintética "— Sin clasificar —" (`?sinBase=true`), que es cómo se encuentra el backlog previo a las bases.
 
 Mismo patrón en el formulario de alta (la base es obligatoria, el nivel opcional y dependiente, y se limpia al cambiar de base) y en el panel de criterios de un módulo.
+
+### "Ver pregunta" es lo único que muestra el CONTENIDO de una pregunta ya creada
+
+Las dos tablas de la pantalla Preguntas resuelven la imagen con un **🖼 gris** al lado del texto, y las filas del editor de un módulo con una miniatura de 32 px del enunciado. Las **opciones** de una `OPCIONES_IMAGEN` no aparecían en ninguna pantalla: sólo se veían como preview local (`URL.createObjectURL`) mientras se subían en el alta, y una vez creada la pregunta desaparecían.
+
+Con un banco donde el enunciado dice *"Indique qué Regla corresponde a Excavación"* y las tres opciones son pictogramas, eso deja **45 de 202 preguntas imposibles de revisar** desde el backoffice — la única forma de saber si la correcta era la buena era rendirlas en la tablet o mirar la base.
+
+`VerPreguntaModal` (`sima-check/components/BancoPreguntas.jsx`) es la respuesta: enunciado en grande, las opciones (texto o imagen) y **cuál es la correcta**, marcada con borde esmeralda **más** un ✓ y la palabra "Correcta" — no sólo color, porque es el único lugar donde se ve ese dato. Cuelga de un botón "Ver" en las dos tablas de Preguntas y en cada fila de `PreguntasAsignadasPanel`.
+
+Tres decisiones adentro:
+
+- **Es de solo lectura, y no por falta de tiempo.** Las preguntas no se editan (ver más arriba) y la imagen es inmutable una vez creada. Un modal de "ver" que ofreciera editar contradiría las dos reglas.
+- **La correcta de una `OPCIONES_IMAGEN` se compara por CLAVE de storage**, igual que `corregir.ts` en el backend. Comparar la URL armada daría siempre falso el día que `imagenUrl()` cambie de forma, y el síntoma sería un modal donde ninguna opción figura como correcta.
+- **El estado del modal vive dentro de `PreguntasAsignadasPanel`**, no en sus llamadores: es solo lectura y no depende de nada del padre, así que las cuatro pantallas que montan ese panel —incluidas las vistas de una versión publicada o archivada— lo tienen sin cablear ningún callback. Ver el contenido de una versión congelada no es editarla.
+
+Lo que **no** muestra: base y nivel cuando se lo abre desde el editor de un módulo. `GET /modulos/:id` hace `include: { pregunta: true }` y trae sólo las columnas, así que `base`/`nivel` no vienen resueltos (`baseConocimientoId` sí). Por eso el "Sin clasificar" del modal se decide con **`baseConocimientoId`** y no con la ausencia de `base`: si no, la misma pregunta se vería clasificada desde Preguntas y sin clasificar desde el editor del módulo, que es peor que no mostrar nada.
 
 ### Enviar a papelera pide confirmación; recuperar no
 

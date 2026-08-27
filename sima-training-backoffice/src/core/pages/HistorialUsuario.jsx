@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import Table from '../../components/Table'
 import Button from '../../components/Button'
 import { usuariosApi } from '../api/usuarios'
+import VerIntentoModal from '../components/VerIntentoModal'
 import { roleBadge, origenBadge } from '../format/badges'
 import { formatVersionNumero } from '../format/version'
 
@@ -121,6 +122,10 @@ const CAMPO = {
 
 const fecha = (v) => (v ? new Date(v).toLocaleDateString('es-AR') : '—')
 const fechaHora = (v) => (v ? new Date(v).toLocaleString('es-AR') : '—')
+// Sólo la hora, para ponerla al lado de la fecha en una celda. Sin segundos, a
+// diferencia de `fechaHora`: en una columna de tabla no aportan y alargan.
+const hora = (v) =>
+  v ? new Date(v).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }) : null
 const capitalizar = (s) => s.charAt(0) + s.slice(1).toLowerCase()
 
 const chip = (cls) => `px-2.5 py-1 rounded-full text-xs font-semibold ${cls}`
@@ -151,6 +156,11 @@ export default function HistorialUsuario({
   const [showRevocadas, setShowRevocadas] = useState(false)
   const [showSesiones, setShowSesiones] = useState(false)
   const [showAudit, setShowAudit] = useState(false)
+
+  // La sesión cuyo detalle se está mirando. El modal pide sus propias
+  // respuestas (GET /sesiones/:id): el informe trae el score de cada intento
+  // pero no qué se contestó en cada una.
+  const [verIntento, setVerIntento] = useState(null)
 
   const fetchInforme = async () => {
     const data = await usuariosApi.informe(usuarioId)
@@ -340,12 +350,21 @@ export default function HistorialUsuario({
   const sesionesColumns = [
     {
       key: 'createdAt',
-      label: 'Fecha',
+      label: 'Fecha y hora',
       // createdAt (reloj del SERVIDOR) y no finalizadaEn (reloj del
       // dispositivo): con el modo offline el POST puede llegar horas después y
       // la tablet puede tener la hora desfasada. Es el mismo criterio con el
       // que el backend calcula la vigencia.
-      render: (val) => <span className="text-slate-500 text-sm">{fecha(val)}</span>,
+      //
+      // La hora importa porque varios intentos del mismo módulo caen el mismo
+      // día: sin ella, tres filas idénticas en fecha no dicen en qué orden se
+      // rindieron ni cuánto pasó entre una y otra.
+      render: (val) => (
+        <span className="text-slate-500 text-sm whitespace-nowrap">
+          {fecha(val)}
+          {hora(val) && <span className="text-slate-400 font-mono ml-1.5">{hora(val)}</span>}
+        </span>
+      ),
     },
     {
       key: 'modulo',
@@ -496,7 +515,17 @@ export default function HistorialUsuario({
 
       <div className="space-y-2">
         {seccionPlegable(showSesiones, () => setShowSesiones((s) => !s), 'Historial de rendiciones', sesiones.length)}
-        {showSesiones && <Table columns={sesionesColumns} data={sesiones} />}
+        {showSesiones && (
+          <Table
+            columns={sesionesColumns}
+            data={sesiones}
+            actions={(row) => (
+              <Button variant="ghost" size="sm" onClick={() => setVerIntento(row)}>
+                Ver intento
+              </Button>
+            )}
+          />
+        )}
       </div>
 
       <div className="space-y-2">
@@ -550,6 +579,13 @@ export default function HistorialUsuario({
           </div>
         )}
       </div>
+
+      {verIntento && (
+        <VerIntentoModal
+          sesionId={verIntento.id}
+          onClose={() => setVerIntento(null)}
+        />
+      )}
     </div>
   )
 }

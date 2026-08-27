@@ -108,6 +108,77 @@ export class SesionesService {
     });
   }
 
+  /**
+   * UN intento con TODO su detalle: qué se preguntó, qué contestó la persona y
+   * si estuvo bien. Es lo que consume "Ver intento" en la hoja de vida.
+   *
+   * Distinto de `listarPorUsuario()`, que devuelve la lista de intentos con su
+   * score pero SIN las respuestas: acá se paga el include completo porque se
+   * pide de a una sesión, no de a todas las de una persona.
+   *
+   * **Devuelve `Respuesta.correcta` y `Pregunta.respuestaCorrecta` por
+   * separado, y no son lo mismo.** `correcta` es la corrección CONGELADA al
+   * momento de rendir; `respuestaCorrecta` se lee viva del banco. Hoy coinciden
+   * siempre (no hay endpoint que edite una pregunta), pero el ✓/✗ de la
+   * pantalla tiene que salir de `correcta` — si algún día se corrige una
+   * pregunta, el intento tiene que seguir diciendo lo que se decidió entonces.
+   * Mismo criterio que el `umbralAprobacion` congelado en la fila.
+   *
+   * **No filtra por `Pregunta.activa`**, igual que `crearSesion()`: una
+   * pregunta mandada a papelera después no puede desaparecer de un intento ya
+   * rendido.
+   */
+  async detalle(id: string) {
+    const sesion = await this.prisma.sesion.findUnique({
+      where: { id },
+      include: {
+        usuario: {
+          select: { id: true, nombre: true, apellido: true, dni: true },
+        },
+        moduloVersion: {
+          select: {
+            id: true,
+            moduloId: true,
+            estado: true,
+            anio: true,
+            mayor: true,
+            menor: true,
+            modulo: { select: { nombre: true } },
+          },
+        },
+        respuestas: {
+          // Aproximación al orden en que se rindieron: el `create` anidado
+          // inserta en el orden del array del DTO, que es el orden en que la
+          // tablet mostró las preguntas. Prisma no lo GARANTIZA, así que esto
+          // es "lo más cercano disponible" y no el orden exacto — no hay otra
+          // columna que lo registre.
+          orderBy: { createdAt: 'asc' },
+          include: {
+            pregunta: {
+              select: {
+                id: true,
+                texto: true,
+                tipo: true,
+                opciones: true,
+                respuestaCorrecta: true,
+                imagen: true,
+                activa: true,
+                baseConocimientoId: true,
+                base: { select: { id: true, nombre: true } },
+                nivel: { select: { id: true, nombre: true } },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!sesion) {
+      throw new NotFoundException(`Sesión ${id} no encontrada`);
+    }
+    return sesion;
+  }
+
   private esConflictoDeClaveIdempotencia(
     err: unknown,
   ): err is Prisma.PrismaClientKnownRequestError {

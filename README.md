@@ -44,16 +44,17 @@ npm install
 cp .env.example .env
 docker compose up -d db          # PostgreSQL local
 npx prisma migrate dev           # crea las tablas
-npx prisma db seed               # organización interna + módulos base
+npx prisma db seed               # organización interna, y nada más
 npm run start:dev                # → http://localhost:3000
 
-# (opcional) escenario de demo navegable de punta a punta, en vez del seed base:
-#   PowerShell:  $env:SEED_DEMO='true'; npx prisma db seed
-#   bash:        SEED_DEMO=true npx prisma db seed
-# Siembra organizaciones cliente→subcontratista, alumnos con sus pares
-# puesto/centro, el banco clasificado por base y nivel, un módulo publicado con
-# su número AÑO.MAYOR.MENOR y las asignaciones automáticas que derivan las
-# reglas. Apagado por defecto: son datos de demostración, no estructura.
+# (opcional) el contenido REAL de SIMA CHECK, además del seed base:
+#   PowerShell:  $env:SEED_SIMA_CHECK='true'; npx prisma db seed
+#   bash:        SEED_SIMA_CHECK=true npx prisma db seed
+# Siembra los catálogos de nómina (88 puestos, 16 centros de costo), 3 bases de
+# conocimiento con su escala, las 202 preguntas de los cinco Excel de evaluación
+# con sus 73 imágenes, los 5 módulos publicados y 54 reglas de asignación.
+# NO siembra personas: la nómina se importa desde el backoffice.
+# Apagado por defecto: es contenido, no estructura.
 
 # 2. Backoffice
 cd TRAINING/sima-training-backoffice

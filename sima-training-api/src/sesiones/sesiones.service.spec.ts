@@ -626,3 +626,57 @@ describe('RegistrarSesionDto contra la ValidationPipe de main.ts', () => {
     expect(motivos.join(' ')).toMatch(/respuestas should not be empty/);
   });
 });
+
+describe('SesionesService.detalle', () => {
+  let service: SesionesService;
+  let prisma: { sesion: { findUnique: jest.Mock } };
+
+  beforeEach(async () => {
+    prisma = { sesion: { findUnique: jest.fn() } };
+    const mod: TestingModule = await Test.createTestingModule({
+      providers: [SesionesService, { provide: PrismaService, useValue: prisma }],
+    }).compile();
+    service = mod.get(SesionesService);
+  });
+
+  it('404 si la sesión no existe', async () => {
+    prisma.sesion.findUnique.mockResolvedValue(null);
+    await expect(service.detalle('no-existe')).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+  });
+
+  it('trae las respuestas con su pregunta, en orden de rendición', async () => {
+    const sesion = { id: 's1', respuestas: [] };
+    prisma.sesion.findUnique.mockResolvedValue(sesion);
+
+    expect(await service.detalle('s1')).toBe(sesion);
+
+    const args = prisma.sesion.findUnique.mock.calls[0][0];
+    expect(args.where).toEqual({ id: 's1' });
+    expect(args.include.respuestas.orderBy).toEqual({ createdAt: 'asc' });
+    expect(args.include.respuestas.include.pregunta.select).toMatchObject({
+      opciones: true,
+      respuestaCorrecta: true,
+      imagen: true,
+    });
+  });
+
+  it('NO filtra por pregunta.activa: una baja posterior no puede borrar lo ya rendido', async () => {
+    // Misma doctrina que el `where` de crearSesion(), que tampoco lo exige.
+    // Está fijado en un test para que nadie lo "arregle" agregando el filtro:
+    // una pregunta mandada a papelera después haría desaparecer filas de un
+    // intento histórico.
+    prisma.sesion.findUnique.mockResolvedValue({ id: 's1', respuestas: [] });
+    await service.detalle('s1');
+
+    const args = prisma.sesion.findUnique.mock.calls[0][0];
+    // Ningún `where` en el include: ni sobre la respuesta ni sobre la pregunta.
+    expect(args.include.respuestas.where).toBeUndefined();
+    expect(args.include.respuestas.include.pregunta.where).toBeUndefined();
+    // `activa` SÍ se trae, pero como columna a mostrar (el badge "En papelera"
+    // del modal), no como filtro. Son dos cosas distintas y es el punto del
+    // test: la pregunta viene igual, marcada.
+    expect(args.include.respuestas.include.pregunta.select.activa).toBe(true);
+  });
+});

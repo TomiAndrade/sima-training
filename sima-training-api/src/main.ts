@@ -1,12 +1,28 @@
+// Tiene que ser el primer import del archivo, antes que cualquier otro módulo:
+// Sentry necesita instrumentar antes de que se carguen los módulos de Nest.
+import './instrument';
+
 import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
+import { AccessLogInterceptor } from './observabilidad/access-log.interceptor';
+import { CorrelationLogger } from './observabilidad/correlation-logger.service';
+import { GlobalExceptionFilter } from './observabilidad/global-exception.filter';
 
 async function bootstrap() {
-  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    // Reemplaza el logger default apenas se crea la app, para que los logs
+    // internos de Nest (incluidos los del propio arranque) también queden
+    // prefijados con el requestId. Ver la nota sobre `observabilidad/` sin
+    // módulo propio en app.module.ts.
+    logger: new CorrelationLogger(),
+  });
   const config = app.get(ConfigService);
+
+  app.useGlobalFilters(new GlobalExceptionFilter());
+  app.useGlobalInterceptors(new AccessLogInterceptor());
 
   // Los archivos subidos (imágenes de preguntas) ya NO se sirven acá con
   // useStaticAssets: eso sólo sabía leer del disco local, y con R2 el byte no
@@ -21,12 +37,16 @@ async function bootstrap() {
     }),
   );
 
+  // No alcanza con `??`: una CORS_ORIGINS seteada pero vacía ("") no es
+  // null/undefined, así que el fallback no se disparaba y el split() dejaba
+  // [''] — un origin que no matchea nada, bloqueando todo en silencio.
   const corsOrigins = (
-    config.get<string>('CORS_ORIGINS') ??
+    config.get<string>('CORS_ORIGINS') ||
     'http://localhost:5173,http://localhost:5174'
   )
     .split(',')
-    .map((origin) => origin.trim());
+    .map((origin) => origin.trim())
+    .filter((origin) => origin.length > 0);
 
   app.enableCors({ origin: corsOrigins });
 

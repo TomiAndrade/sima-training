@@ -1,7 +1,9 @@
-const SIMA_CHECK_PAGES = new Set(['sima-check-overview', 'training-modules', 'questions', 'bases-conocimiento', 'assignment-rules', 'training-assignments'])
+const SIMA_CHECK_PAGES = new Set(['sima-check-overview', 'training-modules', 'questions', 'bases-conocimiento', 'assignment-rules', 'training-assignments', 'sima-check-estadisticas'])
 
 // "Bases" va pegada a "Preguntas" porque es su taxonomía: se entra ahí para
 // definir los temas y escalas con los que después se clasifican las preguntas.
+// "Estadísticas" va al final: se lee sobre lo que las demás configuran, y a
+// diferencia del Resumen (que responde por la GENTE) responde por el CONTENIDO.
 const SIMA_CHECK_TABS = [
   { id: 'sima-check-overview',  label: 'Resumen' },
   { id: 'training-modules',     label: 'Módulos' },
@@ -9,6 +11,7 @@ const SIMA_CHECK_TABS = [
   { id: 'bases-conocimiento',   label: 'Bases' },
   { id: 'assignment-rules',     label: 'Reglas' },
   { id: 'training-assignments', label: 'Asignaciones' },
+  { id: 'sima-check-estadisticas', label: 'Estadísticas' },
 ]
 
 const NAV_SECTIONS = [
@@ -18,7 +21,6 @@ const NAV_SECTIONS = [
   {
     header: 'Administración',
     items: [
-      { id: 'clients',   label: 'Clientes' },
       { id: 'usuarios',  label: 'Usuarios' },
       { id: 'puestos',   label: 'Puestos' },
       { id: 'centros-costo', label: 'Centros de Costo' },

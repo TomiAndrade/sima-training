@@ -3,6 +3,16 @@ import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
 // https://vite.dev/config/
+// Proxy de DEMO: la app y la API salen por el MISMO origen, así alcanza con un
+// solo tunel HTTPS (cloudflared) y no hay CORS que configurar. Con VITE_API_URL
+// vacio, BASE_URL queda en '' y todos los fetch salen relativos (/tablet/...,
+// /uploads/...), que es lo que estas reglas mandan al backend local.
+const proxyDemo = {
+  '/tablet': 'http://localhost:3000',
+  '/uploads': 'http://localhost:3000',
+  '/auth': 'http://localhost:3000',
+}
+
 export default defineConfig({
   plugins: [
     react(),
@@ -62,8 +72,10 @@ export default defineConfig({
   // `npm run dev` detrás del túnel se cae con "This host is not allowed".
   server: {
     allowedHosts: ['.trycloudflare.com'],
+    proxy: proxyDemo,
   },
   preview: {
     allowedHosts: ['.trycloudflare.com'],
+    proxy: proxyDemo,
   },
 })

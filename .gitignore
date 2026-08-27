@@ -14,3 +14,11 @@ docs/.~lock.*
 # apellido, DNI y legajo de empleados reales). Los regenera scripts/demo/ de
 # forma determinista, así que versionarlos no aportaría reproducibilidad.
 docs/demo/
+
+# Dumps de la base y copias de uploads/ que se sacan antes de correr el seed
+# destructivo. Llevan la nómina real (nombre, apellido, DNI) igual que los
+# Excel de docs/, así que valen la misma regla: no se versionan.
+backups/
+
+# Bytecode de los scripts de scripts/contenido/
+__pycache__/
