@@ -37,12 +37,16 @@ async function bootstrap() {
     }),
   );
 
+  // No alcanza con `??`: una CORS_ORIGINS seteada pero vacía ("") no es
+  // null/undefined, así que el fallback no se disparaba y el split() dejaba
+  // [''] — un origin que no matchea nada, bloqueando todo en silencio.
   const corsOrigins = (
-    config.get<string>('CORS_ORIGINS') ??
+    config.get<string>('CORS_ORIGINS') ||
     'http://localhost:5173,http://localhost:5174'
   )
     .split(',')
-    .map((origin) => origin.trim());
+    .map((origin) => origin.trim())
+    .filter((origin) => origin.length > 0);
 
   app.enableCors({ origin: corsOrigins });
 
