@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { AsignacionesModule } from './asignaciones/asignaciones.module';
 import { AuditModule } from './audit/audit.module';
@@ -9,6 +9,7 @@ import { EstadisticasModule } from './estadisticas/estadisticas.module';
 import { HealthController } from './health/health.controller';
 import { ImportModule } from './import/import.module';
 import { ModulosModule } from './modulos/modulos.module';
+import { RequestIdMiddleware } from './observabilidad/request-id.middleware';
 import { OrganizacionesModule } from './organizaciones/organizaciones.module';
 import { PreguntasModule } from './preguntas/preguntas.module';
 import { PrismaModule } from './prisma/prisma.module';
@@ -43,4 +44,16 @@ import { UsuariosModule } from './usuarios/usuarios.module';
   controllers: [HealthController],
   providers: [],
 })
-export class AppModule {}
+// `observabilidad/` no tiene su propio *.module.ts a propósito: nada ahí
+// necesita DI hoy (el middleware no inyecta nada, el logger/filtro/interceptor
+// se instancian con `new` en main.ts). Si el día de mañana necesitan inyectar
+// algo (ej. un cliente de Sentry), ahí conviene migrar a un módulo real con
+// APP_FILTER/APP_INTERCEPTOR — hasta entonces, cablearlo acá y en main.ts es
+// más simple.
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    // Wildcard nombrado: Nest 11 usa Express 5 (path-to-regexp v8), que ya no
+    // acepta el `'*'` bare — tira "Unsupported route path" al arrancar.
+    consumer.apply(RequestIdMiddleware).forRoutes('{*splat}');
+  }
+}
