@@ -41,12 +41,17 @@ export class AccessLogInterceptor implements NestInterceptor {
     response.on('finish', () => {
       const duracionMs = Date.now() - inicio;
       const linea = `${method} ${originalUrl} ${response.statusCode} ${duracionMs}ms`;
+      // Sin contexto explícito acá: `this.logger` ya es un `Logger` construido
+      // con ese contexto, y lo vuelve a agregar solo en cada llamada —
+      // pasarlo de nuevo lo duplica y ConsoleLogger interpreta esa copia
+      // extra como un mensaje (o, en error(), un "stack") más, partiendo la
+      // línea en dos.
       if (response.statusCode >= 500) {
-        this.logger.error(linea, AccessLogInterceptor.name);
+        this.logger.error(linea);
       } else if (response.statusCode >= 400) {
-        this.logger.warn(linea, AccessLogInterceptor.name);
+        this.logger.warn(linea);
       } else {
-        this.logger.log(linea, AccessLogInterceptor.name);
+        this.logger.log(linea);
       }
     });
 

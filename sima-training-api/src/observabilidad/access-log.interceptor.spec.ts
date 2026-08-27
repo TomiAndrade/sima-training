@@ -56,7 +56,6 @@ describe('AccessLogInterceptor', () => {
 
     expect(logger.log).toHaveBeenCalledWith(
       expect.stringMatching(/^GET \/usuarios 200 \d+ms$/),
-      'AccessLogInterceptor',
     );
     expect(logger.warn).not.toHaveBeenCalled();
     expect(logger.error).not.toHaveBeenCalled();
@@ -76,7 +75,6 @@ describe('AccessLogInterceptor', () => {
 
     expect(logger.warn).toHaveBeenCalledWith(
       expect.stringMatching(/^POST \/reglas-asignacion 409 \d+ms$/),
-      'AccessLogInterceptor',
     );
     expect(logger.log).not.toHaveBeenCalled();
     expect(logger.error).not.toHaveBeenCalled();
@@ -93,7 +91,6 @@ describe('AccessLogInterceptor', () => {
 
     expect(logger.error).toHaveBeenCalledWith(
       expect.stringMatching(/^GET \/algo 500 \d+ms$/),
-      'AccessLogInterceptor',
     );
   });
 

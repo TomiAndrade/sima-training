@@ -4,7 +4,7 @@ import {
   ConflictException,
 } from '@nestjs/common';
 import { GlobalExceptionFilter } from './global-exception.filter';
-import { runWithRequestId } from './request-context';
+import { getRequestId, runWithRequestId } from './request-context';
 
 function crearHost(
   overrides: {
@@ -136,11 +136,10 @@ describe('GlobalExceptionFilter', () => {
 
     filter.catch(error, host);
 
-    expect(logger.error).toHaveBeenCalledWith(
-      expect.any(String),
-      error.stack,
-      'GlobalExceptionFilter',
-    );
+    // Sin un tercer argumento de contexto: `this.logger` ya lo agrega solo
+    // (es un Logger construido con ese contexto) — pasarlo de nuevo lo
+    // duplicaría y ConsoleLogger lo confundiría con un mensaje/stack más.
+    expect(logger.error).toHaveBeenCalledWith(expect.any(String), error.stack);
     expect(logger.warn).not.toHaveBeenCalled();
   });
 
@@ -151,11 +150,35 @@ describe('GlobalExceptionFilter', () => {
 
     filter.catch(new ConflictException('dup'), host);
 
-    expect(logger.warn).toHaveBeenCalledWith(
-      expect.any(String),
-      'GlobalExceptionFilter',
-    );
+    expect(logger.warn).toHaveBeenCalledWith(expect.any(String));
     expect(logger.error).not.toHaveBeenCalled();
+  });
+
+  it('durante el log, el contexto de ALS ya tiene el requestId resuelto (incluso el del fallback)', () => {
+    // Regresión: el filtro resolvía el requestId de fallback en una variable
+    // local pero nunca lo escribía al ALS antes de loguear — el logger real
+    // (que lee `getRequestId()` al imprimir) quedaba viendo "sin-request-id"
+    // aunque la respuesta al cliente sí llevara el id correcto. Acá el mock
+    // de logger lee el ALS en el momento de la llamada, como haría el logger
+    // real, para poder detectar exactamente ese desfasaje.
+    let idVistoAlLoguear: string | undefined;
+    const logger = {
+      ...crearLoggerMock(),
+      warn: jest.fn(() => {
+        idVistoAlLoguear = getRequestId();
+      }),
+    };
+    const filter = new GlobalExceptionFilter(logger);
+    const { host, response } = crearHost({
+      headers: { 'x-request-id': 'del-header-para-el-log' },
+    });
+
+    filter.catch(new ConflictException('dup'), host);
+
+    expect(idVistoAlLoguear).toBe('del-header-para-el-log');
+    expect(response.json.mock.calls[0][0].requestId).toBe(
+      'del-header-para-el-log',
+    );
   });
 
   it('si la respuesta ya se envió (headersSent), no vuelve a escribir', () => {
