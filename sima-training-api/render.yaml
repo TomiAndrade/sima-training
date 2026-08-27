@@ -1,49 +1,50 @@
-# Blueprint de Render — PREPARADO PERO NO ACTIVO.
-# Para activar el deploy (pendiente del usuario, Sprint 1):
-#   1. Crear cuenta en Render y conectar el repo de GitHub.
-#   2. Render detecta este render.yaml y provisiona el servicio web + la base Postgres.
-#   3. La variable DATABASE_URL se inyecta automáticamente desde la base gestionada.
-#   4. Setear JWT_SECRET, AUTH_PASSWORD y las 4 variables R2_* como secretos en
-#      el dashboard de Render (ver .env.example para de dónde sale cada una).
+# Referencia del deploy en Render — NO es un Blueprint activo.
 #
-# AUTH_USER y AUTH_PASSWORD son las credenciales del backoffice (Sprint 1: login
-# contra entorno, sin roles). Van acá y no sólo en el dashboard porque
-# auth.service.ts compara el login contra ellas directo: sin setear, el valor
-# esperado es undefined y TODO intento de login responde 401 — el servicio
-# levanta sano y no entra nadie, que es la peor forma de fallar.
+# El Web Service se crea a mano desde el dashboard de Render (New → Web
+# Service), no con "New → Blueprint" sincronizando este archivo. Render NO
+# lee ni aplica este render.yaml automáticamente en ese flujo: queda
+# commiteado como checklist fiel de qué tipear en cada campo del dashboard,
+# para no tener que reconstruir esta config de memoria en el próximo deploy
+# o en un redeploy desde cero. El runbook paso a paso está en
+# docs/deploy-render.md.
 #
-# STORAGE_DRIVER=r2 va FIJO acá, no como default en el código: el contenedor
-# de Render es efímero (sin disco persistente en el plan free), así que un
-# deploy que caiga al default `local` de storage.module.ts pierde todas las
-# imágenes en el primer redeploy siguiente, en silencio — sin este valor
-# explícito, un typo o un olvido en el dashboard no se notaría hasta que ya
-# fuera tarde.
+# La base Postgres (Basic-256mb, región Ohio) ya se creó a mano en el
+# dashboard — por eso no hay bloque `databases:` acá: este archivo no la
+# provisiona, sólo documenta que el Web Service se conecta a ella.
 #
-# Mientras tanto el desarrollo es 100% local (docker-compose + npm run start:dev).
+# STORAGE_DRIVER=r2 va fijo acá, no como default en el código: el contenedor
+# de Render es efímero, así que un deploy que caiga al default `local` de
+# storage.module.ts pierde todas las imágenes en el primer redeploy
+# siguiente, en silencio.
+#
+# Ver .env.render.example para el detalle de dónde sale cada valor (dashboard
+# de Render, de Cloudflare, o generado a mano).
 
 services:
   - type: web
     name: sima-training-api
     runtime: docker
     dockerfilePath: ./Dockerfile
-    plan: free
-    region: oregon
+    plan: starter
+    region: ohio
     branch: main
+    healthCheckPath: /health
+    preDeployCommand: npx prisma migrate deploy
     envVars:
+      - key: PORT
+        value: '10000'
       - key: DATABASE_URL
-        fromDatabase:
-          name: sima-training-db
-          property: connectionString
+        sync: false
       - key: JWT_SECRET
         sync: false
+      - key: JWT_EXPIRES_IN
+        value: '8h'
       - key: AUTH_USER
         value: 'admin@sima.com'
       - key: AUTH_PASSWORD
         sync: false
       - key: CORS_ORIGINS
-        value: 'http://localhost:5173,http://localhost:5174'
-      - key: PORT
-        value: '3000'
+        sync: false
       - key: STORAGE_DRIVER
         value: 'r2'
       - key: R2_ACCOUNT_ID
@@ -54,8 +55,9 @@ services:
         sync: false
       - key: R2_BUCKET
         value: 'sima-training'
-
-databases:
-  - name: sima-training-db
-    plan: free
-    region: oregon
+      - key: SENTRY_DSN
+        sync: false
+      - key: TABLET_LOGIN_SIN_PIN
+        value: 'true'
+      - key: TABLET_JWT_EXPIRES_IN
+        value: '2h'

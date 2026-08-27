@@ -20,5 +20,8 @@ COPY --from=build /app/dist ./dist
 COPY --from=build /app/prisma ./prisma
 COPY --from=build /app/node_modules/.prisma ./node_modules/.prisma
 EXPOSE 3000
-# Aplica migraciones pendientes y arranca.
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/main"]
+# Las migraciones NO corren acá: en Render viven en preDeployCommand
+# (render.yaml), que corre una sola vez antes de que el release reciba
+# tráfico. Correrlas en el CMD las repetía en cada arranque/restart del
+# contenedor, no sólo en cada deploy.
+CMD ["node", "dist/main"]
