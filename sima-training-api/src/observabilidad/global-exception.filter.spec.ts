@@ -3,8 +3,13 @@ import {
   BadRequestException,
   ConflictException,
 } from '@nestjs/common';
+import * as Sentry from '@sentry/nestjs';
 import { GlobalExceptionFilter } from './global-exception.filter';
 import { getRequestId, runWithRequestId } from './request-context';
+
+jest.mock('@sentry/nestjs', () => ({
+  captureException: jest.fn(),
+}));
 
 function crearHost(
   overrides: {
@@ -44,6 +49,10 @@ function crearLoggerMock() {
 }
 
 describe('GlobalExceptionFilter', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
   it('HttpException de negocio (409) respeta status, message y error', () => {
     const filter = new GlobalExceptionFilter(crearLoggerMock());
     const { host, response } = crearHost();
@@ -190,5 +199,29 @@ describe('GlobalExceptionFilter', () => {
 
     expect(response.status).not.toHaveBeenCalled();
     expect(response.json).not.toHaveBeenCalled();
+  });
+
+  it('un 500 reporta a Sentry con el requestId como tag', () => {
+    const filter = new GlobalExceptionFilter(crearLoggerMock());
+    const { host } = crearHost();
+    const error = new Error('boom');
+
+    runWithRequestId('req-para-sentry', () => {
+      filter.catch(error, host);
+    });
+
+    expect(Sentry.captureException).toHaveBeenCalledWith(error, {
+      tags: { requestId: 'req-para-sentry' },
+    });
+  });
+
+  it('un 4xx de negocio NO reporta a Sentry (sería puro ruido)', () => {
+    const filter = new GlobalExceptionFilter(crearLoggerMock());
+    const { host } = crearHost();
+
+    filter.catch(new ConflictException('dup'), host);
+    filter.catch(new BadRequestException(['x']), host);
+
+    expect(Sentry.captureException).not.toHaveBeenCalled();
   });
 });

@@ -7,6 +7,7 @@ import {
   Logger,
   LoggerService,
 } from '@nestjs/common';
+import * as Sentry from '@sentry/nestjs';
 import { randomUUID } from 'node:crypto';
 import { Request, Response } from 'express';
 import {
@@ -89,6 +90,11 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         // partiendo la línea en dos y — en `error()` — corrompiendo el stack
         // real con el nombre de la clase.
         this.logger.error(linea, stack);
+        // Solo 5xx: son fallas reales de la aplicación. Los 4xx (ValidationPipe,
+        // 404, 409 de duplicado) son el sistema funcionando y convertirían a
+        // Sentry en ruido si se mandaran también. Con dsn vacío (dev/tests) esto
+        // es un no-op seguro — no hace falta gating propio acá.
+        Sentry.captureException(exception, { tags: { requestId } });
       } else {
         // 4xx de negocio: son errores esperados, no fallas de la aplicación.
         // Sin esta distinción, los 400 de ValidationPipe y los 409 de

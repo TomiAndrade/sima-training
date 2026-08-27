@@ -1,5 +1,6 @@
 import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { SentryModule } from '@sentry/nestjs/setup';
 import { AsignacionesModule } from './asignaciones/asignaciones.module';
 import { AuditModule } from './audit/audit.module';
 import { AuthModule } from './auth/auth.module';
@@ -21,6 +22,10 @@ import { UsuariosModule } from './usuarios/usuarios.module';
 
 @Module({
   imports: [
+    // Wiring de base del SDK (requerido por la doc de @sentry/nestjs), primero
+    // en la lista. La captura de excepciones NO sale de acá: es manual, sólo
+    // para 5xx, desde GlobalExceptionFilter — ver la nota ahí.
+    SentryModule.forRoot(),
     ConfigModule.forRoot({
       isGlobal: true,
     }),

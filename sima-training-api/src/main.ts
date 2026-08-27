@@ -1,3 +1,7 @@
+// Tiene que ser el primer import del archivo, antes que cualquier otro módulo:
+// Sentry necesita instrumentar antes de que se carguen los módulos de Nest.
+import './instrument';
+
 import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
