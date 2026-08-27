@@ -1,5 +1,7 @@
+import * as Sentry from '@sentry/react'
 import useNavigation from './hooks/useNavigation'
 import BackofficeLayout from './pages/BackofficeLayout'
+import ErrorFallback from './components/ErrorFallback'
 import Dashboard from './pages/Dashboard'
 import Usuarios from './core/pages/Usuarios'
 import Puestos from './core/pages/Puestos'
@@ -43,7 +45,14 @@ export default function App() {
           (`#usuarios/historial/42`, con `setSub`) y una intención de entrada que
           la pantalla consume al montar (`#questions/base/<id>/nivel/<id>`, con
           `replaceSub`). El resto de las pantallas los ignora. */}
-      <PageComponent navigate={navigate} sub={sub} setSub={setSub} replaceSub={replaceSub} />
+      {/* Solo la pantalla se envuelve, no todo App: si una explota, el sidebar
+          de BackofficeLayout sigue vivo y se puede navegar a otra. `key={page}`
+          fuerza el remount del boundary al cambiar de pantalla — Sentry.ErrorBoundary
+          no tiene `resetKeys`, así que sin esto el fallback de una pantalla rota
+          quedaría pegado al navegar a una que anda bien. */}
+      <Sentry.ErrorBoundary key={page} fallback={ErrorFallback}>
+        <PageComponent navigate={navigate} sub={sub} setSub={setSub} replaceSub={replaceSub} />
+      </Sentry.ErrorBoundary>
     </BackofficeLayout>
   )
 }
