@@ -10,8 +10,8 @@ Estado de partida: cuenta Render en plan **Pro**, base Postgres **Basic-256mb** 
 
 1. Tener a mano `sima-training-api/.env.render.example` — es la lista completa de variables, con placeholders y de dónde sale cada valor real.
 2. Armar (fuera del repo, o en un `.env.render` local que **no se commitea** — ya está en `.gitignore`) los valores reales:
-   - `JWT_SECRET`: generar con `openssl rand -base64 48` (o equivalente). Nunca el `dev-secret` de `auth.module.ts`.
-   - `AUTH_USER` / `AUTH_PASSWORD`: las credenciales reales del backoffice.
+   - `JWT_SECRET`: generar con `openssl rand -base64 48` (o equivalente). Nunca el `dev-secret` de `auth.module.ts`. Ya no lo usa el login del backoffice (es Auth0, ver `AUTH0_DOMAIN`/`AUTH0_AUDIENCE` más abajo) — lo sigue usando la app tablet para sus propios tokens.
+   - `AUTH0_DOMAIN` / `AUTH0_AUDIENCE`: del dashboard de Auth0 (tenant y API identifier).
    - Credenciales de Cloudflare R2 (`R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`): crear el bucket y el Account API Token en el dashboard de Cloudflare (permiso "Object Read & Write" acotado al bucket) **antes** de crear el Web Service — el arranque falla si `STORAGE_DRIVER=r2` y falta cualquiera de las cuatro.
    - `SENTRY_DSN` (opcional): del proyecto de Sentry si ya existe.
 
@@ -36,7 +36,7 @@ Cargar en la sección "Environment" del Web Service, una por una, siguiendo `sim
 | `PORT` | Render la inyecta sola; normalmente no hace falta tocarla |
 | `NODE_ENV` | El Dockerfile ya la fija a `production` en el stage de runtime |
 | `DATABASE_URL` | Dashboard → tu Postgres → pestaña "Connections" (ver punto 4) |
-| `JWT_SECRET`, `AUTH_USER`, `AUTH_PASSWORD` | Generados/definidos a mano (paso 1) |
+| `JWT_SECRET`, `AUTH0_DOMAIN`, `AUTH0_AUDIENCE` | Generados/definidos a mano (paso 1) |
 | `CORS_ORIGINS` | Dominios reales del backoffice y de la tablet en producción, separados por coma — sin ellos definidos todavía, dejar vacío hace que el backend caiga al fallback de `localhost` (ver `main.ts`), que no sirve para nada en Render pero tampoco rompe el arranque |
 | `STORAGE_DRIVER`, `R2_*` | Fijo `r2` + credenciales de Cloudflare (paso 1) |
 | `SENTRY_DSN` | Dashboard de Sentry, opcional — vacío = Sentry apagado |
@@ -48,12 +48,12 @@ Cargar en la sección "Environment" del Web Service, una por una, siguiendo `sim
 - **Internal vs External Database URL.** Con el Web Service y la base en la misma región (Ohio), usar la **Internal Database URL** (dashboard → Postgres → Connections) — es más rápida y no tiene costo de transferencia. La **External** sólo hace falta si en algún momento terminan en regiones distintas, o para conectarse desde fuera de Render (ej. un cliente de Postgres local).
 - **El seed se corre a mano, una sola vez, nunca en un comando de deploy.** Ni en `preDeployCommand` ni en el `CMD` del Dockerfile. Para sembrar la organización interna (seed base) o el contenido real de SIMA CHECK (`SEED_SIMA_CHECK=true`), conectarse a la base de producción con la `DATABASE_URL` real (típicamente vía la External Database URL desde la máquina local, o un shell en el propio servicio de Render) y correr `npx prisma db seed` manualmente. No hay ningún escenario en el que este comando deba ejecutarse automáticamente en cada deploy — reharía trabajo sobre datos reales de la nómina.
 - **`STORAGE_DRIVER` mal seteado no falla en silencio.** Si queda vacío, cae al default `local` del código (`storage.module.ts`) — pierde todas las imágenes en el primer redeploy porque el contenedor es efímero. Si tiene cualquier valor que no sea `local` ni `r2` (typo), el módulo tira `Error` al construirse y **el servicio no arranca** — es una falla ruidosa y rápida, a propósito.
-- **`AUTH_USER`/`AUTH_PASSWORD` sin setear no rompen el arranque.** El servicio queda sano pero **nadie puede loguearse** (401 siempre) — es la falla silenciosa opuesta a la de `STORAGE_DRIVER`. Confirmar que las dos variables están cargadas antes de dar el deploy por terminado, no alcanza con que `/health` responda 200.
+- **`AUTH0_DOMAIN`/`AUTH0_AUDIENCE` sin setear rompen el arranque, a propósito** (`Auth0VerifierService` tira `Error` al construirse, mismo criterio que `R2Storage` con sus credenciales) — es una falla ruidosa, no silenciosa como la de antes con `AUTH_USER`/`AUTH_PASSWORD`.
 - **`CORS_ORIGINS` vacía bloquea todo, no lo abre.** Si se carga la variable pero con un valor vacío (en vez de no cargarla), el backend no usa el fallback de desarrollo — bloquea todos los orígenes en silencio. Si todavía no hay dominios de producción definidos, mejor no cargar la variable en absoluto que cargarla vacía.
 
 ## 5. Verificación post-deploy
 
 1. `GET https://<tu-servicio>.onrender.com/health` → `{ status: 'ok', db: 'ok', ... }`. Si `db: 'error'`, revisar `DATABASE_URL` antes que nada más — el resto del deploy pudo haber salido bien igual.
-2. Probar login contra `/auth/login` con las credenciales de `AUTH_USER`/`AUTH_PASSWORD` reales.
+2. Probar el login desde el backoffice apuntado a esta API (Auth0 → Universal Login → redirect de vuelta).
 3. Subir una imagen de pregunta desde el backoffice (una vez que apunte a esta API) y confirmar que aparece en el bucket de R2, no en un disco que Render va a borrar en el próximo redeploy.
 4. Recién ahí, si hace falta, correr el seed a mano (ver trampas arriba).

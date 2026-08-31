@@ -34,13 +34,13 @@ export class TabletController {
   }
 
   // @Public() acá también es obligatorio, y por un motivo distinto al de
-  // /login: el guard global (JwtAuthGuard) ahora corre en TODA ruta, y su
-  // rama HS256 exige `type: 'backoffice'` (fix de seguridad de Story 4) —
-  // un token de alumno (`tipo: 'alumno'`) ya NO la pasa. Sin @Public() acá,
-  // el guard global rechazaría el token de tablet ANTES de que
-  // TabletAuthGuard llegue a mirarlo. TabletAuthGuard sigue siendo la única
-  // autoridad real sobre estas tres rutas, exactamente como antes de esta
-  // story — @Public() sólo le dice al guard global "no opines acá".
+  // /login: el guard global (JwtAuthGuard) corre en TODA ruta y sólo acepta
+  // RS256 de Auth0 — un token de alumno (`tipo: 'alumno'`, HS256) no matchea
+  // ningún algoritmo que el guard global reconozca. Sin @Public() acá, el
+  // guard global rechazaría el token de tablet ANTES de que TabletAuthGuard
+  // llegue a mirarlo. TabletAuthGuard sigue siendo la única autoridad real
+  // sobre estas tres rutas — @Public() sólo le dice al guard global "no
+  // opines acá".
   @Get('pendientes')
   @Public()
   @UseGuards(TabletAuthGuard)

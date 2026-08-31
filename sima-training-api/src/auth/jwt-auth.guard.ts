@@ -59,47 +59,11 @@ export class JwtAuthGuard implements CanActivate {
     } | null;
     const alg = decodificado?.header?.alg;
 
-    if (alg === 'HS256') {
-      await this.autenticarLegacy(token, request);
-      return true;
-    }
     if (alg === 'RS256') {
       await this.autenticarAuth0(token, request);
       return true;
     }
     throw new UnauthorizedException('Token inválido o expirado');
-  }
-
-  /**
-   * Tokens HS256 firmados por este backend con JWT_SECRET: los de
-   * POST /auth/login (scripts de scripts/, ver migrar-contenido-a-produccion.ts
-   * y crear-administradores.ts) y también los de POST /tablet/login, porque
-   * TabletService.login firma con el MISMO JwtService/secreto global.
-   *
-   * Por eso no alcanza con verificar la firma: hay que exigir la forma exacta
-   * del payload de backoffice (`type: 'backoffice'`, tablet.service.ts firma
-   * `tipo: 'alumno'` — clave distinta a propósito). Sin este chequeo, un
-   * alumno logueado sólo con su DNI en la tablet tendría un token que pasa
-   * este guard y habilita cualquier mutación del backoffice.
-   */
-  private async autenticarLegacy(
-    token: string,
-    request: Request,
-  ): Promise<void> {
-    let payload: unknown;
-    try {
-      payload = await this.jwt.verifyAsync(token);
-    } catch {
-      throw new UnauthorizedException('Token inválido o expirado');
-    }
-    const esBackoffice =
-      typeof payload === 'object' &&
-      payload !== null &&
-      (payload as Record<string, unknown>).type === 'backoffice';
-    if (!esBackoffice) {
-      throw new UnauthorizedException('Token inválido o expirado');
-    }
-    (request as Request & { user?: unknown }).user = payload;
   }
 
   /**

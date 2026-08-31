@@ -9,8 +9,8 @@ import { TabletService } from './tablet.service';
 // Módulo aparte y no un controller en sesiones/: lo que sirve la tablet
 // compone asignaciones + módulos + sesiones bajo un contrato propio que nunca
 // expone `respuestaCorrecta`. El JwtService sale del AuthModule global (no
-// hace falta importarlo acá) y AuthService/AuthController del backoffice
-// quedan intactos: son el login `type: 'backoffice'`, esto es un mundo aparte.
+// hace falta importarlo acá) — el login del backoffice es Auth0 (RS256), un
+// mundo aparte de los tokens `tipo: 'alumno'` (HS256) que firma TabletService.
 //
 // Importa AsignacionesModule (no ModulosModule: la consulta de módulo +
 // versión ACTIVO de pendientes()/examen() va por Prisma directo, mismo
