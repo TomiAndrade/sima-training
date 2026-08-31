@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import * as Sentry from '@sentry/react'
 import { useAuth0 } from '@auth0/auth0-react'
 import useNavigation from './hooks/useNavigation'
-import { setAuth0TokenGetter } from './core/api/client'
+import { setAuth0TokenGetter, setAuthErrorHandler } from './core/api/client'
 import BackofficeLayout from './pages/BackofficeLayout'
 import ErrorFallback from './components/ErrorFallback'
 import Dashboard from './pages/Dashboard'
@@ -50,12 +50,20 @@ export default function App() {
     if (!isLoading && !isAuthenticated) loginWithRedirect()
   }, [isLoading, isAuthenticated, loginWithRedirect])
 
-  // Se registra recién cuando hay sesión: mientras tanto client.js sigue
-  // cayendo a su login() demo si algo dispara un request antes de tiempo
-  // (no debería pasar, el return de abajo lo evita, pero es la guarda barata).
+  // Se registra recién cuando hay sesión: mientras tanto client.js rechaza
+  // cualquier request autenticado (no debería pasar, el return de abajo lo
+  // evita, pero es la guarda barata).
   useEffect(() => {
     if (isAuthenticated) setAuth0TokenGetter(() => getAccessTokenSilently())
   }, [isAuthenticated, getAccessTokenSilently])
+
+  // Cuando la sesión ya no se puede renovar sola (getAccessTokenSilently()
+  // tira, o el backend sigue rechazando el token con 401 después de
+  // reintentar) client.js llama a esto en vez de dejar la pantalla que
+  // disparó el request colgada con una promesa rechazada.
+  useEffect(() => {
+    setAuthErrorHandler(() => loginWithRedirect())
+  }, [loginWithRedirect])
 
   if (isLoading || !isAuthenticated) {
     return (

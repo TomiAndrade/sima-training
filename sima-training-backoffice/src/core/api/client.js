@@ -14,9 +14,25 @@ export function setAuth0TokenGetter(fn) {
   getAuth0Token = fn
 }
 
+// App.jsx registra acá un loginWithRedirect() (mismo patrón que el token
+// getter de arriba). Se dispara cuando la sesión de Auth0 ya no se puede
+// renovar sola: getAccessTokenSilently() tira (`login_required` — el
+// refresh token venció) en vez de devolver un token nuevo, y eso pasaba sin
+// que nadie lo atajara: la pantalla que disparó el request quedaba con una
+// promesa rechazada y ningún camino de vuelta al login.
+let onAuthError = null
+export function setAuthErrorHandler(fn) {
+  onAuthError = fn
+}
+
 async function obtenerToken() {
   if (!getAuth0Token) throw new Error('Auth0 todavía no está listo')
-  return getAuth0Token()
+  try {
+    return await getAuth0Token()
+  } catch (err) {
+    onAuthError?.()
+    throw err
+  }
 }
 
 async function parse(res) {
@@ -49,6 +65,11 @@ async function request(method, path, { body, auth = false } = {}) {
   let res = await doFetch()
   if (auth && res.status === 401) {
     res = await doFetch()
+    // Todavía 401 con un token que Auth0 dio por bueno: no es un token
+    // vencido que un reintento arregla, es la sesión completa. Mismo
+    // disparador que el catch de obtenerToken(), para el caso borde donde
+    // getAccessTokenSilently() no tira pero el backend igual rechaza.
+    if (res.status === 401) onAuthError?.()
   }
   return parse(res)
 }
@@ -69,6 +90,7 @@ async function upload(path, file) {
   let res = await doFetch()
   if (res.status === 401) {
     res = await doFetch()
+    if (res.status === 401) onAuthError?.()
   }
   return parse(res)
 }
