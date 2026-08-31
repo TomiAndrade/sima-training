@@ -22,3 +22,8 @@ backups/
 
 # Bytecode de los scripts de scripts/contenido/
 __pycache__/
+
+# Mapeo idLocal -> idProd de la migración de contenido a producción. Es estado
+# de una corrida concreta contra una base concreta, no fuente: versionarlo haría
+# que otra máquina crea que ya migró lo que no migró.
+sima-training-api/scripts/.estado-migracion-produccion.json

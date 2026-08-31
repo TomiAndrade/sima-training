@@ -1,5 +1,8 @@
+import { useEffect } from 'react'
 import * as Sentry from '@sentry/react'
+import { useAuth0 } from '@auth0/auth0-react'
 import useNavigation from './hooks/useNavigation'
+import { setAuth0TokenGetter } from './core/api/client'
 import BackofficeLayout from './pages/BackofficeLayout'
 import ErrorFallback from './components/ErrorFallback'
 import Dashboard from './pages/Dashboard'
@@ -35,8 +38,32 @@ const PAGES = {
 const PAGE_IDS = Object.keys(PAGES)
 
 export default function App() {
+  const { isLoading, isAuthenticated, loginWithRedirect, getAccessTokenSilently } = useAuth0()
   const { page, sub, navigate, setSub, replaceSub } = useNavigation('dashboard', PAGE_IDS)
   const PageComponent = PAGES[page] ?? Dashboard
+
+  // Gate de auth: sin router, así que no hay una "ruta protegida" que
+  // envolver — es la app entera. loginWithRedirect() manda al Universal
+  // Login de Auth0; onRedirectCallback (main.jsx) trae de vuelta al hash que
+  // había antes de irse.
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated) loginWithRedirect()
+  }, [isLoading, isAuthenticated, loginWithRedirect])
+
+  // Se registra recién cuando hay sesión: mientras tanto client.js sigue
+  // cayendo a su login() demo si algo dispara un request antes de tiempo
+  // (no debería pasar, el return de abajo lo evita, pero es la guarda barata).
+  useEffect(() => {
+    if (isAuthenticated) setAuth0TokenGetter(() => getAccessTokenSilently())
+  }, [isAuthenticated, getAccessTokenSilently])
+
+  if (isLoading || !isAuthenticated) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 text-slate-500 text-sm">
+        Conectando con Auth0…
+      </div>
+    )
+  }
 
   return (
     <BackofficeLayout page={page} navigate={navigate}>

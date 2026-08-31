@@ -1,4 +1,5 @@
 import { Controller, Get } from '@nestjs/common';
+import { Public } from '../auth/public.decorator';
 import { ResumenService } from './resumen.service';
 
 // Lectura, sin JWT — mismo criterio que el resto de los GET del proyecto
@@ -11,6 +12,7 @@ export class ResumenController {
   constructor(private readonly resumen: ResumenService) {}
 
   @Get('sima-check')
+  @Public()
   simaCheck() {
     return this.resumen.simaCheck();
   }

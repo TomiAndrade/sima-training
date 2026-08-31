@@ -14,6 +14,7 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { Public } from '../auth/public.decorator';
 import { MAX_IMAGEN_SIZE } from '../storage/formato-imagen';
 import { CreatePreguntaDto } from './dto/create-pregunta.dto';
 import { FindAllPreguntasDto } from './dto/find-all-preguntas.dto';
@@ -51,11 +52,13 @@ export class PreguntasController {
   }
 
   @Get()
+  @Public()
   findAll(@Query() query: FindAllPreguntasDto) {
     return this.preguntas.findAll(query);
   }
 
   @Get(':id')
+  @Public()
   findOne(@Param('id', ParseUUIDPipe) id: string) {
     return this.preguntas.findOne(id);
   }

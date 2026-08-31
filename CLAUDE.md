@@ -6,17 +6,18 @@ MVP de alta fidelidad para validar la plataforma **SIMA TRAINING** de **Ingenier
 
 **SIMA CHECK** (capacitaciones y evaluaciones industriales) es el primer producto integrado en la plataforma. La arquitectura está preparada para incorporar productos futuros (SIMA INSPECTIONS, SIMA AUDITS, etc.) sin reorganizaciones.
 
-## Tres proyectos independientes
+**La app tablet (`sima-check-app`) vive en su propio repo desde 2026-08-31: [`TomiAndrade/sima-check-app`](https://github.com/TomiAndrade/sima-check-app), deployada en Netlify (`simacheck.netlify.app`).** Salió de acá con `git subtree split` (conservó su historial) porque era 100% autocontenida — propio `package.json`, cero imports cruzados hacia el resto de TRAINING, sólo consume la API real por HTTP contra `/tablet/*`. Este repo sigue siendo la fuente de verdad de esos endpoints (ver `tablet/` en Módulos NestJS y [decisiones/tablet.md](docs/decisiones/tablet.md)); lo que cambió es sólo dónde vive el código del frontend que los consume.
+
+## Dos proyectos independientes
 
 | Proyecto | Descripción | Puerto dev |
 |---|---|---|
 | `sima-training-api/` | **Backend** NestJS + PostgreSQL + Prisma (Sprint 1) | 3000 |
 | `sima-training-backoffice/` | Backoffice de la plataforma SIMA TRAINING | 5173 |
-| `sima-check-app/` | App de evaluación para tablets industriales (producto SIMA CHECK) | 5174 |
 
 ## Stack técnico
 
-**Frontends** (`sima-training-backoffice`, `sima-check-app`):
+**Frontend** (`sima-training-backoffice`):
 - **Vite + React** (template react)
 - **Tailwind CSS v3** + PostCSS + Autoprefixer
 - Sin router (navegación con `useState`)
@@ -27,7 +28,7 @@ MVP de alta fidelidad para validar la plataforma **SIMA TRAINING** de **Ingenier
 - **Prisma 6** (ORM + migraciones)
 - **JWT** para auth básica (sin roles todavía)
 
-> El backoffice ya consume la API real (ver `src/core/api/`) en **Usuarios, Puestos, Centros de Costo, Módulos, Preguntas, Reglas de asignación, Asignaciones y el Resumen de SIMA CHECK**. Siguen mockeadas **Dashboard y Clientes**; se migran ABM por ABM en sprints siguientes. La app tablet (`sima-check-app`) **ya está conectada**: consume `/tablet/*` vía `src/core/api/` y no le queda ningún mock de datos (`src/data/` se eliminó). Lo que sigue pendiente ahí es el **offline de datos**, no la conexión.
+> El backoffice ya consume la API real (ver `src/core/api/`) en **Usuarios, Puestos, Centros de Costo, Módulos, Preguntas, Reglas de asignación, Asignaciones y el Resumen de SIMA CHECK**. Siguen mockeadas **Dashboard y Clientes**; se migran ABM por ABM en sprints siguientes. La app tablet (repo aparte, ver arriba) **ya está conectada**: consume `/tablet/*` y no le queda ningún mock de datos. Lo que sigue pendiente ahí es el **offline de datos**, no la conexión.
 
 ## Cómo correr
 
@@ -49,10 +50,8 @@ npm install
 cp .env.example .env             # VITE_API_URL apunta al backend local
 npm run dev                      # → http://localhost:5173
 
-# 3. App tablet (consume el backend: necesita la API corriendo)
-cd TRAINING/sima-check-app
-npm install
-npm run dev                      # → http://localhost:5174
+# 3. App tablet — repo aparte, ver https://github.com/TomiAndrade/sima-check-app
+#    (clonarlo al lado de este, no adentro; consume el backend de arriba vía VITE_API_URL)
 ```
 
 ### Contenido de SIMA CHECK (`SEED_SIMA_CHECK=true`)
@@ -432,14 +431,9 @@ sima-training-backoffice/src/
                        `setSub` (apila en el historial, para una sub-vista que
                        es un LUGAR) y `replaceSub` (no apila, para un sub que es
                        una INTENCIÓN de entrada y se consume al montar))
-
-sima-check-app/src/
-├── core/api/          client.js · tablet.js (login, pendientes, examen,
-│                      registrar resultado) · imagenes.js   # capa HTTP
-├── components/        Button · ProgressBar · QuestionCard · BannerActualizacion
-├── pages/             UsuarioSelection · ModuleSelection · Evaluation · Results
-└── App.jsx            eleva el estado del flujo y registra el service worker
 ```
+
+`sima-check-app/` (la app tablet) ya no vive acá — es el repo aparte [`TomiAndrade/sima-check-app`](https://github.com/TomiAndrade/sima-check-app), ver la nota al principio de este archivo.
 
 ## Buscador en los desplegables largos (`SearchableSelect`)
 

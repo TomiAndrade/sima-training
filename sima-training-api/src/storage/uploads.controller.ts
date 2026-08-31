@@ -8,6 +8,7 @@ import {
   Res,
 } from '@nestjs/common';
 import type { Response } from 'express';
+import { Public } from '../auth/public.decorator';
 import { ArchivoNoEncontrado, StorageService } from './storage.service';
 import { contentTypeDe } from './r2.storage';
 
@@ -43,6 +44,7 @@ export class UploadsController {
   constructor(private readonly storage: StorageService) {}
 
   @Get('*clave')
+  @Public()
   // 1 año e `immutable`: la clave lleva un uuid y el contenido de una clave
   // nunca cambia (la imagen de una pregunta es inmutable, ver
   // decisiones/preguntas.md). Es lo que evita que cada tablet vuelva a bajar
@@ -61,7 +63,9 @@ export class UploadsController {
     try {
       const archivo = await this.storage.leer(ruta);
       const contentType =
-        archivo.contentType ?? contentTypeDe(ruta) ?? 'application/octet-stream';
+        archivo.contentType ??
+        contentTypeDe(ruta) ??
+        'application/octet-stream';
       res.setHeader('Content-Type', contentType);
       if (archivo.contentLength !== undefined) {
         res.setHeader('Content-Length', archivo.contentLength);

@@ -10,6 +10,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { Response } from 'express';
+import { Public } from '../auth/public.decorator';
 import { LoginTabletDto } from './dto/login-tablet.dto';
 import { RegistrarSesionTabletDto } from './dto/registrar-sesion-tablet.dto';
 import { TabletAuthGuard, UsuarioTablet } from './tablet-auth.guard';
@@ -21,13 +22,27 @@ export class TabletController {
 
   // PROVISIONAL sin PIN — ver el comentario de TabletService.login() y
   // docs/autenticacion-tablet.md.
+  //
+  // @Public() acá no es opcional: con JwtAuthGuard como guard global (Story
+  // 4), esta ruta necesitaría un Bearer para poder... emitir un Bearer. Un
+  // alumno arranca sin ningún token, sólo con su DNI.
   @Post('login')
+  @Public()
   @HttpCode(HttpStatus.OK)
   login(@Body() dto: LoginTabletDto) {
     return this.tablet.login(dto);
   }
 
+  // @Public() acá también es obligatorio, y por un motivo distinto al de
+  // /login: el guard global (JwtAuthGuard) ahora corre en TODA ruta, y su
+  // rama HS256 exige `type: 'backoffice'` (fix de seguridad de Story 4) —
+  // un token de alumno (`tipo: 'alumno'`) ya NO la pasa. Sin @Public() acá,
+  // el guard global rechazaría el token de tablet ANTES de que
+  // TabletAuthGuard llegue a mirarlo. TabletAuthGuard sigue siendo la única
+  // autoridad real sobre estas tres rutas, exactamente como antes de esta
+  // story — @Public() sólo le dice al guard global "no opines acá".
   @Get('pendientes')
+  @Public()
   @UseGuards(TabletAuthGuard)
   pendientes(@UsuarioTablet() usuarioId: number) {
     return this.tablet.pendientes(usuarioId);
@@ -38,6 +53,7 @@ export class TabletController {
   // el usuarioId sí se usa ahora: es contra él que se cuentan los intentos ya
   // gastados y la espera entre uno y otro (409 si no puede rendir).
   @Get('modulos/:moduloId/examen')
+  @Public()
   @UseGuards(TabletAuthGuard)
   examen(
     @UsuarioTablet() usuarioId: number,
@@ -60,6 +76,7 @@ export class TabletController {
   // campo que sólo sirve para decidir un status HTTP lo ensucia para su único
   // consumidor real — @Res({ passthrough: true }) alcanza sin tocar eso.
   @Post('sesiones')
+  @Public()
   @UseGuards(TabletAuthGuard)
   async rendir(
     @UsuarioTablet() usuarioId: number,

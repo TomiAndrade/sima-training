@@ -14,6 +14,7 @@ import {
 } from '@nestjs/common';
 import { AuditService } from '../audit/audit.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { Public } from '../auth/public.decorator';
 import { CreateUsuarioDto } from './dto/create-usuario.dto';
 import { FindAllUsuariosDto } from './dto/find-all-usuarios.dto';
 import { UpdateUsuarioDto } from './dto/update-usuario.dto';
@@ -33,11 +34,13 @@ export class UsuariosController {
   }
 
   @Get()
+  @Public()
   findAll(@Query() query: FindAllUsuariosDto) {
     return this.usuarios.findAll(query);
   }
 
   @Get(':id')
+  @Public()
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.usuarios.findOne(id);
   }
@@ -46,6 +49,7 @@ export class UsuariosController {
   // log global, por eso cuelga acá y no de un controller propio de audit/.
   // Lectura abierta, igual que el resto de los GET.
   @Get(':id/audit-log')
+  @Public()
   auditLog(@Param('id', ParseIntPipe) id: number) {
     return this.audit.listarPorUsuario(id);
   }
@@ -54,6 +58,7 @@ export class UsuariosController {
   // sesiones + auditoría + veredicto, en un solo request. Lectura abierta,
   // igual que el resto de los GET.
   @Get(':id/informe')
+  @Public()
   informe(@Param('id', ParseIntPipe) id: number) {
     return this.usuarios.informe(id);
   }

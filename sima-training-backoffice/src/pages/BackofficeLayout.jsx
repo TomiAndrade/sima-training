@@ -1,3 +1,5 @@
+import { useAuth0 } from '@auth0/auth0-react'
+
 const SIMA_CHECK_PAGES = new Set(['sima-check-overview', 'training-modules', 'questions', 'bases-conocimiento', 'assignment-rules', 'training-assignments', 'sima-check-estadisticas'])
 
 // "Bases" va pegada a "Preguntas" porque es su taxonomía: se entra ahí para
@@ -37,7 +39,20 @@ const NAV_SECTIONS = [
 const ALL_NAV_ITEMS = NAV_SECTIONS.flatMap((s) => s.items)
 
 export default function BackofficeLayout({ page, navigate, children }) {
+  const { user, logout } = useAuth0()
   const inSimaCheck = SIMA_CHECK_PAGES.has(page)
+
+  // El rol real (ADMINISTRADOR/COORDINADOR/AUDITOR) no viaja en el perfil de
+  // Auth0 a propósito — vive en Vinculacion, no en el token de identidad.
+  // Mostrar sólo nombre/email acá es honesto con eso; un endpoint /usuarios/me
+  // para el rol queda para otra story.
+  const nombre = user?.name ?? user?.email ?? 'Usuario'
+  const iniciales = nombre
+    .split(/\s+/)
+    .map((parte) => parte[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase()
 
   return (
     <div className="flex h-screen bg-slate-50 text-slate-900 overflow-hidden">
@@ -91,17 +106,23 @@ export default function BackofficeLayout({ page, navigate, children }) {
 
         {/* Footer */}
         <div className="px-4 py-3 border-t border-slate-200">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2.5 min-w-0">
               <div className="w-7 h-7 bg-slate-100 border border-slate-200 rounded flex items-center justify-center text-[10px] font-bold text-red-600 font-mono flex-shrink-0">
-                AT
+                {iniciales}
               </div>
               <div className="min-w-0">
-                <div className="text-slate-700 text-xs font-medium truncate">Admin TEST</div>
-                <div className="text-slate-400 text-[10px] uppercase tracking-wider">Administrador</div>
+                <div className="text-slate-700 text-xs font-medium truncate">{nombre}</div>
+                <div className="text-slate-400 text-[10px] tracking-wider truncate">{user?.email}</div>
               </div>
             </div>
-            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 flex-shrink-0 ml-2" />
+            <button
+              onClick={() => logout({ logoutParams: { returnTo: window.location.origin } })}
+              className="text-slate-400 hover:text-red-600 text-[10px] font-medium uppercase tracking-wider flex-shrink-0"
+              title="Cerrar sesión"
+            >
+              Salir
+            </button>
           </div>
         </div>
       </aside>

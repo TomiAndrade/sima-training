@@ -9,6 +9,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { Public } from '../auth/public.decorator';
 import { CreateOrganizacionDto } from './dto/create-organizacion.dto';
 import { UpdateOrganizacionDto } from './dto/update-organizacion.dto';
 import { OrganizacionesService } from './organizaciones.service';
@@ -24,11 +25,13 @@ export class OrganizacionesController {
   }
 
   @Get()
+  @Public()
   findAll() {
     return this.organizaciones.findAll();
   }
 
   @Get(':id')
+  @Public()
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.organizaciones.findOne(id);
   }

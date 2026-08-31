@@ -13,6 +13,21 @@ const AUTH_PASSWORD = import.meta.env.VITE_AUTH_PASSWORD ?? 'sima1234'
 
 let token = null
 
+// Auth0 (Story 4): App.jsx llama a esto una vez que useAuth0() está listo,
+// pasándole getAccessTokenSilently. Mientras no se llame (o si algún día se
+// saca el Auth0Provider), `obtenerToken` cae al login() demo de arriba — no
+// se borra ese código a propósito, ver CLAUDE.md de este sprint.
+let getAuth0Token = null
+export function setAuth0TokenGetter(fn) {
+  getAuth0Token = fn
+}
+
+async function obtenerToken() {
+  if (getAuth0Token) return getAuth0Token()
+  if (!token) await login()
+  return token
+}
+
 async function parse(res) {
   const text = await res.text()
   const body = text ? JSON.parse(text) : null
@@ -34,15 +49,15 @@ async function login() {
   return token
 }
 
-// Llamada genérica. `auth: true` adjunta el Bearer (y reintenta el login una vez
-// si el token expiró o falta).
+// Llamada genérica. `auth: true` adjunta el Bearer (y reintenta una vez si el
+// token expiró o falta). Con Auth0 activo, el reintento no pisa nada a mano:
+// getAccessTokenSilently() ya maneja su propio cacheo/refresh.
 async function request(method, path, { body, auth = false } = {}) {
   const doFetch = async () => {
     const headers = {}
     if (body !== undefined) headers['Content-Type'] = 'application/json'
     if (auth) {
-      if (!token) await login()
-      headers['Authorization'] = `Bearer ${token}`
+      headers['Authorization'] = `Bearer ${await obtenerToken()}`
     }
     return fetch(`${BASE_URL}${path}`, {
       method,
@@ -54,22 +69,20 @@ async function request(method, path, { body, auth = false } = {}) {
   let res = await doFetch()
   if (auth && res.status === 401) {
     token = null
-    await login()
     res = await doFetch()
   }
   return parse(res)
 }
 
 // Subida de archivos (multipart). No setea Content-Type: el browser agrega el
-// boundary. Adjunta el Bearer y reintenta el login una vez ante 401.
+// boundary. Adjunta el Bearer y reintenta una vez ante 401.
 async function upload(path, file) {
   const doFetch = async () => {
-    if (!token) await login()
     const formData = new FormData()
     formData.append('file', file)
     return fetch(`${BASE_URL}${path}`, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${token}` },
+      headers: { Authorization: `Bearer ${await obtenerToken()}` },
       body: formData,
     })
   }
@@ -77,7 +90,6 @@ async function upload(path, file) {
   let res = await doFetch()
   if (res.status === 401) {
     token = null
-    await login()
     res = await doFetch()
   }
   return parse(res)
