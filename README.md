@@ -6,6 +6,8 @@ MVP de alta fidelidad para **Ingeniería Sima**, orientado a la industria Oil & 
 
 Detalle completo (modelo de dominio, decisiones de diseño por sprint, endpoints) en [`CLAUDE.md`](CLAUDE.md). Pendientes activos en [`docs/pendientes.md`](docs/pendientes.md).
 
+**La app tablet (`sima-check-app`) vive en su propio repo desde 2026-08-31: [`TomiAndrade/sima-check-app`](https://github.com/TomiAndrade/sima-check-app), deployada en Netlify (`simacheck.netlify.app`).** Salió de acá con `git subtree split` (conservó su historial); consume la API de este repo por HTTP contra `/tablet/*`.
+
 ---
 
 ## Proyectos
@@ -14,7 +16,6 @@ Detalle completo (modelo de dominio, decisiones de diseño por sprint, endpoints
 |---|---|---|
 | `sima-training-api/` | **Backend** NestJS + PostgreSQL + Prisma | 3000 |
 | `sima-training-backoffice/` | Backoffice de la plataforma SIMA TRAINING | 5173 |
-| `sima-check-app/` | App de evaluación para tablets industriales (SIMA CHECK) | 5174 |
 
 Cada uno tiene su propio `package.json` y se corre de forma independiente.
 
@@ -22,7 +23,7 @@ Cada uno tiene su propio `package.json` y se corre de forma independiente.
 
 ## Stack
 
-**Frontends** (`sima-training-backoffice`, `sima-check-app`):
+**Frontend** (`sima-training-backoffice`):
 - **Vite + React** (sin react-router — navegación con `useState`)
 - **Tailwind CSS v3** + PostCSS + Autoprefixer
 
@@ -62,10 +63,8 @@ npm install
 cp .env.example .env             # VITE_API_URL apunta al backend local
 npm run dev                      # → http://localhost:5173
 
-# 3. App tablet (consume el backend: necesita la API corriendo)
-cd TRAINING/sima-check-app
-npm install
-npm run dev   # → http://localhost:5174
+# 3. App tablet — repo aparte, ver https://github.com/TomiAndrade/sima-check-app
+#    (clonarlo al lado de este, no adentro; consume el backend de arriba vía VITE_API_URL)
 ```
 
 ---
@@ -157,13 +156,9 @@ sima-training-backoffice/src/
 ├── pages/          BackofficeLayout.jsx · Dashboard.jsx
 ├── components/     Button · Modal · Table · StatCard · MultiSelectFilter
 └── hooks/          useNavigation.js
-
-sima-check-app/src/
-├── core/api/       client.js · tablet.js · imagenes.js   # capa HTTP
-├── components/     Button · ProgressBar · QuestionCard · BannerActualizacion
-├── pages/          UsuarioSelection · ModuleSelection · Evaluation · Results
-└── App.jsx         eleva el estado del flujo y registra el service worker
 ```
+
+`sima-check-app/` (la app tablet) ya no vive acá — es el repo aparte [`TomiAndrade/sima-check-app`](https://github.com/TomiAndrade/sima-check-app), ver la nota al principio de este archivo.
 
 ---
 

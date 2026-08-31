@@ -19,7 +19,7 @@ Estado de partida: cuenta Render en plan **Pro**, base Postgres **Basic-256mb** 
 
 En el dashboard de Render, **New → Web Service**, conectando el repo `TomiAndrade/sima-training`.
 
-- **Root Directory**: `sima-training-api` — el repo tiene tres proyectos hermanos (`sima-training-api`, `sima-training-backoffice`, `sima-check-app`), y el Dockerfile vive dentro del primero.
+- **Root Directory**: `sima-training-api` — el repo tiene dos proyectos hermanos (`sima-training-api`, `sima-training-backoffice`; la app tablet `sima-check-app` salió a su propio repo el 2026-08-31), y el Dockerfile vive dentro del primero.
 - **Runtime**: Docker (usa `sima-training-api/Dockerfile` tal cual, sin build/start command propios de Render).
 - **Plan**: Starter.
 - **Region**: Ohio — **misma región que la base**, para poder usar la Internal Database URL (ver punto 4).
