@@ -20,23 +20,31 @@ Un solo deploy. Cada entidad futura se agrega como un **módulo NestJS nuevo**, 
 
 Con matices por entidad que se decidieron después, y que valen como precedente: `Sesion` es inmutable y **no** lleva soft-delete ([sesiones.md](./sesiones.md#sesion-es-inmutable-y-no-lleva-soft-delete)), `AuditLog` tampoco ([auditoria.md](./auditoria.md#el-borrado-físico-de-los-pares-se-vuelve-legítimo-gracias-a-esta-decisión-no-a-pesar-de-ella)), y `Asignacion` usa `revocadaAt` en vez de `deletedAt` porque revocar y borrar son cosas distintas.
 
-### Auth básica sin roles
+### Login del backoffice: Auth0 (Story 4), no credenciales propias
 
-El backoffice se autentica con credenciales de entorno (`AUTH_USER` / `AUTH_PASSWORD`); el cliente hace auto-login y cachea el token en memoria, sin pantalla de login todavía. **Lecturas abiertas, escrituras con JWT.**
+El backoffice se autentica contra **Auth0** (Universal Login, RS256): `main.jsx` envuelve la app en `Auth0Provider`, `App.jsx` dispara `loginWithRedirect()` si no hay sesión y registra el token getter (`getAccessTokenSilently`) que `client.js` usa en cada request autenticado. **Lecturas abiertas, escrituras con Bearer.**
 
-Es provisorio y está atado a que la abstracción de roles del sistema no está definida (ver [`../pendientes.md`](../pendientes.md)): por eso el único admin previsto entra por `.env` en vez de ser un `Usuario`, y el alta del backoffice está fijada a ALUMNO ([usuarios.md](./usuarios.md#frontend-el-alta-está-fijada-a-alumno)).
+Del lado del backend, `JwtAuthGuard` es el **guard global** (`APP_GUARD`, no opt-in por ruta): cualquier ruta nueva queda cerrada por default y necesita `@Public()` explícito para abrirse. Sólo acepta RS256 — decodifica el header del token, y si no matchea ese algoritmo, 401 directo. `Auth0VerifierService` valida la firma contra el JWKS del tenant (cacheado), el issuer y el audience, y `JwtAuthGuard.autenticarAuth0()` resuelve la identidad local: primero por `authProviderId`, si no por `email` (linkeo de primer login, sin crear usuarios nunca), y rechaza si la vinculación no está activa o si el rol es ALUMNO (los alumnos entran por la tablet, no por acá).
 
-El token de la tablet es **otro**, con su propio guard y su propio payload, a propósito: ver [tablet.md](./tablet.md#token-de-alumno-separado-del-token-de-backoffice).
+Existió un camino legacy — `POST /auth/login` contra `AUTH_USER`/`AUTH_PASSWORD` de entorno, firmando HS256 con `JWT_SECRET` — que se mantuvo un tiempo como fallback mientras Auth0 se terminaba de verificar en producción. Se eliminó por completo una vez confirmado (`AuthController`/`AuthService`, la rama HS256 del guard, y el auto-login demo de `client.js`): hoy Auth0 es la única vía de login del backoffice, sin puerta trasera.
+
+Sigue atado a que la abstracción de roles del sistema no está terminada de definir (ver [`../pendientes.md`](../pendientes.md)): el alta del backoffice está fijada a ALUMNO ([usuarios.md](./usuarios.md#frontend-el-alta-está-fijada-a-alumno)), y los administradores/coordinadores existentes se dieron de alta a mano (`scripts/archivo/crear-administradores.ts`) para que Auth0 pudiera linkearlos por email.
+
+El token de la tablet es **otro mundo aparte**, con su propio guard y su propio payload: HS256, firmado por este mismo backend con el `JWT_SECRET` de siempre (`TabletService.login`, `tipo: 'alumno'`), verificado sólo por `TabletAuthGuard` — nunca por el guard global, que rutas como `POST /tablet/login` marcan `@Public()` justamente para que `JwtAuthGuard` no opine. Detalle en [tablet.md](./tablet.md#token-de-alumno-separado-del-token-de-backoffice).
+
+### Sesión de Auth0 vencida: redirige a login, no se cuelga
+
+`getAccessTokenSilently()` renueva la sesión sola mientras el refresh token siga vivo. Cuando ya no puede (`login_required`, sesión vencida del todo), tira en vez de devolver un token — y hasta que se resolvió esto, ese error se perdía como una promesa rechazada en la pantalla que disparó el request, sin ningún camino de vuelta al login. `client.js` expone `setAuthErrorHandler()` (mismo patrón que el token getter) y `App.jsx` lo conecta a `loginWithRedirect()`; se dispara tanto si Auth0 tira el error como si el backend sigue devolviendo 401 después del reintento normal de un token vencido.
 
 ### Local-first: PostgreSQL en Docker Compose
 
 La base corre local vía `docker compose up -d db`; requiere Docker Desktop. Es lo que permite trabajar sin depender de ninguna cuenta cloud, y es también el argumento que decidió resolver la detección de duplicados **en memoria** en vez de con una extensión de Postgres ([preguntas.md](./preguntas.md#detección-de-duplicados-y-similares-en-memoria-no-con-pg_trgm)).
 
-### Deploy preparado, no activo
+### Deploy activo en Render — sin CI
 
-`Dockerfile` y `render.yaml` están listos, y el CI corre lint + build + test + un smoke test de `start:prod`. Lo que falta es crear la cuenta y conectar el repo — el CI **no tiene paso de deploy** hasta que eso pase.
+El backend está deployado en Render (plan Starter, Docker, región Ohio), manual desde el dashboard y no vía Blueprint: `render.yaml` es un checklist versionado de qué tipear en cada campo, no algo que Render aplique solo. Runbook completo en [`../deploy-render.md`](../deploy-render.md).
 
-El estado y lo que bloquea (una implementación de object storage, ver abajo) viven en [`../pendientes.md`](../pendientes.md).
+**No hay ningún CI.** No existe `.github/workflows/` en el repo — lint, build y test se corren a mano antes de cada deploy manual. Es deuda real, no "falta conectar algo que ya está armado": anotado en [`../pendientes.md`](../pendientes.md).
 
 ### `/health` chequea la base, y aun así nunca devuelve 503
 
