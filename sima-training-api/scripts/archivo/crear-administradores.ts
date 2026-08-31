@@ -1,3 +1,26 @@
+// ═══════════════════════════════════════════════════════════════════════
+// ARCHIVADO — NO RE-EJECUTAR.
+//
+// Creó los 3 usuarios ADMINISTRADOR en producción, antes de integrar Auth0,
+// para que cada cuenta existiera de antemano y Auth0 pudiera linkearla por
+// email en su primer login. Corrió una sola vez, el 2026-08-31, y cumplió
+// su función — los 3 administradores ya existen en producción.
+//
+// Por qué no se re-corre:
+//   - Se autenticaba con POST /auth/login usando MIGRACION_AUTH_USER /
+//     MIGRACION_AUTH_PASSWORD contra AUTH_USER/AUTH_PASSWORD del backend.
+//     Ese endpoint y esas variables YA NO EXISTEN (cleanup post-Auth0,
+//     Story 4) — el script no puede ni loguearse tal cual está.
+//   - Volver a correrlo contra los mismos 3 DNI es además redundante: el
+//     alta de Usuario revive por DNI si ya existe, así que en el mejor
+//     caso no haría nada nuevo.
+//
+// Se conserva tal cual corrió (no se toca ni se actualiza a la API actual)
+// porque ya cumplió su propósito — ver la memoria del proyecto sobre no
+// tocar scripts de producción ya verificados. Sirve como referencia de
+// cómo se dieron de alta esas 3 cuentas, no como algo para correr de nuevo.
+// ═══════════════════════════════════════════════════════════════════════
+
 // Crea los 3 usuarios ADMINISTRADOR en PRODUCCIÓN, antes de integrar Auth0.
 // Auth0 va a linkear cada cuenta por email en su primer login, así que el
 // email de las 3 personas tiene que existir SÍ o SÍ.
