@@ -10,6 +10,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { Public } from '../auth/public.decorator';
 import { CreatePuestoDto } from './dto/create-puesto.dto';
 import { FindPuestosDto } from './dto/find-puestos.dto';
 import { UpdatePuestoDto } from './dto/update-puesto.dto';
@@ -26,6 +27,7 @@ export class PuestosController {
   }
 
   @Get()
+  @Public()
   findAll(@Query() query: FindPuestosDto) {
     return this.puestos.findAll(query);
   }

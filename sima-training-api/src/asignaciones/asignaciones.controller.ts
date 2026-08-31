@@ -11,6 +11,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { Public } from '../auth/public.decorator';
 import { AsignacionesService } from './asignaciones.service';
 import { CreateAsignacionDto } from './dto/create-asignacion.dto';
 import { FindAsignacionesDto } from './dto/find-asignaciones.dto';
@@ -20,6 +21,7 @@ export class AsignacionesController {
   constructor(private readonly asignaciones: AsignacionesService) {}
 
   @Get()
+  @Public()
   findByUsuario(@Query() query: FindAsignacionesDto) {
     return this.asignaciones.findByUsuario(query.usuarioId);
   }

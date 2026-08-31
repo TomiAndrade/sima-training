@@ -10,6 +10,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { Public } from '../auth/public.decorator';
 import { CentrosCostoService } from './centros-costo.service';
 import { CreateCentroCostoDto } from './dto/create-centro-costo.dto';
 import { FindCentrosCostoDto } from './dto/find-centros-costo.dto';
@@ -26,6 +27,7 @@ export class CentrosCostoController {
   }
 
   @Get()
+  @Public()
   findAll(@Query() query: FindCentrosCostoDto) {
     return this.centrosCosto.findAll(query);
   }

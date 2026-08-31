@@ -60,6 +60,13 @@ model Usuario {
   dni      String  @unique
   email    String?
 
+  // Id de la identidad en el proveedor externo (Auth0 `sub`). Nullable: null
+  // hasta el primer login por Auth0; se completa vía linkeo por email en
+  // JwtAuthGuard, nunca a mano. Único, pero como es nullable Postgres permite
+  // múltiples NULL sin chocar (mismo criterio que dni/email, no hace falta
+  // índice parcial).
+  authProviderId String? @unique @map("auth_provider_id")
+
   vinculacion Vinculacion?
 
   asignaciones Asignacion[]

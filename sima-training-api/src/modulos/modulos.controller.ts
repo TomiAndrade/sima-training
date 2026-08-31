@@ -12,6 +12,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { Public } from '../auth/public.decorator';
 import { ActivarModuloDto } from './dto/activar-modulo.dto';
 import { AsignarPreguntaItemDto } from './dto/asignar-preguntas.dto';
 import { CreateModuloDto } from './dto/create-modulo.dto';
@@ -32,21 +33,25 @@ export class ModulosController {
   }
 
   @Get()
+  @Public()
   findAll() {
     return this.modulos.findAll();
   }
 
   @Get(':id')
+  @Public()
   findOne(@Param('id', ParseUUIDPipe) id: string) {
     return this.modulos.findOne(id);
   }
 
   @Get(':id/versiones')
+  @Public()
   findVersiones(@Param('id', ParseUUIDPipe) id: string) {
     return this.modulos.findVersiones(id);
   }
 
   @Get(':id/versiones/:versionId')
+  @Public()
   findVersionOne(
     @Param('id', ParseUUIDPipe) id: string,
     @Param('versionId', ParseUUIDPipe) versionId: string,
