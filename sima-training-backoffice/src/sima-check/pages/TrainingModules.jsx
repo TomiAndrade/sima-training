@@ -15,7 +15,14 @@ import {
   parametrosDistintos,
 } from '../components/parametrosExamen'
 
-const EMPTY_MODULE_FORM = { nombre: '', descripcion: '', vigenciaMeses: '' }
+const EMPTY_MODULE_FORM = {
+  nombre: '',
+  descripcion: '',
+  vigenciaMeses: '',
+  // Arranca en false igual que el default de la columna: exponer un módulo a
+  // gente de afuera de la empresa tiene que ser un acto explícito.
+  demoPublico: false,
+}
 
 function ChipToggle({ active, onClick, children }) {
   return (
@@ -98,6 +105,11 @@ export default function TrainingModules() {
   // Confirmación de Activar/Desactivar el módulo entero (baja lógica, separada
   // de la edición de metadata).
   const [desactivarModal, setDesactivarModal] = useState(null)
+  // Estado propio del toggle de demo (dentro del modal de detalles), aparte del
+  // de Desactivar: son dos acciones distintas sobre la misma fila y compartir el
+  // flag dejaría los dos botones en "guardando" al tocar cualquiera.
+  const [guardandoDemo, setGuardandoDemo] = useState(false)
+  const [demoError, setDemoError] = useState(null)
   const [desactivando, setDesactivando] = useState(false)
   const [desactivarError, setDesactivarError] = useState(null)
 
@@ -273,6 +285,9 @@ export default function TrainingModules() {
 
   const openDetalleModulo = (mod) => {
     setDetalleModal(mod)
+    // Un error del toggle de demo no puede sobrevivir a cerrar el modal y
+    // reaparecer sobre otro módulo.
+    setDemoError(null)
   }
 
   // Criterios listos para mandar: los completos (una fila recién agregada
@@ -298,6 +313,7 @@ export default function TrainingModules() {
         nombre: moduleForm.nombre.trim(),
         descripcion: moduleForm.descripcion.trim() || undefined,
         vigenciaMeses,
+        demoPublico: moduleForm.demoPublico,
         // Los parámetros de examen viajan en el propio POST: el backend los
         // desvía a la v1 BORRADOR que crea junto con el módulo.
         ...parametrosAPayload(moduleParametros),
@@ -344,6 +360,36 @@ export default function TrainingModules() {
       setDesactivarError(err.message)
     } finally {
       setDesactivando(false)
+    }
+  }
+
+  // --- Poner/sacar el módulo del modo demostración ---
+  //
+  // Vive en el modal de "Ver detalles" y no como una acción de fila: la fila ya
+  // tiene cuatro botones y éste es el menos frecuente de todos (se toca una vez
+  // por módulo, no en el día a día). El modal era de solo lectura hasta acá, y
+  // se le hace esta excepción porque es donde ya está toda la metadata.
+  //
+  // Sin modal de confirmación propio, a diferencia de Desactivar: sacar un
+  // módulo de la demo no afecta a ningún alumno ni revoca nada, y ponerlo se
+  // deshace con el mismo botón. Lo que sí hace es refrescar la lista, para que
+  // el badge "Demo" de la tabla no quede mintiendo.
+  const handleToggleDemo = async () => {
+    if (!detalleModal) return
+    const proximo = !detalleModal.demoPublico
+    setGuardandoDemo(true)
+    setDemoError(null)
+    try {
+      await modulosApi.update(detalleModal.id, { demoPublico: proximo })
+      // Se actualiza el modal abierto además de recargar la lista: si sólo se
+      // recargara, el modal seguiría mostrando el valor viejo (tiene su propia
+      // copia de la fila, no una referencia viva a la lista).
+      setDetalleModal((m) => ({ ...m, demoPublico: proximo }))
+      await loadModules()
+    } catch (err) {
+      setDemoError(err.message)
+    } finally {
+      setGuardandoDemo(false)
     }
   }
 
@@ -965,6 +1011,13 @@ export default function TrainingModules() {
           )}
           {estadoVersionBadge(vigente?.estado)}
           <span className="text-slate-400 text-xs font-mono">{formatVersionNumero(vigente)}</span>
+          {/* Qué se le está mostrando a gente de afuera tiene que verse de un
+              vistazo en el listado, no sólo entrando al detalle de cada módulo. */}
+          {row.demoPublico && (
+            <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-sky-50 text-sky-700 border border-sky-200">
+              Demo
+            </span>
+          )}
         </div>
       ),
     },
@@ -1124,6 +1177,26 @@ export default function TrainingModules() {
               placeholder="Cada cuántos meses debe recertificarse un alumno"
             />
           </div>
+          {/* Modo invitado. Va junto a la metadata del módulo (y no con "Cómo se
+              rinde") porque no es un parámetro de la versión: no se congela al
+              publicar y se puede sacar en cualquier momento sin versionar nada. */}
+          <div>
+            <label className="flex items-start gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                className="mt-0.5 accent-red-600"
+                checked={moduleForm.demoPublico}
+                onChange={(e) => setModuleForm((f) => ({ ...f, demoPublico: e.target.checked }))}
+              />
+              <span className="text-sm">
+                <span className="text-slate-700 font-medium">Mostrar en el modo demostración</span>
+                <span className="block text-slate-500 text-xs mt-0.5">
+                  Cualquiera puede rendirlo desde la tablet sin estar en el sistema, dando
+                  sólo su nombre. Los resultados quedan aparte y no cuentan como capacitación.
+                </span>
+              </span>
+            </label>
+          </div>
           <div className="pt-2 border-t border-slate-200">
             <label className="block text-slate-700 text-sm font-medium mb-2">
               Cómo se rinde <span className="text-slate-400 font-normal">(opcional — se puede cambiar mientras sea borrador)</span>
@@ -1186,6 +1259,42 @@ export default function TrainingModules() {
             <div>
               <div className="text-slate-400 text-xs font-medium mb-1">Estado</div>
               <div className="text-slate-900 text-sm">{detalleModal.activo === false ? 'Inactivo' : 'Activo'}</div>
+            </div>
+            {/* La ÚNICA acción de este modal, que hasta acá era de solo lectura
+                — ver el comentario de handleToggleDemo(). */}
+            <div className="pt-3 border-t border-slate-200">
+              <div className="text-slate-400 text-xs font-medium mb-1">Modo demostración</div>
+              <div className="flex items-start justify-between gap-3">
+                <div className="text-sm">
+                  <div className="text-slate-900">
+                    {detalleModal.demoPublico
+                      ? 'Se ofrece a quien pruebe la app sin estar en el sistema'
+                      : 'No se ofrece en la demo'}
+                  </div>
+                  {detalleModal.demoPublico && (
+                    <div className="text-slate-500 text-xs mt-0.5">
+                      Los resultados quedan aparte y no cuentan como capacitación.
+                    </div>
+                  )}
+                </div>
+                <Button
+                  variant={detalleModal.demoPublico ? 'secondary' : 'primary'}
+                  size="sm"
+                  disabled={guardandoDemo}
+                  onClick={handleToggleDemo}
+                >
+                  {guardandoDemo
+                    ? 'Guardando…'
+                    : detalleModal.demoPublico
+                      ? 'Quitar de la demo'
+                      : 'Agregar a la demo'}
+                </Button>
+              </div>
+              {demoError && (
+                <div className="mt-2 bg-red-50 border border-red-200 text-red-700 text-xs rounded px-3 py-2">
+                  {demoError}
+                </div>
+              )}
             </div>
             {/* Cómo se rinde sale de la versión vigente, no del módulo: son
                 parámetros congelados por versión. Un módulo sin ninguna versión

@@ -264,6 +264,137 @@ function FilaRanking({ fila, abierta, onToggle, onVer }) {
 }
 
 // Tabla de un corte por catálogo (centro de costo o puesto).
+// Fecha y HORA de una prueba de demo. Con la hora y no sólo el día por el mismo
+// motivo que el historial de rendiciones: varias pruebas caen el mismo día y sin
+// la hora no se sabe en qué orden ni cuánto pasó entre una y otra.
+const fechaHora = (iso) => {
+  const d = new Date(iso)
+  return `${d.toLocaleDateString('es-AR')} ${d.toLocaleTimeString('es-AR', {
+    hour: '2-digit',
+    minute: '2-digit',
+  })}`
+}
+
+// Cómo le fue al MODO INVITADO: gente que probó la app sin estar en el sistema.
+//
+// Va en esta pantalla y no en un tab propio porque el volumen esperado es chico
+// (una o dos tablets en una oficina) y una pantalla entera para cuatro números
+// se ve vacía. Va PLEGADA y al pie por lo mismo: es lo último que se mira acá, no
+// lo que trae a alguien a esta pantalla. Si algún día la demo se usa a escala,
+// sale a tab propio sin tocar el backend.
+function SeccionInvitados({ datos, error }) {
+  if (error) {
+    return (
+      <p className="text-slate-400 text-xs">
+        No se pudo cargar el reporte del modo demostración: {error}
+      </p>
+    )
+  }
+  if (!datos || datos.totales.pruebas === 0) {
+    return (
+      <p className="text-slate-400 text-xs">
+        — Todavía no probó nadie la app en modo demostración —
+      </p>
+    )
+  }
+
+  const { totales, porModulo, recientes } = datos
+
+  return (
+    <div className="space-y-4">
+      {/* La advertencia va PRIMERO y no al pie: alguien que abre esta sección
+          después de mirar el resto de la pantalla tiene que saber, antes de leer
+          un número, que esta gente no es de la nómina. */}
+      <p className="text-slate-400 text-xs">
+        Gente de afuera del sistema que probó la app dando sólo su nombre. Estos
+        resultados <span className="font-semibold">no cuentan como capacitación</span>{' '}
+        y no entran en ninguno de los números de arriba ni en el Resumen.
+      </p>
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <StatCard label="Pruebas" value={totales.pruebas} />
+        <StatCard label="Nombres distintos" value={totales.nombres} />
+        <StatCard label="Aprobaron" value={pctTexto(totales.porcentajeAprobacion)} />
+        <StatCard label="Acierto" value={pctTexto(totales.porcentajeAcierto)} />
+      </div>
+
+      {/* El nombre es texto libre sin verificar, así que "nombres distintos" no
+          es un conteo de personas. Decirlo acá evita que alguien lo reporte como
+          "X visitantes". */}
+      <p className="text-slate-400 text-xs">
+        &ldquo;Nombres distintos&rdquo; es una aproximación: el nombre lo escribe
+        cada uno y nadie lo verifica, así que dos personas que se llaman igual
+        cuentan como una, y la misma persona escribiéndose distinto cuenta como
+        dos.
+      </p>
+
+      <div>
+        <p className="text-slate-500 text-xs mb-1.5">Por módulo</p>
+        <Table
+          columns={[
+            { key: 'moduloNombre', label: 'Módulo' },
+            { key: 'pruebas', label: 'Pruebas' },
+            {
+              key: 'porcentajeAprobacion',
+              label: 'Aprobaron',
+              render: (p, row) => (
+                <span className="font-mono text-xs" style={{ color: colorPorcentaje(p) }}>
+                  {p}% <span className="text-slate-400">({row.aprobadas}/{row.pruebas})</span>
+                </span>
+              ),
+            },
+          ]}
+          data={porModulo}
+        />
+      </div>
+
+      <div>
+        <p className="text-slate-500 text-xs mb-1.5">
+          Últimas pruebas{recientes.length < totales.pruebas && ` (${recientes.length} de ${totales.pruebas})`}
+        </p>
+        <Table
+          columns={[
+            { key: 'nombre', label: 'Nombre' },
+            { key: 'moduloNombre', label: 'Módulo' },
+            {
+              key: 'porcentaje',
+              label: 'Resultado',
+              render: (p, row) => (
+                <span className="font-mono text-xs">
+                  {p}% <span className="text-slate-400">({row.correctas}/{row.total})</span>
+                </span>
+              ),
+            },
+            {
+              key: 'aprobada',
+              label: '',
+              render: (aprobada) => (
+                <span
+                  className={`px-2.5 py-1 rounded-full text-xs font-semibold border ${
+                    aprobada
+                      ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                      : 'bg-red-50 border-red-200 text-red-700'
+                  }`}
+                >
+                  {aprobada ? 'Aprobó' : 'Desaprobó'}
+                </span>
+              ),
+            },
+            {
+              key: 'fecha',
+              label: 'Fecha y hora',
+              render: (fecha) => (
+                <span className="text-slate-500 text-xs font-mono">{fechaHora(fecha)}</span>
+              ),
+            },
+          ]}
+          data={recientes}
+        />
+      </div>
+    </div>
+  )
+}
+
 function TablaCatalogo({ datos, etiqueta }) {
   const columns = [
     {
@@ -315,18 +446,48 @@ export default function Estadisticas() {
   const [showNuncaServidas, setShowNuncaServidas] = useState(false)
   const [showSinFallos, setShowSinFallos] = useState(false)
 
+  // Modo demostración. Estado aparte del reporte principal —y no un campo más
+  // de `datos`— porque son dos endpoints distintos: el de invitados puede fallar
+  // (o no existir todavía, contra un backend viejo) sin que eso se lleve puesta
+  // la pantalla entera. Por eso las dos cargas van con allSettled.
+  const [invitados, setInvitados] = useState(null)
+  const [errorInvitados, setErrorInvitados] = useState(null)
+  const [showInvitados, setShowInvitados] = useState(false)
+
   // La pregunta completa para el modal "Ver pregunta". El ranking sólo trae
   // texto y conteos, así que el contenido (opciones, imágenes, cuál es la
   // correcta) se pide aparte con GET /preguntas/:id.
   const [verPregunta, setVerPregunta] = useState(null)
 
+  // Los dos reportes en paralelo, con allSettled y no all: un fallo del de
+  // invitados (el secundario) no puede tumbar la pantalla — se pinta como un
+  // aviso dentro de su sección y el reporte principal se muestra igual.
+  //
+  // No toca estado: devuelve los dos resultados y cada llamador decide qué
+  // hacer. Es lo que permite llamarla desde el efecto sin hacer setState en su
+  // cuerpo (react-hooks/set-state-in-effect), y de paso deja que el efecto
+  // descarte una respuesta vieja con su guarda `active`.
+  const cargar = () =>
+    Promise.allSettled([estadisticasApi.simaCheck(), estadisticasApi.invitados()])
+
+  const aplicarDemo = (demo) => {
+    if (demo.status === 'fulfilled') {
+      setInvitados(demo.value)
+      setErrorInvitados(null)
+    } else {
+      setErrorInvitados(demo.reason.message)
+    }
+  }
+
   useEffect(() => {
     let active = true
-    estadisticasApi
-      .simaCheck()
-      .then((data) => active && setDatos(data))
-      .catch((err) => active && setError(err.message))
-      .finally(() => active && setLoading(false))
+    cargar().then(([principal, demo]) => {
+      if (!active) return
+      aplicarDemo(demo)
+      if (principal.status === 'fulfilled') setDatos(principal.value)
+      else setError(principal.reason.message)
+      setLoading(false)
+    })
     return () => {
       active = false
     }
@@ -335,25 +496,21 @@ export default function Estadisticas() {
   const refrescar = async () => {
     setRefrescando(true)
     setErrorRefresco(null)
-    try {
-      setDatos(await estadisticasApi.simaCheck())
-    } catch (err) {
-      setErrorRefresco(err.message)
-    } finally {
-      setRefrescando(false)
-    }
+    const [principal, demo] = await cargar()
+    aplicarDemo(demo)
+    if (principal.status === 'fulfilled') setDatos(principal.value)
+    else setErrorRefresco(principal.reason.message)
+    setRefrescando(false)
   }
 
   const reintentar = async () => {
     setLoading(true)
     setError(null)
-    try {
-      setDatos(await estadisticasApi.simaCheck())
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setLoading(false)
-    }
+    const [principal, demo] = await cargar()
+    aplicarDemo(demo)
+    if (principal.status === 'fulfilled') setDatos(principal.value)
+    else setError(principal.reason.message)
+    setLoading(false)
   }
 
   const abrirPregunta = async (preguntaId) => {
@@ -611,6 +768,22 @@ export default function Estadisticas() {
           </div>
         </>
       )}
+
+      {/* Modo demostración: al pie y plegado, FUERA del bloque condicional de
+          arriba. Es la única sección que tiene sentido mostrar aunque todavía no
+          se haya rendido ninguna evaluación real — la demo puede tener pruebas
+          antes que la nómina. */}
+      <div className="space-y-2">
+        {seccionPlegable(
+          showInvitados,
+          () => setShowInvitados((s) => !s),
+          'Modo demostración',
+          invitados?.totales.pruebas ?? 0,
+        )}
+        {showInvitados && (
+          <SeccionInvitados datos={invitados} error={errorInvitados} />
+        )}
+      </div>
 
       {verPregunta && (
         <VerPreguntaModal
