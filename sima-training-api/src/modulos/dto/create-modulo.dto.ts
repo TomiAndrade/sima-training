@@ -1,4 +1,5 @@
 import {
+  IsBoolean,
   IsInt,
   IsNotEmpty,
   IsOptional,
@@ -27,4 +28,12 @@ export class CreateModuloDto extends ParametrosExamenDto {
   @IsInt()
   @Min(1)
   vigenciaMeses?: number;
+
+  // ¿Se ofrece en el modo invitado de la tablet? Omitirlo deja el default de la
+  // columna (false), y eso es lo que se quiere: exponer un módulo a gente de
+  // afuera de la empresa tiene que ser un acto explícito, nunca lo que pasa por
+  // no decir nada.
+  @IsOptional()
+  @IsBoolean()
+  demoPublico?: boolean;
 }
