@@ -6,7 +6,7 @@ Los dos de acá dependían de `POST /auth/login` y de `AUTH_USER`/`AUTH_PASSWORD
 
 | Script | Qué hizo |
 |---|---|
-| `crear-administradores.ts` | Creó los 3 usuarios ADMINISTRADOR en producción antes de integrar Auth0, para que Auth0 pudiera linkear cada cuenta por email en su primer login |
+| `crear-administradores.ts` | Creó los 3 usuarios ADMINISTRADOR en producción antes de integrar Auth0, para que Auth0 pudiera linkear cada cuenta por email en su primer login. **Para sumar un administrador nuevo hoy: `../crear-admin.ts`**, que hace lo mismo contra la base con Prisma en vez de por HTTP |
 | `migrar-contenido-a-produccion.ts` | Migró el contenido de evaluación de SIMA CHECK (bases, niveles, imágenes, preguntas y módulos) de la base local a producción, escribiendo por HTTP contra la API deployada |
 
-Si en algún momento hace falta un script nuevo contra producción, no reusar estos — armar uno nuevo contra la API actual (Auth0, no `/auth/login`).
+Si en algún momento hace falta un script nuevo contra producción, no reusar estos — armar uno nuevo contra la API actual (Auth0, no `/auth/login`). Es lo que se hizo con `../crear-admin.ts`, que reemplaza a `crear-administradores.ts`: escribe con Prisma directo contra la `DATABASE_URL` en vez de por HTTP, justamente porque con el guard global de Auth0 un script HTTP necesitaría el token de un admin que ya exista.

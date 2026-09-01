@@ -30,6 +30,14 @@ Existió un camino legacy — `POST /auth/login` contra `AUTH_USER`/`AUTH_PASSWO
 
 Sigue atado a que la abstracción de roles del sistema no está terminada de definir (ver [`../pendientes.md`](../pendientes.md)): el alta del backoffice está fijada a ALUMNO ([usuarios.md](./usuarios.md#frontend-el-alta-está-fijada-a-alumno)), y los administradores/coordinadores existentes se dieron de alta a mano (`scripts/archivo/crear-administradores.ts`) para que Auth0 pudiera linkearlos por email.
 
+Sumar un administrador nuevo sigue siendo eso: correr un script. Hoy es **`scripts/crear-admin.ts`** — el archivado no sirve, se autenticaba con el `POST /auth/login` que se eliminó en este mismo cleanup. Tres cosas del diseño de ese script que salen de decisiones de acá:
+
+- **Escribe por Prisma, no por HTTP.** `POST /usuarios` está detrás del guard global, así que un script HTTP necesitaría un token RS256 de un admin que ya exista — huevo y gallina justo cuando el admin es lo que falta. Igual no toca la base a mano: reusa `UsuariosService.create()` levantando un application context de Nest, como el seed, para heredar la matriz rol↔organización, el revive por DNI y el AuditLog.
+- **Aborta si el email ya lo tiene otro usuario vivo.** `email` no es único en el schema, así que la base acepta el duplicado sin chistar, pero el guard hace `findMany` por email y con dos candidatos **rechaza el login de los dos** en vez de elegir uno. O sea que el alta duplicada no falla donde se hace: rompe en silencio la cuenta que ya andaba.
+- **Los datos de la persona van por CLI, no hardcodeados.** Nombre, apellido y DNI son PII y el archivo está versionado — mismo criterio con el que el seed no siembra la nómina.
+
+Y crea sólo la fila `Usuario` + `Vinculacion`: la cuenta de Auth0 con el mismo email es un paso manual en el dashboard del tenant, porque el backend nunca crea usuarios.
+
 El token de la tablet es **otro mundo aparte**, con su propio guard y su propio payload: HS256, firmado por este mismo backend con el `JWT_SECRET` de siempre (`TabletService.login`, `tipo: 'alumno'`), verificado sólo por `TabletAuthGuard` — nunca por el guard global, que rutas como `POST /tablet/login` marcan `@Public()` justamente para que `JwtAuthGuard` no opine. Detalle en [tablet.md](./tablet.md#token-de-alumno-separado-del-token-de-backoffice).
 
 ### Sesión de Auth0 vencida: redirige a login, no se cuelga

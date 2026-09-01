@@ -106,6 +106,7 @@ Ver [`.env.example`](.env.example). Las principales:
 | `npx prisma db seed` | Carga los datos base (agregar `SEED_SIMA_CHECK=true` para el contenido real de SIMA CHECK) |
 | `npx prisma studio` | Explorador visual de la base |
 | `npx ts-node scripts/sembrar-rendiciones.ts` | **Sólo dev.** Siembra rendiciones simuladas — ver abajo |
+| `npx ts-node scripts/crear-admin.ts` | Da de alta un ADMINISTRADOR (lo único que el backoffice no puede hacer) — ver abajo |
 
 ### Rendiciones simuladas (`scripts/sembrar-rendiciones.ts`)
 
@@ -134,6 +135,25 @@ Dos detalles del diseño: **reusa `SesionesService.registrar()`** en vez de escr
 Es idempotente (`claveIdempotencia` derivada del par asignación-intento): correrlo dos veces no duplica.
 
 **No confundir con `scripts/demo/`**, que es otra cosa y está marcado como deuda en [`../docs/pendientes.md`](../docs/pendientes.md).
+
+### Dar de alta un administrador (`scripts/crear-admin.ts`)
+
+Es lo único del ABM de usuarios que el backoffice **no** puede hacer: su alta manual está fijada a `rol: ALUMNO` y no hay pantalla para crear cuentas de sistema. Y `POST /usuarios` está detrás del guard global de Auth0, así que un script HTTP necesitaría un token de un admin que ya exista — por eso éste escribe contra la base (reusando `UsuariosService.create()` con un application context de Nest, no con `INSERT` crudos).
+
+```powershell
+# dry-run (el default: no escribe nada, e imprime a qué base apunta)
+npx ts-node scripts/crear-admin.ts --nombre Juan --apellido Perez --dni 30111222 --email juan@ejemplo.com
+
+# escribir de verdad
+npx ts-node scripts/crear-admin.ts --nombre Juan --apellido Perez --dni 30111222 --email juan@ejemplo.com --ejecutar
+
+# contra producción: la DATABASE_URL de la línea del comando le gana a la del .env
+$env:DATABASE_URL='postgresql://…?sslmode=require'; npx ts-node scripts/crear-admin.ts … --ejecutar
+```
+
+Los datos de la persona van **por CLI y no hardcodeados**: nombre, apellido y DNI son PII y el script está versionado. `--organizacion-id <n>` sólo hace falta si hay más de una organización INTERNA (la matriz rol↔organización no permite ADMINISTRADOR en otro tipo); con una sola, la resuelve.
+
+⚠️ **Crea sólo la fila `Usuario` + `Vinculacion`.** Para que la persona entre al backoffice hace falta además **una cuenta en Auth0 con el mismo email**: el guard nunca crea usuarios — busca por `authProviderId` y, si no encuentra, linkea por email en el primer login. Y el script **aborta si ese email ya lo tiene otro usuario vivo**: `email` no es único en el schema, pero el guard rechaza el login cuando matchea más de uno, así que el duplicado no rompe donde se crea sino en la cuenta que ya andaba.
 
 ## Endpoints
 
