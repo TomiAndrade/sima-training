@@ -204,7 +204,13 @@ describe('InvitadoService', () => {
       activo: true,
       demoPublico: true,
       versiones: [
-        { id: VERSION_ID, anio: 2026, mayor: 1, menor: 0, preguntasPorExamen: 1 },
+        {
+          id: VERSION_ID,
+          anio: 2026,
+          mayor: 1,
+          menor: 0,
+          preguntasPorExamen: 1,
+        },
       ],
     });
     prisma.moduloVersionPregunta.findMany.mockResolvedValue([

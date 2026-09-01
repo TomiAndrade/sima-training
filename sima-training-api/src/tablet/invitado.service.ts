@@ -63,8 +63,9 @@ export class InvitadoService {
    */
   login(dto: LoginInvitadoDto) {
     const nombre = dto.nombre.trim();
-    const expiresIn = (this.config.get<string>('TABLET_INVITADO_JWT_EXPIRES_IN') ??
-      '30m') as NonNullable<JwtSignOptions['expiresIn']>;
+    const expiresIn = (this.config.get<string>(
+      'TABLET_INVITADO_JWT_EXPIRES_IN',
+    ) ?? '30m') as NonNullable<JwtSignOptions['expiresIn']>;
 
     return {
       // El nombre va FIRMADO adentro del token (ver invitado-auth.guard.ts):

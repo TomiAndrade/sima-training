@@ -164,17 +164,18 @@ export class InvitadosService {
       acc.set(moduloId, fila);
     }
 
-    return [...acc.values()]
-      .map((f) => ({
-        ...f,
-        // Acá sí 0 y no null: una fila de este array existe sólo si tuvo al
-        // menos una prueba, así que el divisor nunca es cero y "0 %" significa
-        // de verdad que nadie aprobó.
-        porcentajeAprobacion: Math.round((f.aprobadas / f.pruebas) * 100),
-      }))
-      // Por nombre y no por cantidad, mismo criterio que el gráfico del
-      // Resumen: las filas no cambian de lugar entre dos cargas.
-      .sort((a, b) => a.moduloNombre.localeCompare(b.moduloNombre, 'es'));
+    return (
+      [...acc.values()]
+        .map((f) => ({
+          ...f,
+          // Acá sí 0 y no null: una fila de este array existe sólo si tuvo al
+          // menos una prueba, así que el divisor nunca es cero y "0 %" significa
+          // de verdad que nadie aprobó.
+          porcentajeAprobacion: Math.round((f.aprobadas / f.pruebas) * 100),
+        }))
+        // Por nombre y no por cantidad, mismo criterio que el gráfico del
+        // Resumen: las filas no cambian de lugar entre dos cargas.
+        .sort((a, b) => a.moduloNombre.localeCompare(b.moduloNombre, 'es'))
+    );
   }
 }
-
