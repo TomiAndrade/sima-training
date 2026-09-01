@@ -23,3 +23,12 @@ export const origenBadge = {
   AUTOMATICA: 'bg-indigo-50 text-indigo-600',
   MANUAL:     'bg-slate-100 text-slate-600',
 }
+
+// Tipo de Organizacion. INTERNA no es un tipo que este ABM deje crear (sólo
+// existe "Ingeniería SIMA"), pero el listado trae el catálogo completo y tiene
+// que poder mostrarla igual.
+export const tipoOrganizacionBadge = {
+  CLIENTE:        'bg-blue-50 text-blue-600',
+  SUBCONTRATISTA: 'bg-violet-50 text-violet-600',
+  INTERNA:        'bg-slate-100 text-slate-600',
+}

@@ -7,6 +7,7 @@ import BackofficeLayout from './pages/BackofficeLayout'
 import ErrorFallback from './components/ErrorFallback'
 import Dashboard from './pages/Dashboard'
 import Usuarios from './core/pages/Usuarios'
+import Organizaciones from './core/pages/Organizaciones'
 import Puestos from './core/pages/Puestos'
 import CentrosCosto from './core/pages/CentrosCosto'
 import Overview from './sima-check/pages/Overview'
@@ -20,6 +21,7 @@ import Estadisticas from './sima-check/pages/Estadisticas'
 const PAGES = {
   dashboard: Dashboard,
   usuarios: Usuarios,
+  organizaciones: Organizaciones,
   puestos: Puestos,
   'centros-costo': CentrosCosto,
   'sima-check-overview': Overview,
