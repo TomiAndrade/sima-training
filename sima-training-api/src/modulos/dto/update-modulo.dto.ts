@@ -30,4 +30,12 @@ export class UpdateModuloDto {
   @IsInt()
   @Min(1)
   vigenciaMeses?: number;
+
+  // ¿Se ofrece en el modo invitado de la tablet? Se edita por acá y no por una
+  // ruta propia porque es metadata del contenedor, igual que `activo`: no se
+  // congela con la versión y sacar un módulo de la demo tiene que ser inmediato,
+  // sin publicar nada.
+  @IsOptional()
+  @IsBoolean()
+  demoPublico?: boolean;
 }

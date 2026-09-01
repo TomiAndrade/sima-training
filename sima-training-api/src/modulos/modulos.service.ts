@@ -73,6 +73,10 @@ export class ModulosService {
         descripcion: true,
         activo: true,
         vigenciaMeses: true,
+        // El select es explícito, así que un campo nuevo del modelo NO aparece
+        // solo: sin esta línea la pantalla Módulos no podría mostrar ni editar
+        // el tilde de demo. (create/update sí lo pasan por spread del DTO.)
+        demoPublico: true,
       },
     });
     if (modulos.length === 0) return [];

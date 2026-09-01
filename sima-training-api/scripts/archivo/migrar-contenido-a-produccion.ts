@@ -1,3 +1,33 @@
+// ═══════════════════════════════════════════════════════════════════════
+// ARCHIVADO — NO RE-EJECUTAR.
+//
+// Migró el contenido de evaluación de SIMA CHECK (bases, niveles, imágenes,
+// preguntas y módulos con su versión ACTIVA) de la base local a producción,
+// escribiendo por HTTP contra la API ya deployada. Corrió una sola vez,
+// el 2026-08-31, y cumplió su función — producción ya tiene ese contenido.
+//
+// Por qué no se re-corre:
+//   - Se autenticaba con POST /auth/login usando MIGRACION_AUTH_USER /
+//     MIGRACION_AUTH_PASSWORD contra AUTH_USER/AUTH_PASSWORD del backend.
+//     Ese endpoint y esas variables YA NO EXISTEN (cleanup post-Auth0,
+//     Story 4) — el script no puede ni loguearse tal cual está.
+//   - Su idempotencia real dependía de scripts/.estado-migracion-produccion.json,
+//     un archivo LOCAL y gitignoreado que nunca viajó con el repo (no
+//     portable a otra máquina ni a otro checkout). Sin ese archivo en el
+//     lugar donde este script lo busca (relativo a su __dirname original,
+//     que ya no es éste), una re-corrida entraría directo por la capa 2
+//     (reconciliar() contra lo que ya hay en producción, matcheando por
+//     clave de contenido) en vez de por el fast-path. Esa capa está pensada
+//     como fallback para recuperar el mapeo, no como vía principal, y
+//     duplicaría contenido si dos preguntas locales llegaran a compartir
+//     una clave ambigua que `assertClavesUnicas` no atrapó en su momento.
+//
+// Se conserva tal cual corrió (no se toca ni se actualiza a la API actual)
+// porque ya cumplió su propósito — ver la memoria del proyecto sobre no
+// tocar scripts de producción ya verificados. Sirve como referencia de
+// cómo se hizo esa migración, no como algo para correr de nuevo.
+// ═══════════════════════════════════════════════════════════════════════
+
 // Migra el contenido de evaluación de SIMA CHECK de la base LOCAL a PRODUCCIÓN,
 // escribiendo por HTTP contra la API deployada.
 //
@@ -242,7 +272,7 @@ async function guardarEstado(estado: Estado) {
 // arranque y ABORTA si dos preguntas comparten clave.
 // ---------------------------------------------------------------------------
 
-const SEP = ''; // unit separator: no aparece en texto tipeado
+const SEP = ''; // unit separator: no aparece en texto tipeado
 
 interface DatosClave {
   texto: string;

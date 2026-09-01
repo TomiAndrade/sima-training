@@ -2,8 +2,6 @@ import { Global, Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
 import { JwtModule, JwtModuleOptions } from '@nestjs/jwt';
-import { AuthController } from './auth.controller';
-import { AuthService } from './auth.service';
 import { Auth0VerifierService } from './auth0-verifier.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
 
@@ -23,15 +21,18 @@ import { JwtAuthGuard } from './jwt-auth.guard';
       }),
     }),
   ],
-  controllers: [AuthController],
   providers: [
-    AuthService,
     Auth0VerifierService,
     JwtAuthGuard,
     // Guard global (Story 4): antes de esto, auth era 100% opt-in por ruta
     // (@UseGuards(JwtAuthGuard) puesto a mano en ~40 lugares). Con esto,
     // CUALQUIER ruta nueva queda cerrada por default — necesita @Public()
     // explícito para abrirse, no al revés. Ver public.decorator.ts.
+    //
+    // El JwtModule sigue acá aunque el backoffice ya no emita tokens propios
+    // (se fue POST /auth/login, cleanup post-Auth0): TabletService lo sigue
+    // usando para firmar los tokens `tipo: 'alumno'` de la app tablet, con
+    // el mismo JWT_SECRET.
     { provide: APP_GUARD, useClass: JwtAuthGuard },
   ],
   // Auth0VerifierService tiene que estar acá: @Global() sólo hace visibles

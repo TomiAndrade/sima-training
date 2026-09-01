@@ -4,28 +4,35 @@
 // servidos por la API (ver imagenUrl en preguntas.js).
 export const BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000'
 
-// Credenciales del backoffice (Sprint 1: login simple sin roles). El prototipo
-// todavía no tiene pantalla de login, así que el cliente se autentica solo con
-// las credenciales demo y cachea el token en memoria. Cuando exista la pantalla
-// de login real (post Sprint 1), esto se reemplaza por el token de la sesión.
-const AUTH_USER = import.meta.env.VITE_AUTH_USER ?? 'admin@sima.com'
-const AUTH_PASSWORD = import.meta.env.VITE_AUTH_PASSWORD ?? 'sima1234'
-
-let token = null
-
 // Auth0 (Story 4): App.jsx llama a esto una vez que useAuth0() está listo,
-// pasándole getAccessTokenSilently. Mientras no se llame (o si algún día se
-// saca el Auth0Provider), `obtenerToken` cae al login() demo de arriba — no
-// se borra ese código a propósito, ver CLAUDE.md de este sprint.
+// pasándole getAccessTokenSilently. Es la única vía de autenticación del
+// backoffice — sin token getter registrado, cualquier request autenticado
+// falla (no debería poder pasar: App.jsx no renderiza nada hasta que Auth0
+// resuelve la sesión).
 let getAuth0Token = null
 export function setAuth0TokenGetter(fn) {
   getAuth0Token = fn
 }
 
+// App.jsx registra acá un loginWithRedirect() (mismo patrón que el token
+// getter de arriba). Se dispara cuando la sesión de Auth0 ya no se puede
+// renovar sola: getAccessTokenSilently() tira (`login_required` — el
+// refresh token venció) en vez de devolver un token nuevo, y eso pasaba sin
+// que nadie lo atajara: la pantalla que disparó el request quedaba con una
+// promesa rechazada y ningún camino de vuelta al login.
+let onAuthError = null
+export function setAuthErrorHandler(fn) {
+  onAuthError = fn
+}
+
 async function obtenerToken() {
-  if (getAuth0Token) return getAuth0Token()
-  if (!token) await login()
-  return token
+  if (!getAuth0Token) throw new Error('Auth0 todavía no está listo')
+  try {
+    return await getAuth0Token()
+  } catch (err) {
+    onAuthError?.()
+    throw err
+  }
 }
 
 async function parse(res) {
@@ -38,20 +45,9 @@ async function parse(res) {
   return body
 }
 
-async function login() {
-  const res = await fetch(`${BASE_URL}/auth/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ usuario: AUTH_USER, password: AUTH_PASSWORD }),
-  })
-  const body = await parse(res)
-  token = body.access_token
-  return token
-}
-
-// Llamada genérica. `auth: true` adjunta el Bearer (y reintenta una vez si el
-// token expiró o falta). Con Auth0 activo, el reintento no pisa nada a mano:
-// getAccessTokenSilently() ya maneja su propio cacheo/refresh.
+// Llamada genérica. `auth: true` adjunta el Bearer y reintenta una vez ante
+// 401: getAccessTokenSilently() ya maneja su propio cacheo/refresh, así que
+// el segundo intento le da la chance de traer un token renovado.
 async function request(method, path, { body, auth = false } = {}) {
   const doFetch = async () => {
     const headers = {}
@@ -68,8 +64,12 @@ async function request(method, path, { body, auth = false } = {}) {
 
   let res = await doFetch()
   if (auth && res.status === 401) {
-    token = null
     res = await doFetch()
+    // Todavía 401 con un token que Auth0 dio por bueno: no es un token
+    // vencido que un reintento arregla, es la sesión completa. Mismo
+    // disparador que el catch de obtenerToken(), para el caso borde donde
+    // getAccessTokenSilently() no tira pero el backend igual rechaza.
+    if (res.status === 401) onAuthError?.()
   }
   return parse(res)
 }
@@ -89,8 +89,8 @@ async function upload(path, file) {
 
   let res = await doFetch()
   if (res.status === 401) {
-    token = null
     res = await doFetch()
+    if (res.status === 401) onAuthError?.()
   }
   return parse(res)
 }

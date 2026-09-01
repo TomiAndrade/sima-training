@@ -2,14 +2,14 @@
 
 Backend de la plataforma **SIMA Training** — NestJS + PostgreSQL + Prisma.
 
-Expone la API que consumen los frontends existentes (`sima-training-backoffice` y, a futuro, `sima-check-app`). Sprint 1: ABM de **Usuarios** y **Organizaciones** sobre datos reales, autenticación básica JWT y esqueleto de importación de Excel. Sprint 2: banco de **Preguntas** y **Módulos versionados** de SIMA CHECK. Sprint 3: **versionado real de módulos** (`ModuloVersion` con numeración pública `AÑO.MAYOR.MENOR`, borrador/activar/archivar, unassign duro de preguntas). Sprint 4: **imágenes en el enunciado y en las opciones** de una pregunta, servidas desde `/uploads`. Sprint 5: **modelo de vinculación** — `Usuario` queda como identidad pura y la pertenencia (organización, rol, pares puesto+centro de costo) se mueve a `Vinculacion` / `VinculacionPuestoCentro`; la clasificación SIMA/CLIENTE/SUBCONTRATISTA/INVITADO se elimina como concepto. Además: **asignaciones automáticas** — el par (puesto, centro de costo) de una persona obliga a rendir un módulo (`ReglaAsignacion`), y `AsignacionesService.recalcular()` deriva las `Asignacion` (`AUTOMATICA`/`MANUAL`) vigentes de cada usuario. Sprint 6: **clasificación del banco** — cada `Pregunta` apunta a una `BaseConocimiento` (el tema) y a un `NivelBase` de esa base (la dificultad, con escala propia por base); reemplaza a la vieja `Etiqueta`, que se elimina. Sprint 7: **composición de módulos por criterio** — una `ModuloVersion` puede declarar *qué evalúa* (`ModuloVersionCriterio`) y el backend materializa el pool de preguntas, conviviendo con la elección manual de siempre. Sprint 8: **rendición de evaluaciones** — `Sesion` (un intento, contra una versión concreta) + `Respuesta` (una por pregunta contestada), con la corrección y el umbral persistidos; con eso `AsignacionesService.modulosAprobados()` deja de ser un hueco y `Asignacion.moduloVersionId` se completa al aprobar.
+Expone la API que consumen `sima-training-backoffice` (este repo) y `sima-check-app` (la app tablet, en su propio repo desde el 2026-08-31, ver [`../CLAUDE.md`](../CLAUDE.md)). Sprint 1: ABM de **Usuarios** y **Organizaciones** sobre datos reales, autenticación básica JWT y esqueleto de importación de Excel. Sprint 2: banco de **Preguntas** y **Módulos versionados** de SIMA CHECK. Sprint 3: **versionado real de módulos** (`ModuloVersion` con numeración pública `AÑO.MAYOR.MENOR`, borrador/activar/archivar, unassign duro de preguntas). Sprint 4: **imágenes en el enunciado y en las opciones** de una pregunta, servidas desde `/uploads`. Sprint 5: **modelo de vinculación** — `Usuario` queda como identidad pura y la pertenencia (organización, rol, pares puesto+centro de costo) se mueve a `Vinculacion` / `VinculacionPuestoCentro`; la clasificación SIMA/CLIENTE/SUBCONTRATISTA/INVITADO se elimina como concepto. Además: **asignaciones automáticas** — el par (puesto, centro de costo) de una persona obliga a rendir un módulo (`ReglaAsignacion`), y `AsignacionesService.recalcular()` deriva las `Asignacion` (`AUTOMATICA`/`MANUAL`) vigentes de cada usuario. Sprint 6: **clasificación del banco** — cada `Pregunta` apunta a una `BaseConocimiento` (el tema) y a un `NivelBase` de esa base (la dificultad, con escala propia por base); reemplaza a la vieja `Etiqueta`, que se elimina. Sprint 7: **composición de módulos por criterio** — una `ModuloVersion` puede declarar *qué evalúa* (`ModuloVersionCriterio`) y el backend materializa el pool de preguntas, conviviendo con la elección manual de siempre. Sprint 8: **rendición de evaluaciones** — `Sesion` (un intento, contra una versión concreta) + `Respuesta` (una por pregunta contestada), con la corrección y el umbral persistidos; con eso `AsignacionesService.modulosAprobados()` deja de ser un hueco y `Asignacion.moduloVersionId` se completa al aprobar.
 
 ## Stack
 
 - **NestJS 11** + TypeScript (monolito modular, organizado por dominio)
 - **PostgreSQL 16** (local vía Docker Compose)
 - **Prisma 6** (ORM + migraciones versionadas)
-- **JWT** para autenticación básica (sin roles todavía)
+- **Auth0** (RS256) para el login del backoffice, con 4 roles (ADMINISTRADOR/COORDINADOR/AUDITOR/ALUMNO) vía `Vinculacion` — **JWT** (HS256) propio para la app tablet
 
 ## Requisitos
 
@@ -84,9 +84,13 @@ Ver [`.env.example`](.env.example). Las principales:
 |---|---|
 | `PORT` | Puerto HTTP (default 3000) |
 | `DATABASE_URL` | Conexión a PostgreSQL |
-| `JWT_SECRET` / `JWT_EXPIRES_IN` | Firma y vigencia del token |
-| `AUTH_USER` / `AUTH_PASSWORD` | Credenciales del backoffice (Sprint 1, login simple sin roles) |
+| `JWT_SECRET` / `JWT_EXPIRES_IN` | Firma y vigencia del token de la app tablet (`tipo: 'alumno'`) — el login del backoffice es Auth0, ver abajo |
+| `AUTH0_DOMAIN` / `AUTH0_AUDIENCE` | Login del backoffice (Story 4): `JwtAuthGuard` valida RS256 contra el JWKS de este tenant. Sin estas dos, el módulo no arranca |
 | `CORS_ORIGINS` | Orígenes permitidos (frontends) |
+| `STORAGE_DRIVER` | `local` (disco, sólo dev) o `r2` (Cloudflare R2, obligatorio en cualquier deploy — el contenedor es efímero). Default `local` |
+| `UPLOADS_DIR` | Sólo con `STORAGE_DRIVER=local`. Carpeta servida bajo `/uploads` |
+| `R2_ACCOUNT_ID` / `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` / `R2_BUCKET` | Sólo con `STORAGE_DRIVER=r2` |
+| `SENTRY_DSN` | Reporte de errores 5xx. Vacío = Sentry desactivado |
 | `TABLET_LOGIN_SIN_PIN` | Login de la tablet sin PIN (default `'true'`; `501` en `'false'`) — ver [`docs/autenticacion-tablet.md`](docs/autenticacion-tablet.md) |
 | `TABLET_JWT_EXPIRES_IN` | Vigencia del token de la tablet (default `2h`, corta a propósito: es un atril compartido, no el dispositivo de una sola persona) |
 
@@ -102,6 +106,7 @@ Ver [`.env.example`](.env.example). Las principales:
 | `npx prisma db seed` | Carga los datos base (agregar `SEED_SIMA_CHECK=true` para el contenido real de SIMA CHECK) |
 | `npx prisma studio` | Explorador visual de la base |
 | `npx ts-node scripts/sembrar-rendiciones.ts` | **Sólo dev.** Siembra rendiciones simuladas — ver abajo |
+| `npx ts-node scripts/crear-admin.ts` | Da de alta un ADMINISTRADOR (lo único que el backoffice no puede hacer) — ver abajo |
 
 ### Rendiciones simuladas (`scripts/sembrar-rendiciones.ts`)
 
@@ -131,13 +136,32 @@ Es idempotente (`claveIdempotencia` derivada del par asignación-intento): corre
 
 **No confundir con `scripts/demo/`**, que es otra cosa y está marcado como deuda en [`../docs/pendientes.md`](../docs/pendientes.md).
 
+### Dar de alta un administrador (`scripts/crear-admin.ts`)
+
+Es lo único del ABM de usuarios que el backoffice **no** puede hacer: su alta manual está fijada a `rol: ALUMNO` y no hay pantalla para crear cuentas de sistema. Y `POST /usuarios` está detrás del guard global de Auth0, así que un script HTTP necesitaría un token de un admin que ya exista — por eso éste escribe contra la base (reusando `UsuariosService.create()` con un application context de Nest, no con `INSERT` crudos).
+
+```powershell
+# dry-run (el default: no escribe nada, e imprime a qué base apunta)
+npx ts-node scripts/crear-admin.ts --nombre Juan --apellido Perez --dni 30111222 --email juan@ejemplo.com
+
+# escribir de verdad
+npx ts-node scripts/crear-admin.ts --nombre Juan --apellido Perez --dni 30111222 --email juan@ejemplo.com --ejecutar
+
+# contra producción: la DATABASE_URL de la línea del comando le gana a la del .env
+$env:DATABASE_URL='postgresql://…?sslmode=require'; npx ts-node scripts/crear-admin.ts … --ejecutar
+```
+
+Los datos de la persona van **por CLI y no hardcodeados**: nombre, apellido y DNI son PII y el script está versionado. `--organizacion-id <n>` sólo hace falta si hay más de una organización INTERNA (la matriz rol↔organización no permite ADMINISTRADOR en otro tipo); con una sola, la resuelve.
+
+⚠️ **Crea sólo la fila `Usuario` + `Vinculacion`.** Para que la persona entre al backoffice hace falta además **una cuenta en Auth0 con el mismo email**: el guard nunca crea usuarios — busca por `authProviderId` y, si no encuentra, linkea por email en el primer login. Y el script **aborta si ese email ya lo tiene otro usuario vivo**: `email` no es único en el schema, pero el guard rechaza el login cuando matchea más de uno, así que el duplicado no rompe donde se crea sino en la cuenta que ya andaba.
+
 ## Endpoints
 
 | Método | Ruta | Auth | Descripción |
 |---|---|---|---|
 | `GET` | `/health` | — | Estado del servicio |
 | `GET` | `/uploads/*` | — | Archivos subidos (imágenes de preguntas). Lectura pública |
-| `POST` | `/auth/login` | — | Login, devuelve `access_token` |
+| `GET` | `/resumen/sima-check` | — | Agregados de la pantalla Resumen: `habilitacion` (conteo de personas por estado de veredicto), `aprobacion` (`porcentaje` es `null`, no `0`, si nadie rindió todavía), `porModulo` (una barra por módulo, colapsando sus versiones) y `recientes` (las 7 últimas rendiciones) |
 | `GET` | `/usuarios` | — | Lista paginada (`?page=`, `?limit=`, default 1/50), filtros `?organizacionId=` · `?rol=` · `?puestoId=` · `?centroCostoId=`, orden `created_at` desc. Responde `{ data, total, page, limit }`; cada usuario trae `vinculacion: { rol, organizacion, parPrincipal, pares }` (ver más abajo) |
 | `POST` | `/usuarios` | JWT | Alta con su vinculación anidada: `{ nombre, apellido, dni, email?, datos?, vinculacion: { organizacionId, rol, pares?: [{ puestoId, centroCostoId }] } }`. 409 si el DNI ya está en uso (revive si pertenece a un usuario dado de baja); 400 si el rol no está permitido para el tipo de esa organización |
 | `GET` | `/usuarios/:id` | — | Detalle (misma forma que el listado) |
@@ -205,6 +229,8 @@ Es idempotente (`claveIdempotencia` derivada del par asignación-intento): corre
 
 Las **lecturas** (`GET`) son abiertas y las **escrituras** requieren `Authorization: Bearer <token>` — **con una sola excepción: `GET /sesiones/:id`**, que lleva guard porque es el único GET que devuelve la respuesta correcta de cada pregunta (ver [`../docs/decisiones/sesiones.md`](../docs/decisiones/sesiones.md)).
 
+El token de las rutas marcadas `JWT` es un **access token RS256 de Auth0**, validado contra su JWKS (`Auth0VerifierService` + `JwtAuthGuard`, Story 4) — no hay endpoint propio de login para el backoffice. El de las rutas `JWT alumno` es otro mundo aparte: HS256, firmado por este mismo backend (`TabletService.login`) con `JWT_SECRET`, y sólo lo acepta `TabletAuthGuard`. Detalle en [`../docs/decisiones/infraestructura.md`](../docs/decisiones/infraestructura.md).
+
 ### Forma de un usuario
 
 El rol y la organización van **anidados en la vinculación** (dejaron de ser campos planos de `Usuario`), y el par principal se expone aparte para que el listado tenga una sola fila puesto/centro que mostrar:
@@ -229,7 +255,9 @@ El rol y la organización van **anidados en la vinculación** (dejaron de ser ca
 
 ```
 src/
-├── auth/            Login JWT + guard (sin roles, Sprint 1)
+├── auth/            Guard global (JwtAuthGuard, Story 4): valida RS256 de
+│                    Auth0 contra su JWKS. Sin endpoint propio de login —
+│                    el backoffice entra por Auth0 Universal Login
 ├── usuarios/        ABM de Usuario (identidad pura) + su Vinculacion y sus pares,
 │                    anidados en el mismo request. matriz-rol-organizacion.ts:
 │                    la matriz tipo-de-organización ↔ rol, compartida con el import.
@@ -296,11 +324,13 @@ prisma/
 └── migrations/      Migraciones versionadas
 ```
 
-## Despliegue (pendiente)
+## Despliegue
 
-`Dockerfile` y `render.yaml` están preparados pero **no activos**. Para desplegar a la nube hay que crear la cuenta en Render/Railway y conectar el repo — ver comentarios en [`render.yaml`](render.yaml). El CI (`.github/workflows/ci-sima-training.yml`) corre lint + build + test + un smoke test de `start:prod` (levanta el server contra un Postgres real del job y verifica `/health`), sin paso de deploy todavía.
+**Activo en Render** (plan Starter, Docker, región Ohio). El deploy es manual desde el dashboard, no vía Blueprint — `render.yaml` queda commiteado como checklist fiel de qué tipear en cada campo, no se aplica solo. Runbook completo en [`../docs/deploy-render.md`](../docs/deploy-render.md).
 
-**Storage al deployar**: va object storage (S3 o Cloudflare R2), no disco persistente — el plan free de Render no ofrece discos, y el contenedor es efímero (cada redeploy borraría `UPLOADS_DIR` con `LocalDiskStorage`). Falta escribir la implementación nueva de `StorageService` (ver `docs/pendientes.md`); el storage está detrás de una interfaz chica así que no toca schema, controllers ni frontend.
+**Storage: Cloudflare R2 en producción**, no disco — el plan de Render no ofrece disco persistente y el contenedor es efímero (`STORAGE_DRIVER=r2` fijo en `render.yaml`). `R2Storage` es la implementación real (`src/storage/r2.storage.ts`, vía el SDK de S3), detrás de la misma interfaz chica que `LocalDiskStorage` (la que se usa en desarrollo) — ver [`../docs/decisiones/infraestructura.md`](../docs/decisiones/infraestructura.md#storage-de-archivos).
+
+**No hay CI todavía.** No existe ningún workflow en `.github/workflows/` — verificar y correr lint/build/test es manual antes de cada deploy. Anotado como pendiente real en [`../docs/pendientes.md`](../docs/pendientes.md).
 
 ## Decisiones de diseño — [`../docs/decisiones/`](../docs/decisiones/)
 

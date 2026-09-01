@@ -157,8 +157,9 @@ model Pregunta {
   // escrito a mano en la migración, que Prisma no conoce.
   nivel NivelBase?        @relation(fields: [nivelId, baseConocimientoId], references: [id, baseConocimientoId], onDelete: Restrict)
 
-  versiones  ModuloVersionPregunta[]
-  respuestas Respuesta[]
+  versiones          ModuloVersionPregunta[]
+  respuestas         Respuesta[]
+  respuestasInvitado RespuestaInvitado[]
 
   // Trazabilidad
   createdAt DateTime @default(now()) @map("created_at")
@@ -262,6 +263,16 @@ model Modulo {
   // certificado. Nullable: módulos sin cadencia de recertificación definida.
   vigenciaMeses Int?    @map("vigencia_meses")
 
+  // ¿Se ofrece en el modo invitado de la tablet? Default false, y eso es lo
+  // importante: un módulo nuevo NO se expone solo. Quién entra en la demo es una
+  // decisión de contenido —a un visitante externo no se le muestra el material
+  // interno de un cliente—, así que se tilda explícitamente desde el backoffice.
+  //
+  // Vive en Modulo y no en ModuloVersion porque no es cómo se rinde sino QUÉ se
+  // muestra: la demo siempre sirve la versión ACTIVO vigente, igual que la
+  // rendición real. No se congela con la versión.
+  demoPublico Boolean @default(false) @map("demo_publico")
+
   versiones        ModuloVersion[]
   reglasAsignacion ReglaAsignacion[]
   asignaciones     Asignacion[]
@@ -312,11 +323,12 @@ model ModuloVersion {
   maxIntentos                Int? @map("max_intentos")
   esperaEntreIntentosMinutos Int? @map("espera_entre_intentos_minutos")
 
-  modulo       Modulo                  @relation(fields: [moduloId], references: [id])
-  preguntas    ModuloVersionPregunta[]
-  criterios    ModuloVersionCriterio[]
-  asignaciones Asignacion[]
-  sesiones     Sesion[]
+  modulo           Modulo                  @relation(fields: [moduloId], references: [id])
+  preguntas        ModuloVersionPregunta[]
+  criterios        ModuloVersionCriterio[]
+  asignaciones     Asignacion[]
+  sesiones         Sesion[]
+  sesionesInvitado SesionInvitado[]
 
   // Trazabilidad
   createdAt DateTime @default(now()) @map("created_at")
@@ -731,6 +743,97 @@ model Respuesta {
   // Para "qué preguntas se fallan más" y para el join de estadísticas por base.
   @@index([preguntaId])
   @@map("respuestas")
+}
+
+// Rendición del MODO INVITADO: alguien que no está en el sistema probando la app.
+//
+// Es una TABLA APARTE de Sesion, y ésa es la decisión central del modo invitado.
+// La alternativa evaluada era un flag `esDemo` en Sesion, y se descartó: los
+// agregadores reales (resumen/, estadisticas/) hacen groupBy directo sobre
+// Respuesta, así que cada query existente tendría que acordarse de excluir los
+// invitados. Un olvido ahí no rompe nada visible — sólo hace que un número siga
+// mostrándose, mentiroso. Con tablas separadas no hay filtro que olvidar: la
+// contaminación es imposible por construcción, no por disciplina.
+//
+// El costo aceptado es que el reporte de invitados es código propio y no reusa
+// EstadisticasService. Es barato: no tiene puesto, centro de costo, veredicto de
+// habilitación ni vencimientos — nada de la nómina aplica acá.
+//
+// INMUTABLE igual que Sesion (sin updatedAt, sin deletedAt) y por el mismo
+// motivo: es un hecho histórico.
+model SesionInvitado {
+  id String @id @default(uuid())
+
+  // El nombre que escribió la persona. Es una ETIQUETA, no una identidad: nadie
+  // lo verifica, dos "Juan" distintos son indistinguibles y cualquiera puede
+  // escribir cualquier cosa. Alcanza para "cuánta gente probó y cómo le fue",
+  // que es todo lo que se le pide; NO se lo puede tratar como un registro de
+  // personas ni cruzar con Usuario. Por eso es un String suelto y no una FK:
+  // modelarlo como Usuario obligaría a inventarle un DNI (único y NOT NULL) y lo
+  // metería en el listado de Usuarios, en el resumen de habilitación y en las
+  // asignaciones — todo lo que este modo justamente no debe tocar.
+  nombre String @db.VarChar(120)
+
+  // Contra qué versión se rindió. NOT NULL igual que en Sesion: un score sólo
+  // significa algo contra el set de preguntas que se sirvió.
+  moduloVersionId String @map("modulo_version_id")
+
+  iniciadaEn   DateTime @default(now()) @map("iniciada_en")
+  finalizadaEn DateTime @map("finalizada_en")
+
+  // Mismo resultado que Sesion y calculado por el MISMO código puro
+  // (sesiones/corregir.ts). El umbral se congela acá por el mismo motivo de
+  // siempre: subirlo mañana no puede reescribir lo que decía un resultado ya
+  // mostrado.
+  correctas        Int
+  total            Int
+  porcentaje       Int
+  umbralAprobacion Int     @map("umbral_aprobacion")
+  aprobada         Boolean
+
+  // SIN claveIdempotencia, a diferencia de Sesion. Esa columna existe para el
+  // modo offline, que en la demo no aplica: el invitado rinde con la tablet
+  // conectada y ahí mismo. Un doble POST por red inestable duplicaría una fila de
+  // un reporte de demo, que es un costo mucho menor que arrastrar el mecanismo
+  // entero (y su chequeo de "la clave es de otra persona", que acá no se puede
+  // hacer porque no hay persona).
+
+  moduloVersion ModuloVersion       @relation(fields: [moduloVersionId], references: [id])
+  respuestas    RespuestaInvitado[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([moduloVersionId])
+  // El reporte ordena por fecha desc ("las últimas pruebas").
+  @@index([createdAt])
+  @@map("sesiones_invitado")
+}
+
+// Una fila por pregunta contestada en una SesionInvitado. Espejo de Respuesta,
+// separada por el mismo motivo que su madre: si compartiera tabla con Respuesta,
+// el groupBy de estadisticas/ contaría las de la demo.
+model RespuestaInvitado {
+  id String @id @default(uuid())
+
+  sesionId   String @map("sesion_id")
+  preguntaId String @map("pregunta_id")
+
+  respuestaDada String? @map("respuesta_dada")
+  correcta      Boolean
+
+  // onDelete Cascade y no el Restrict implícito de Respuesta: una rendición de
+  // demo no es un certificado, y si algún día hace falta purgar la demo (limpiar
+  // datos de prueba antes de una feria, o borrar el nombre de alguien que lo
+  // pide) tiene que poder borrarse sin desarmarla fila por fila. La relación con
+  // Pregunta sí es Restrict: una pregunta del banco no se borra nunca.
+  sesion   SesionInvitado @relation(fields: [sesionId], references: [id], onDelete: Cascade)
+  pregunta Pregunta       @relation(fields: [preguntaId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([sesionId, preguntaId])
+  @@index([preguntaId])
+  @@map("respuestas_invitado")
 }
 
 // Acción registrada en un AuditLog: alta, edición o baja de la fila auditada.

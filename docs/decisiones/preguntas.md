@@ -41,7 +41,7 @@ Para que los dos ejes no queden inconsistentes, `ModulosService.setPreguntaActiv
 
 `src/import/similitud.ts` normaliza el texto en español (sin acentos ni puntuación) y compara por **coeficiente de Dice sobre trigramas de caracteres**, contra el banco completo y contra las filas del mismo archivo.
 
-Se eligió sobre la extensión `pg_trgm` de Postgres —que era el TODO original— porque el proyecto es local-first sin deploy cloud activo, y atar la portabilidad a que el Postgres administrado permita `CREATE EXTENSION` no se justificaba a la escala del banco. Queda encapsulado en funciones puras, reemplazable por un índice en base el día que haga falta más escala.
+Se eligió sobre la extensión `pg_trgm` de Postgres —que era el TODO original— porque el proyecto arrancó local-first, y atar la portabilidad a que el Postgres administrado permita `CREATE EXTENSION` no se justificaba a la escala del banco. Sigue siendo la decisión vigente con el deploy ya activo en Render ([infraestructura.md](./infraestructura.md#deploy-activo-en-render--sin-ci)): la escala del banco no cambió. Queda encapsulado en funciones puras, reemplazable por un índice en base el día que haga falta más escala.
 
 Sólo corre en el **preview del import**: el alta directa (`POST /preguntas`) no la ejecuta.
 

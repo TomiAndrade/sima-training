@@ -211,6 +211,13 @@ const MODULOS = [
     preguntasPorExamen: 15,
     umbralAprobacion: 70,
     vigenciaMeses: 12,
+    // Uno de los dos módulos del MODO INVITADO (el otro es Reglas de Oro). Los
+    // eligió el usuario, y el criterio es qué contenido se le puede mostrar a
+    // alguien de afuera de la empresa: éste es la inducción general de SIMA y
+    // Reglas de Oro es normativa pública (Res. SRT N° 770/13). Los otros tres
+    // quedan fuera a propósito — Phoenix es el programa de una operadora
+    // concreta, y los dos niveles superiores son material interno.
+    demoPublico: true,
   },
   {
     slug: 'intermedio',
@@ -244,6 +251,8 @@ const MODULOS = [
     preguntasPorExamen: 12,
     umbralAprobacion: 70,
     vigenciaMeses: 12,
+    // El segundo módulo del modo invitado — ver el comentario en SIMA Básico.
+    demoPublico: true,
   },
   {
     slug: 'phoenix',

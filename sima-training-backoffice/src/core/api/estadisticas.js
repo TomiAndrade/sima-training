@@ -10,6 +10,12 @@ export const estadisticasApi = {
   // cuál de las opciones era la buena, sin devolver el string). Lo que sí la
   // expone es el detalle de un intento — ver sesiones.js.
   simaCheck: () => api.get('/estadisticas/sima-check'),
+
+  // Cómo le fue al MODO INVITADO: cuánta gente probó la app sin estar en el
+  // sistema y con qué resultado. Endpoint aparte del de arriba y no un bloque
+  // más de su payload — son dos poblaciones distintas, y un payload único
+  // invitaría a sumar los dos totales creyendo que hablan de la misma gente.
+  invitados: () => api.get('/estadisticas/invitados'),
 }
 
 // Cuántas respuestas necesita una pregunta para que su porcentaje signifique

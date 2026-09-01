@@ -106,7 +106,7 @@ Antes esas dos columnas iban al jsonb `datos` (el que después se eliminó, ver 
 
 ## Frontend: el alta está fijada a ALUMNO
 
-Decisión de producto, no una limitación técnica: la abstracción de roles del sistema todavía no está definida, y el único admin previsto entra con `AUTH_USER`/`AUTH_PASSWORD` del `.env` en vez de ser un `Usuario`. El backend sigue soportando los cuatro roles y la matriz sin cambios.
+Decisión de producto, no una limitación técnica: la abstracción de roles del sistema todavía no está definida. Los administradores sí son `Usuario` (Auth0 los linkea por email, ver [infraestructura.md](./infraestructura.md#login-del-backoffice-auth0-story-4-no-credenciales-propias)), pero no hay ninguna pantalla para crear uno nuevo — el backend sigue soportando los cuatro roles y la matriz sin cambios, falta el flujo de producto.
 
 El formulario no tiene `<select>` de rol: al crear manda siempre `rol: 'ALUMNO'`, y **al editar no manda `rol` en absoluto**, así que el rol real de un usuario legacy con otro rol nunca se pisa en silencio — se muestra como texto de solo lectura.
 

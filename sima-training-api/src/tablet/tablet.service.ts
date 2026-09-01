@@ -7,11 +7,10 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService, JwtSignOptions } from '@nestjs/jwt';
-import { TipoPregunta } from '@prisma/client';
 import { AsignacionesService } from '../asignaciones/asignaciones.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { SesionesService } from '../sesiones/sesiones.service';
-import { resolverUrlImagen } from '../storage/url-imagen';
+import { serializarPregunta } from './serializar-pregunta';
 import { LoginTabletDto } from './dto/login-tablet.dto';
 import { RegistrarSesionTabletDto } from './dto/registrar-sesion-tablet.dto';
 import {
@@ -370,38 +369,4 @@ export class TabletService {
       ahora: new Date(),
     });
   }
-}
-
-// Traduce una Pregunta del banco a lo que se manda a la tablet. CRÍTICO:
-// `respuestaCorrecta` no entra por diseño (ver el select de arriba, que ni
-// siquiera la trae) — todo lo que devuelve esta función se ve abriendo las
-// devtools del examen.
-function serializarPregunta(pregunta: {
-  id: string;
-  texto: string;
-  tipo: TipoPregunta;
-  imagen: string | null;
-  opciones: unknown;
-}) {
-  return {
-    id: pregunta.id,
-    texto: pregunta.texto,
-    tipo: pregunta.tipo,
-    imagen: pregunta.imagen
-      ? { clave: pregunta.imagen, url: resolverUrlImagen(pregunta.imagen) }
-      : null,
-    opciones: serializarOpciones(pregunta.tipo, pregunta.opciones),
-  };
-}
-
-// OPCION_MULTIPLE / VERDADERO_FALSO: el jsonb tal cual (array de strings).
-// OPCIONES_IMAGEN: cada string del jsonb es una CLAVE de storage — se traduce
-// a { clave, url } (la app muestra `url` y manda `clave` de vuelta como
-// respuesta; corregir.ts compara esa clave cruda, no la URL armada).
-function serializarOpciones(tipo: TipoPregunta, opciones: unknown) {
-  const lista = Array.isArray(opciones) ? (opciones as string[]) : [];
-  if (tipo === 'OPCIONES_IMAGEN') {
-    return lista.map((clave) => ({ clave, url: resolverUrlImagen(clave) }));
-  }
-  return lista;
 }
