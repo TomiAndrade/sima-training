@@ -78,6 +78,59 @@ La `url` es **relativa** (`UPLOADS_PREFIX + clave`, sin ningún `BASE_URL`) porq
 
 ---
 
+## El modo invitado
+
+Alguien que **no está en el sistema** prueba la app dando sólo su nombre. El caso real es una tablet en la oficina y alguien que pasa y quiere ver de qué se trata; el mismo dispositivo tiene que seguir sirviendo para que una persona de la nómina rinda de verdad.
+
+### Tablas propias, no un flag `esDemo` en `Sesion`
+
+Es la decisión central del modo, y la que ordena todas las demás. Las rendiciones de demo van a `SesionInvitado`/`RespuestaInvitado`, espejo de `Sesion`/`Respuesta` pero con un `nombre` en vez de un `usuarioId`.
+
+La alternativa evaluada era una columna discriminadora en `Sesion` y filtrarla en los reportes. Se descartó porque `resumen/` y `estadisticas/` hacen `groupBy` **directo sobre `Respuesta`**: cada query existente —y cada una futura— tendría que acordarse de excluir a los invitados. Ese olvido no falla ruidosamente; deja el número en pantalla, mentiroso. Con las tablas separadas la contaminación es imposible **por construcción y no por disciplina**, que es el mismo criterio con el que el `select` del examen no trae `respuestaCorrecta` en vez de descartarla al serializar.
+
+El costo aceptado: el reporte de invitados (`GET /estadisticas/invitados`) es código propio y no reusa `EstadisticasService`. Sale barato porque un invitado no tiene puesto, ni centro de costo, ni veredicto de habilitación, ni vencimientos — o sea, casi nada de lo que ese service calcula.
+
+### El nombre es una etiqueta, no una identidad
+
+`SesionInvitado.nombre` es un `String` suelto, sin FK. Modelarlo como `Usuario` obligaría a inventarle un DNI (único y `NOT NULL`) y lo metería en el listado de Usuarios, en el resumen de habilitación y en el motor de asignaciones — todo lo que este modo justamente no debe tocar. `INVITADO` sigue **fuera** del enum de roles, como estaba anotado.
+
+La consecuencia hay que asumirla y decirla en pantalla: nadie verifica ese nombre, así que dos personas que se llaman igual cuentan como una y la misma persona escribiéndose distinto cuenta como dos. El reporte lo presenta como "nombres distintos" y aclara que es una aproximación — nunca como un padrón de visitantes.
+
+### Un tercer tipo de token, con su propio guard
+
+`{ tipo: 'invitado', nombre }`, TTL de 30 minutos. La diferencia estructural con los otros dos (`tipo: 'alumno'` y el `type: 'backoffice'` de Auth0) es que **no tiene `sub`**: no hay usuario al que apunte, así que no existe id que poner en una query de pendientes ni en una `Sesion` real.
+
+Es un `InvitadoAuthGuard` propio y no un `TabletAuthGuard` con el chequeo de `sub` relajado. Compartido, cada endpoint de alumno tendría que acordarse de rechazar a los invitados; separados, una ruta no puede aceptar el token equivocado por omisión. Los specs fijan el cruce en los dos sentidos: un token de alumno es criptográficamente válido (mismo secreto) y aun así da 401 en `/tablet/invitado/*`.
+
+El **nombre viaja firmado adentro del token**, no en el body de cada request — mismo principio que el `usuarioId` del alumno: quien rinde no elige a nombre de quién queda registrado. Por eso el nombre se pide **antes** de entrar y no después de rendir, lo que además deja el flujo del invitado idéntico al del alumno (ingreso → lista → examen → resultado) en vez de meter una pantalla en el medio.
+
+### `demoPublico` se valida al servir Y al registrar
+
+`Modulo.demoPublico` (default `false`) decide qué se ofrece en la demo: se tilda desde el backoffice y un módulo nuevo nunca se expone solo. Sin el chequeo, un token de invitado serviría para pedir el examen de **cualquier** módulo cambiando el id en la URL — el modo sería una puerta abierta al banco entero. El examen de un módulo que existe pero no es de demo responde **404 y no 403**: para un invitado ese módulo directamente no existe, y un 403 le confirmaría qué ids son válidos.
+
+Que se valide **también al registrar** es una diferencia deliberada con el flujo real, donde el tope de reintentos se aplica sólo al servir. Esa asimetría existe por el modo offline (una sesión que se sincroniza tres días tarde no puede caerse por una ventana que ya venció), y en la demo no hay offline: se rinde conectado y en el momento. Sin el chequeo, un token de invitado podría sembrar filas contra cualquier versión del banco.
+
+### Lo que el modo NO hace
+
+Ninguna de estas tres es un pendiente:
+
+- **No toca `Asignacion`.** Un invitado no tiene obligaciones, así que aprobar no marca nada como cumplido.
+- **No aplica el tope de reintentos.** Se cuenta por persona, y acá no hay persona: contar intentos "de Juan" contra un nombre sin verificar no significaría nada. Un invitado rinde las veces que quiera, y la app le ofrece "volver a rendir" aunque haya aprobado — que es exactamente lo que se espera de alguien mirando la app, y lo contrario de la regla del flujo real.
+- **No deduplica por `claveIdempotencia`.** Es el mecanismo del modo offline. Un doble POST por red inestable deja una fila de más en un reporte de demo, que es mucho más barato que arrastrar el mecanismo entero — incluido su chequeo de "la clave es de otra persona", que acá ni siquiera se puede hacer.
+
+### La confusión es el riesgo, no el acceso
+
+Lo que puede salir mal no es que un desconocido vea las preguntas: es que **alguien del sistema entre por la demo, rinda una evaluación entera y crea que quedó registrada**. De ahí las cuatro decisiones de UI:
+
+- El DNI conserva toda la jerarquía visual; la demo va abajo, tras un divisor y sin color de acento.
+- Ámbar en lugar del rojo de la marca durante todo el flujo de demo: el color es la primera señal, antes de leer un cartel.
+- `BannerDemo` fijo en **todas** las pantallas del modo, la evaluación incluida — al revés que `BannerActualizacion`, que se esconde mientras se rinde. Ahí el motivo era no interrumpir; acá el único momento en que se puede desarmar la confusión es mientras está pasando.
+- La aclaración del resultado va **pegada al badge** y no en el banner de arriba: un "APROBADO" verde en grande es justo el instante en que alguien puede creer que se certificó.
+
+En el frontend, el flujo de pantallas es **uno solo** para los dos modos: las diferencias de contrato viven en `core/modo.js` (un adaptador que unifica `pendientes` con `modulos` de demo y arma el payload de cada POST) y las de copy las decide cada pantalla mirando el `modo`. Un modo invitado con su propio árbol de componentes sería la misma app dos veces, condenada a divergir.
+
+---
+
 ## La PWA
 
 `sima-check-app` es instalable con `vite-plugin-pwa`. Lo que sigue es sólo sobre instalabilidad y actualización — el cacheo de **datos** (asignaciones, preguntas, rendiciones hechas sin conexión) no está implementado y vive en [`../pendientes.md`](../pendientes.md).
