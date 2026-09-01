@@ -2,6 +2,9 @@ import { Logger, Module, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AsignacionesModule } from '../asignaciones/asignaciones.module';
 import { SesionesModule } from '../sesiones/sesiones.module';
+import { InvitadoAuthGuard } from './invitado-auth.guard';
+import { InvitadoController } from './invitado.controller';
+import { InvitadoService } from './invitado.service';
 import { TabletAuthGuard } from './tablet-auth.guard';
 import { TabletController } from './tablet.controller';
 import { TabletService } from './tablet.service';
@@ -18,10 +21,21 @@ import { TabletService } from './tablet.service';
 // TabletService.rendir() delega TODA la corrección/idempotencia en
 // SesionesService.registrar(), no la reimplementa). No hay ciclo: ni
 // Asignaciones ni Sesiones importan Tablet.
+// El MODO INVITADO (InvitadoController/InvitadoService) vive en este mismo
+// módulo y no en uno propio: es el mismo namespace HTTP y la misma app. Lo que
+// sí es propio es todo lo demás — su controller, su guard y su token —, porque
+// un invitado y un alumno no comparten ninguna regla salvo cómo se sortea y cómo
+// se corrige un examen. InvitadoService no depende de Asignaciones ni de
+// Sesiones: la demo no toca ninguna de las dos.
 @Module({
   imports: [AsignacionesModule, SesionesModule],
-  controllers: [TabletController],
-  providers: [TabletService, TabletAuthGuard],
+  controllers: [TabletController, InvitadoController],
+  providers: [
+    TabletService,
+    TabletAuthGuard,
+    InvitadoService,
+    InvitadoAuthGuard,
+  ],
 })
 export class TabletModule implements OnModuleInit {
   private readonly logger = new Logger(TabletModule.name);
