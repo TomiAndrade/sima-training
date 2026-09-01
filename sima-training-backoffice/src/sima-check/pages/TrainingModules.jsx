@@ -24,6 +24,10 @@ const EMPTY_MODULE_FORM = {
   demoPublico: false,
 }
 
+// Foto vacía de "Detalles del módulo" (nombre/descripción/vigencia) en
+// "Editar contenido" — ver el comentario junto a localDetalles.
+const DETALLES_VACIOS = { nombre: '', descripcion: '', vigenciaMeses: '' }
+
 function ChipToggle({ active, onClick, children }) {
   return (
     <button
@@ -180,6 +184,15 @@ export default function TrainingModules() {
   const [parametrosGuardados, setParametrosGuardados] = useState(PARAMETROS_VACIOS)
   const [guardandoParametros, setGuardandoParametros] = useState(false)
   const [parametrosError, setParametrosError] = useState(null)
+  // Detalles del módulo (nombre/descripción/vigencia): metadata del CONTENEDOR
+  // y no de la versión, pero se edita acá igual que parámetros y criterios —
+  // "Editar contenido" es donde se termina de configurar un módulo, y antes no
+  // había ningún lugar del backoffice para tocar la vigencia después de crearlo.
+  // Mismo modelo sin staging que parámetros: botón propio, pega directo al PATCH.
+  const [localDetalles, setLocalDetalles] = useState(DETALLES_VACIOS)
+  const [detallesGuardados, setDetallesGuardados] = useState(DETALLES_VACIOS)
+  const [guardandoDetalles, setGuardandoDetalles] = useState(false)
+  const [detallesError, setDetallesError] = useState(null)
   const sessionKeyRef = useRef(null)
   useEffect(() => {
     if (!questionsView || questionsView.readOnly || !banco.version) return
@@ -197,6 +210,14 @@ export default function TrainingModules() {
       setLocalParametros(desdeServidor)
       setParametrosGuardados(desdeServidor)
       setParametrosError(null)
+      const detallesDesdeServidor = {
+        nombre: questionsModule?.nombre ?? '',
+        descripcion: questionsModule?.descripcion ?? '',
+        vigenciaMeses: questionsModule?.vigenciaMeses != null ? String(questionsModule.vigenciaMeses) : '',
+      }
+      setLocalDetalles(detallesDesdeServidor)
+      setDetallesGuardados(detallesDesdeServidor)
+      setDetallesError(null)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [questionsView?.moduleId, questionsView?.versionId, questionsView?.readOnly, banco.version])
@@ -597,6 +618,42 @@ export default function TrainingModules() {
     }
   }
 
+  // Igual que los parámetros: el PATCH no toca pivots, así que no puede
+  // pisarse con el staging de preguntas y no necesita flushCambios() antes.
+  const handleGuardarDetalles = async () => {
+    if (!localDetalles.nombre.trim()) {
+      setDetallesError('Poné un nombre para el módulo.')
+      return
+    }
+    const trimmedVigencia = localDetalles.vigenciaMeses.trim()
+    let vigenciaMeses = null
+    if (trimmedVigencia) {
+      const n = Number(trimmedVigencia)
+      if (!Number.isInteger(n) || n < 1) {
+        setDetallesError('La vigencia tiene que ser un número entero de al menos 1 mes, o vacío para que no venza nunca.')
+        return
+      }
+      vigenciaMeses = n
+    }
+    setGuardandoDetalles(true)
+    setDetallesError(null)
+    try {
+      await modulosApi.update(questionsView.moduleId, {
+        nombre: localDetalles.nombre.trim(),
+        descripcion: localDetalles.descripcion.trim(),
+        vigenciaMeses,
+      })
+      const guardado = { ...localDetalles, vigenciaMeses: vigenciaMeses != null ? String(vigenciaMeses) : '' }
+      setLocalDetalles(guardado)
+      setDetallesGuardados(guardado)
+      await loadModules()
+    } catch (err) {
+      setDetallesError(err.message)
+    } finally {
+      setGuardandoDetalles(false)
+    }
+  }
+
   // --- Guardar los cambios pendientes y volver a la lista ---
   const handleGuardarYVolver = async (irAtras) => {
     setGuardando(true)
@@ -657,6 +714,19 @@ export default function TrainingModules() {
       ? parametrosDesdeVersion(banco.version)
       : localParametros
     const parametrosDirty = parametrosDistintos(localParametros, parametrosGuardados)
+    // Mismo criterio que parametrosVista: en solo lectura sale directo del
+    // módulo (no hay staging que llenar sobre una versión publicada/archivada).
+    const detallesVista = view.readOnly
+      ? {
+          nombre: questionsModule?.nombre ?? '',
+          descripcion: questionsModule?.descripcion ?? '',
+          vigenciaMeses: questionsModule?.vigenciaMeses != null ? String(questionsModule.vigenciaMeses) : '',
+        }
+      : localDetalles
+    const detallesDirty =
+      localDetalles.nombre !== detallesGuardados.nombre ||
+      localDetalles.descripcion !== detallesGuardados.descripcion ||
+      localDetalles.vigenciaMeses !== detallesGuardados.vigenciaMeses
     const pendientesPreguntas = contarPendientes()
 
     const irAtras = () => setView(
@@ -720,6 +790,90 @@ export default function TrainingModules() {
               : 'Estás viendo la versión publicada (solo lectura). Para modificarla, volvé y usá "Editar contenido".'}
           </div>
         )}
+
+        <div className="border border-slate-200 rounded bg-white">
+          <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between gap-3 flex-wrap">
+            <div>
+              <span className="text-slate-500 text-[10px] font-semibold uppercase tracking-widest">
+                Detalles del módulo
+              </span>
+              <p className="text-slate-400 text-[11px] mt-0.5">
+                {view.readOnly
+                  ? 'Nombre, descripción y vigencia del módulo (no de esta versión puntual).'
+                  : 'Nombre, descripción y cada cuánto vence una aprobación. No se congela con la versión.'}
+              </p>
+            </div>
+            {!view.readOnly && (
+              <Button size="sm" onClick={handleGuardarDetalles} disabled={!detallesDirty || guardandoDetalles}>
+                {guardandoDetalles ? 'Guardando...' : 'Guardar detalles'}
+              </Button>
+            )}
+          </div>
+
+          {detallesError && (
+            <div className="px-4 py-2.5 bg-red-50 border-b border-red-200 text-red-700 text-xs">{detallesError}</div>
+          )}
+
+          {view.readOnly ? (
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm px-4 py-3">
+              <div className="col-span-2">
+                <dt className="text-slate-400 text-xs font-medium mb-0.5">Nombre</dt>
+                <dd className="text-slate-900">{detallesVista.nombre}</dd>
+              </div>
+              <div className="col-span-2">
+                <dt className="text-slate-400 text-xs font-medium mb-0.5">Descripción</dt>
+                <dd className="text-slate-900 whitespace-pre-wrap">{detallesVista.descripcion || '—'}</dd>
+              </div>
+              <div>
+                <dt className="text-slate-400 text-xs font-medium mb-0.5">Vigencia</dt>
+                <dd className="text-slate-900 font-mono">
+                  {detallesVista.vigenciaMeses
+                    ? `Cada ${detallesVista.vigenciaMeses} mes${detallesVista.vigenciaMeses !== '1' ? 'es' : ''}`
+                    : 'no vence nunca'}
+                </dd>
+              </div>
+            </dl>
+          ) : (
+            <div className="px-4 py-3 space-y-4">
+              <div>
+                <label className="block text-slate-700 text-sm font-medium mb-1">Nombre</label>
+                <input
+                  className="w-full bg-white border border-slate-300 rounded px-3 py-2 text-slate-900 text-sm focus:outline-none focus:border-red-600"
+                  value={localDetalles.nombre}
+                  onChange={(e) => setLocalDetalles((d) => ({ ...d, nombre: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="block text-slate-700 text-sm font-medium mb-1">
+                  Descripción <span className="text-slate-400 font-normal">(opcional)</span>
+                </label>
+                <textarea
+                  rows={2}
+                  className="w-full bg-white border border-slate-300 rounded px-3 py-2 text-slate-900 text-sm focus:outline-none focus:border-red-600"
+                  value={localDetalles.descripcion}
+                  onChange={(e) => setLocalDetalles((d) => ({ ...d, descripcion: e.target.value }))}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-slate-700 text-sm font-medium mb-1">Vigencia (meses)</label>
+                  <input
+                    type="number"
+                    min={1}
+                    step={1}
+                    className="w-full bg-white border border-slate-300 rounded px-3 py-2 text-slate-900 text-sm focus:outline-none focus:border-red-600"
+                    placeholder="no vence nunca"
+                    value={localDetalles.vigenciaMeses}
+                    onChange={(e) => setLocalDetalles((d) => ({ ...d, vigenciaMeses: e.target.value }))}
+                  />
+                  <p className="text-slate-400 text-[11px] mt-1">
+                    Cada cuántos meses hay que recertificarse. Vacío = no vence nunca.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
 
         <ParametrosExamenPanel
           valores={parametrosVista}
@@ -1256,6 +1410,9 @@ export default function TrainingModules() {
                   : '—'}
               </div>
             </div>
+            {/* Nombre, descripción y vigencia se editan desde "Editar contenido"
+                (junto con el resto del contenido del módulo), no acá — este modal
+                queda de solo lectura salvo el toggle de demo de abajo. */}
             <div>
               <div className="text-slate-400 text-xs font-medium mb-1">Estado</div>
               <div className="text-slate-900 text-sm">{detalleModal.activo === false ? 'Inactivo' : 'Activo'}</div>
