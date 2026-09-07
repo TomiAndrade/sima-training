@@ -14,7 +14,6 @@ import {
 } from '@nestjs/common';
 import { AuditService } from '../audit/audit.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { Public } from '../auth/public.decorator';
 import { CreateUsuarioDto } from './dto/create-usuario.dto';
 import { FindAllUsuariosDto } from './dto/find-all-usuarios.dto';
 import { UpdateUsuarioDto } from './dto/update-usuario.dto';
@@ -34,31 +33,29 @@ export class UsuariosController {
   }
 
   @Get()
-  @Public()
+  @UseGuards(JwtAuthGuard)
   findAll(@Query() query: FindAllUsuariosDto) {
     return this.usuarios.findAll(query);
   }
 
   @Get(':id')
-  @Public()
+  @UseGuards(JwtAuthGuard)
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.usuarios.findOne(id);
   }
 
   // Historial de auditoría DE ESTA PERSONA (Vinculacion + sus pares) — no un
   // log global, por eso cuelga acá y no de un controller propio de audit/.
-  // Lectura abierta, igual que el resto de los GET.
   @Get(':id/audit-log')
-  @Public()
+  @UseGuards(JwtAuthGuard)
   auditLog(@Param('id', ParseIntPipe) id: number) {
     return this.audit.listarPorUsuario(id);
   }
 
   // Informe agregado de habilitación (Story 10): usuario + asignaciones +
-  // sesiones + auditoría + veredicto, en un solo request. Lectura abierta,
-  // igual que el resto de los GET.
+  // sesiones + auditoría + veredicto, en un solo request.
   @Get(':id/informe')
-  @Public()
+  @UseGuards(JwtAuthGuard)
   informe(@Param('id', ParseIntPipe) id: number) {
     return this.usuarios.informe(id);
   }
