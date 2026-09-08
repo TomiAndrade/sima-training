@@ -24,6 +24,7 @@ const NAV_SECTIONS = [
     header: 'Administración',
     items: [
       { id: 'usuarios',  label: 'Usuarios' },
+      { id: 'organizaciones', label: 'Organizaciones' },
       { id: 'puestos',   label: 'Puestos' },
       { id: 'centros-costo', label: 'Centros de Costo' },
     ],
