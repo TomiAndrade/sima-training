@@ -11,9 +11,13 @@ export class SesionesController {
    * estuvo bien y cuál era la correcta. Lo consume "Ver intento" en la hoja de
    * vida del backoffice.
    *
-   * ⚠️ **ES LA ÚNICA LECTURA DEL PROYECTO CON GUARD, y no es un descuido.**
-   * La convención es "lecturas abiertas; escrituras protegidas", pero éste es
-   * el único GET que devuelve `Pregunta.respuestaCorrecta`.
+   * ⚠️ **No es la única lectura del proyecto con guard** (todas las
+   * lecturas del backoffice requieren sesión ahora — se cerraron los GET
+   * que eran `@Public()` de más), pero sí sigue siendo la única que expone
+   * `Pregunta.respuestaCorrecta`, y por eso el motivo del guard acá es otro:
+   * bloquear a alguien que **no** tiene sesión de backoffice pero sí conoce
+   * un `sesionId` real (la app se lo devuelve al alumno/invitado al
+   * terminar de rendir).
    *
    * El backend NUNCA le manda la respuesta correcta a la tablet —
    * `TabletService.serializarPregunta()` la omite a propósito— y eso es

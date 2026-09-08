@@ -12,7 +12,6 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { Public } from '../auth/public.decorator';
 import { BasesConocimientoService } from './bases-conocimiento.service';
 import { CreateBaseConocimientoDto } from './dto/create-base-conocimiento.dto';
 import { CreateNivelDto } from './dto/create-nivel.dto';
@@ -32,7 +31,7 @@ export class BasesConocimientoController {
   }
 
   @Get()
-  @Public()
+  @UseGuards(JwtAuthGuard)
   findAll(@Query() query: FindBasesConocimientoDto) {
     return this.bases.findAll(query);
   }
@@ -76,7 +75,7 @@ export class BasesConocimientoController {
   }
 
   @Get(':id')
-  @Public()
+  @UseGuards(JwtAuthGuard)
   findOne(@Param('id', ParseUUIDPipe) id: string) {
     return this.bases.findOne(id);
   }

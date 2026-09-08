@@ -11,7 +11,6 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { Public } from '../auth/public.decorator';
 import { CreateReglaAsignacionDto } from './dto/create-regla-asignacion.dto';
 import { FindReglasAsignacionDto } from './dto/find-reglas-asignacion.dto';
 import { UpdateReglaAsignacionDto } from './dto/update-regla-asignacion.dto';
@@ -28,7 +27,7 @@ export class ReglasAsignacionController {
   }
 
   @Get()
-  @Public()
+  @UseGuards(JwtAuthGuard)
   findAll(@Query() query: FindReglasAsignacionDto) {
     return this.reglas.findAll(query);
   }
