@@ -11,6 +11,7 @@ import ImportUsuariosModal from '../components/ImportUsuariosModal'
 import ParesPuestoCentro from '../components/ParesPuestoCentro'
 import HistorialUsuario from './HistorialUsuario'
 import { roleBadge } from '../format/badges'
+import { useEsAdministrador } from '../auth/sesionContext'
 import { opcionesCatalogo } from '../format/catalogo'
 
 // Decisión de producto: el backoffice solo da de alta ALUMNOS por ahora (la
@@ -18,6 +19,11 @@ import { opcionesCatalogo } from '../format/catalogo'
 // sigue soportando los cuatro roles (ADMINISTRADOR/COORDINADOR/AUDITOR/ALUMNO)
 // sin cambios — esto es una simplificación temporal solo de este formulario.
 const ROL_ALTA = 'ALUMNO'
+
+// Los roles que un ADMINISTRADOR puede asignar al editar. Es el enum completo
+// del backend: la matriz de abajo se encarga de que la organización elegida
+// sea compatible, así que no hace falta recortar nada acá.
+const ROLES_ASIGNABLES = ['ADMINISTRADOR', 'COORDINADOR', 'AUDITOR', 'ALUMNO']
 
 // Espejo de sima-training-api/src/usuarios/matriz-rol-organizacion.ts —
 // si esa matriz cambia, actualizar acá también. Se usa para filtrar el select
@@ -83,10 +89,18 @@ export default function Usuarios({ sub = [], setSub = () => {} }) {
   const [loadError, setLoadError] = useState(null)
   const [tab, setTab] = useState('todas')
 
+  // Quién está mirando. Sólo un ADMINISTRADOR puede cambiar roles; para
+  // COORDINADOR y AUDITOR la UI queda igual que antes (badge de solo lectura).
+  // Es UI nada más: quien decide de verdad es el backend, que rechaza con 403
+  // a cualquiera que no sea administrador (UsuariosService.update).
+  const esAdministrador = useEsAdministrador()
+
   const [modal, setModal] = useState(null)
   const [form, setForm] = useState(emptyForm)
   const [pares, setPares] = useState([])
   const [paresTouched, setParesTouched] = useState(false)
+  // Mismo criterio que paresTouched: sólo se manda el rol si de verdad se tocó.
+  const [rolTouched, setRolTouched] = useState(false)
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState(null)
   const [importOpen, setImportOpen] = useState(false)
@@ -235,6 +249,7 @@ export default function Usuarios({ sub = [], setSub = () => {} }) {
     })
     setPares([])
     setParesTouched(false)
+    setRolTouched(false)
     setFormError(null)
     setModal({ mode: 'create' })
   }
@@ -256,6 +271,7 @@ export default function Usuarios({ sub = [], setSub = () => {} }) {
       })),
     )
     setParesTouched(false)
+    setRolTouched(false)
     setFormError(null)
     setModal({ mode: 'edit', data: usuario })
   }
@@ -289,11 +305,16 @@ export default function Usuarios({ sub = [], setSub = () => {} }) {
       dni: form.dni.trim(),
       vinculacion: {
         organizacionId: form.organizacionId ? Number(form.organizacionId) : undefined,
-        // El rol solo se manda al crear (siempre ALUMNO). Al editar se omite
-        // a propósito: UpdateVinculacionDto.rol es opcional y el backend no
-        // toca lo que no viene, así que el rol real de un usuario legacy
-        // (ADMINISTRADOR/COORDINADOR/AUDITOR) nunca se pisa en silencio.
-        ...(modal.mode === 'create' ? { rol: ROL_ALTA } : {}),
+        // Al crear, siempre ALUMNO. Al editar el rol se omite salvo que un
+        // ADMINISTRADOR lo haya cambiado explícitamente: UpdateVinculacionDto.rol
+        // es opcional y el backend no toca lo que no viene, así que omitirlo es
+        // lo que evita pisar en silencio el rol de un usuario legacy. Mandarlo
+        // sin ser administrador da 403, no un cambio silencioso.
+        ...(modal.mode === 'create'
+          ? { rol: ROL_ALTA }
+          : esAdministrador && rolTouched
+            ? { rol: form.rol }
+            : {}),
       },
     }
     if (form.email.trim()) payload.email = form.email.trim()
@@ -675,6 +696,43 @@ export default function Usuarios({ sub = [], setSub = () => {} }) {
               >
                 {ROL_ALTA.toLowerCase()}
               </span>
+            ) : esAdministrador ? (
+              <>
+                <select
+                  className="w-full bg-white border border-slate-300 rounded px-3 py-2 text-slate-900 text-sm focus:outline-none focus:border-red-600 capitalize"
+                  value={form.rol}
+                  onChange={(e) => {
+                    // Cambiar el rol puede invalidar la organización elegida
+                    // (la matriz no permite cualquier combinación), así que se
+                    // limpia: el select de abajo se refiltra solo y obliga a
+                    // volver a elegir una válida en vez de mandar uno que el
+                    // backend va a rechazar con 400.
+                    const rol = e.target.value
+                    const tiposValidos = TIPOS_ORG_POR_ROL[rol] ?? []
+                    const orgActual = organizaciones.find(
+                      (o) => String(o.id) === String(form.organizacionId),
+                    )
+                    setRolTouched(true)
+                    setForm((f) => ({
+                      ...f,
+                      rol,
+                      organizacionId:
+                        orgActual && tiposValidos.includes(orgActual.tipo)
+                          ? f.organizacionId
+                          : '',
+                    }))
+                  }}
+                >
+                  {ROLES_ASIGNABLES.map((rol) => (
+                    <option key={rol} value={rol} className="capitalize">
+                      {rol.toLowerCase()}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-slate-400 text-xs mt-1">
+                  Cambiar el rol puede requerir elegir otra organización.
+                </p>
+              </>
             ) : (
               <>
                 <span
@@ -683,7 +741,7 @@ export default function Usuarios({ sub = [], setSub = () => {} }) {
                   {form.rol.toLowerCase()}
                 </span>
                 <p className="text-slate-400 text-xs mt-1">
-                  El rol no se puede cambiar desde este formulario.
+                  Sólo un administrador puede cambiar el rol.
                 </p>
               </>
             )}

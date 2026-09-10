@@ -1,5 +1,7 @@
 import { Controller, Get, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { LECTURA_BACKOFFICE } from '../auth/matriz-permisos';
+import { Roles } from '../auth/roles.decorator';
 import { EstadisticasService } from './estadisticas.service';
 import { InvitadosService } from './invitados.service';
 
@@ -21,6 +23,7 @@ export class EstadisticasController {
 
   @Get('sima-check')
   @UseGuards(JwtAuthGuard)
+  @Roles(...LECTURA_BACKOFFICE)
   simaCheck() {
     return this.estadisticas.simaCheck();
   }
@@ -35,6 +38,7 @@ export class EstadisticasController {
   // eso también requiere sesión de backoffice.
   @Get('invitados')
   @UseGuards(JwtAuthGuard)
+  @Roles(...LECTURA_BACKOFFICE)
   invitadosDemo() {
     return this.invitados.estadisticas();
   }

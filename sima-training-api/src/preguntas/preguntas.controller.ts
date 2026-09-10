@@ -14,6 +14,8 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { LECTURA_BACKOFFICE, SOLO_ADMINISTRADOR } from '../auth/matriz-permisos';
+import { Roles } from '../auth/roles.decorator';
 import { MAX_IMAGEN_SIZE } from '../storage/formato-imagen';
 import { CreatePreguntaDto } from './dto/create-pregunta.dto';
 import { FindAllPreguntasDto } from './dto/find-all-preguntas.dto';
@@ -26,6 +28,7 @@ export class PreguntasController {
 
   @Post()
   @UseGuards(JwtAuthGuard)
+  @Roles(...SOLO_ADMINISTRADOR)
   create(@Body() dto: CreatePreguntaDto) {
     return this.preguntas.create(dto);
   }
@@ -36,6 +39,7 @@ export class PreguntasController {
   // la clave que después viaja en el POST /preguntas.
   @Post('imagen')
   @UseGuards(JwtAuthGuard)
+  @Roles(...SOLO_ADMINISTRADOR)
   @UseInterceptors(
     FileInterceptor('file', { limits: { fileSize: MAX_IMAGEN_SIZE } }),
   )
@@ -46,24 +50,28 @@ export class PreguntasController {
   // La clave viaja url-encoded (contiene una /), ver preguntasApi.borrarImagen.
   @Delete('imagen/:clave')
   @UseGuards(JwtAuthGuard)
+  @Roles(...SOLO_ADMINISTRADOR)
   borrarImagen(@Param('clave') clave: string) {
     return this.preguntas.borrarImagen(clave);
   }
 
   @Get()
   @UseGuards(JwtAuthGuard)
+  @Roles(...LECTURA_BACKOFFICE)
   findAll(@Query() query: FindAllPreguntasDto) {
     return this.preguntas.findAll(query);
   }
 
   @Get(':id')
   @UseGuards(JwtAuthGuard)
+  @Roles(...LECTURA_BACKOFFICE)
   findOne(@Param('id', ParseUUIDPipe) id: string) {
     return this.preguntas.findOne(id);
   }
 
   @Patch(':id')
   @UseGuards(JwtAuthGuard)
+  @Roles(...SOLO_ADMINISTRADOR)
   setActiva(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: TogglePreguntaActivaDto,

@@ -13,10 +13,11 @@ Consecuencias de la convención, para mantenerla:
 - **No hay changelog.** Se documenta el diseño **vigente**. Un diseño anterior se menciona —en una línea, dentro de la decisión que lo reemplazó— sólo cuando explica por qué el actual es así, o sea cuando alguien podría razonablemente proponer volver atrás. Si nadie lo propondría, no se menciona.
 - **Al cambiar una decisión se reescribe la sección, no se apila una nueva.**
 
-## Los ocho archivos
+## Los nueve archivos
 
 | Archivo | Qué contiene |
 |---|---|
+| [autorizacion.md](autorizacion.md) | Los dos guards globales, el fail-closed, la matriz de permisos, la escalada que el decorador no tapa y el rol en el frontend |
 | [usuarios.md](usuarios.md) | `Usuario` como identidad pura, `Vinculacion`, los pares puesto+centro, la matriz tipo-de-organización ↔ rol y el import de nómina |
 | [preguntas.md](preguntas.md) | El banco: `Pregunta`, sus dos bajas lógicas, las imágenes, la detección de duplicados, el import desde Excel, y la clasificación en `BaseConocimiento`/`NivelBase` |
 | [modulos.md](modulos.md) | `Modulo` y `ModuloVersion` (versionado inmutable), el pivot con sus dos orígenes, `ModuloVersionCriterio` y el editor de contenido |

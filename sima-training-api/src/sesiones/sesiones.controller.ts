@@ -1,5 +1,7 @@
 import { Controller, Get, Param, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { LECTURA_BACKOFFICE } from '../auth/matriz-permisos';
+import { Roles } from '../auth/roles.decorator';
 import { SesionesService } from './sesiones.service';
 
 @Controller('sesiones')
@@ -31,6 +33,7 @@ export class SesionesController {
    */
   @Get(':id')
   @UseGuards(JwtAuthGuard)
+  @Roles(...LECTURA_BACKOFFICE)
   detalle(@Param('id') id: string) {
     return this.sesiones.detalle(id);
   }

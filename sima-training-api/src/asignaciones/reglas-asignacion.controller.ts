@@ -11,6 +11,8 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { GESTION_NOMINA, LECTURA_BACKOFFICE } from '../auth/matriz-permisos';
+import { Roles } from '../auth/roles.decorator';
 import { CreateReglaAsignacionDto } from './dto/create-regla-asignacion.dto';
 import { FindReglasAsignacionDto } from './dto/find-reglas-asignacion.dto';
 import { UpdateReglaAsignacionDto } from './dto/update-regla-asignacion.dto';
@@ -22,12 +24,14 @@ export class ReglasAsignacionController {
 
   @Post()
   @UseGuards(JwtAuthGuard)
+  @Roles(...GESTION_NOMINA)
   create(@Body() dto: CreateReglaAsignacionDto) {
     return this.reglas.create(dto);
   }
 
   @Get()
   @UseGuards(JwtAuthGuard)
+  @Roles(...LECTURA_BACKOFFICE)
   findAll(@Query() query: FindReglasAsignacionDto) {
     return this.reglas.findAll(query);
   }
@@ -37,6 +41,7 @@ export class ReglasAsignacionController {
   // asignaciones AUTOMATICA de la gente del centro.
   @Patch(':id')
   @UseGuards(JwtAuthGuard)
+  @Roles(...GESTION_NOMINA)
   update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateReglaAsignacionDto,
@@ -51,6 +56,7 @@ export class ReglasAsignacionController {
   // DELETE /modulos/:id/borrador.
   @Delete(':id')
   @UseGuards(JwtAuthGuard)
+  @Roles(...GESTION_NOMINA)
   remove(@Param('id', ParseUUIDPipe) id: string) {
     return this.reglas.remove(id);
   }

@@ -212,7 +212,12 @@ describe('UsuariosService', () => {
     });
 
     await expect(
-      service.update(1, { vinculacion: { rol: RolUsuario.COORDINADOR } }),
+      service.update(
+        1,
+        { vinculacion: { rol: RolUsuario.COORDINADOR } },
+        undefined,
+        RolUsuario.ADMINISTRADOR,
+      ),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
@@ -396,7 +401,12 @@ describe('UsuariosService', () => {
     prisma.usuario.findFirst.mockResolvedValue(usuarioConVinculacion());
     prisma.usuario.update.mockResolvedValue(usuarioConVinculacion());
 
-    await service.update(1, { vinculacion: { rol: RolUsuario.COORDINADOR } });
+    await service.update(
+      1,
+      { vinculacion: { rol: RolUsuario.COORDINADOR } },
+      undefined,
+      RolUsuario.ADMINISTRADOR,
+    );
 
     expect(asignaciones.recalcularEnTx).not.toHaveBeenCalled();
   });
@@ -631,7 +641,12 @@ describe('UsuariosService', () => {
           puestosCentros: [],
         });
 
-      await service.update(1, { vinculacion: { rol: RolUsuario.COORDINADOR } });
+      await service.update(
+        1,
+        { vinculacion: { rol: RolUsuario.COORDINADOR } },
+        undefined,
+        RolUsuario.ADMINISTRADOR,
+      );
 
       expect(audit.registrar).toHaveBeenCalledWith(prisma, {
         entidad: 'Vinculacion',

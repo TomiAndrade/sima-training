@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -328,7 +329,30 @@ export class UsuariosService {
     };
   }
 
-  async update(id: number, dto: UpdateUsuarioDto, actor = 'backoffice') {
+  /**
+   * ⚠️ `actorRol` es la ÚNICA autorización del proyecto que no vive en un
+   * `@Roles()`. El decorador autoriza el endpoint entero, y acá el problema
+   * está adentro del body: `UpdateVinculacionDto` deja tocar `rol` y
+   * `organizacionId`, y `PATCH /usuarios/:id` es GESTION_NOMINA — o sea que
+   * sin este chequeo un COORDINADOR se asciende a ADMINISTRADOR con un curl,
+   * editándose a sí mismo. Ningún decorador de endpoint puede filtrar campos
+   * de un body, por eso el chequeo es acá y no allá.
+   *
+   * Es el rol de QUIEN HACE el cambio, distinto de `actor` (un string libre,
+   * el nombre que va a `updatedBy` y al AuditLog). Se llaman parecido y son
+   * cosas distintas.
+   *
+   * `undefined` cuenta como "no es administrador" y por lo tanto no puede
+   * escalar: mismo criterio fail-closed que el `RolesGuard`. Hoy el único
+   * caller es el controller, que siempre lo manda; un caller interno futuro
+   * que necesite cambiar roles tiene que pasarlo explícito.
+   */
+  async update(
+    id: number,
+    dto: UpdateUsuarioDto,
+    actor = 'backoffice',
+    actorRol?: RolUsuario,
+  ) {
     const actual = await this.prisma.usuario.findFirst({
       where: { id, deletedAt: null },
       include: USUARIO_INCLUDE,
@@ -338,6 +362,28 @@ export class UsuariosService {
     }
 
     const { vinculacion, ...identidad } = dto;
+
+    // Escalada de privilegios: sólo un ADMINISTRADOR puede mover a alguien de
+    // rol o de organización. La comparación va SIEMPRE contra `actual` (lo
+    // que dice la base), nunca contra algo que haya mandado el cliente, y se
+    // considera cambio sólo si el valor es DISTINTO del actual: mandar el rol
+    // que la persona ya tiene es un no-op y no tiene por qué fallar — el
+    // frontend reenvía el objeto entero al editar cualquier otro campo.
+    if (vinculacion && actorRol !== RolUsuario.ADMINISTRADOR) {
+      const cambiaRol =
+        vinculacion.rol !== undefined &&
+        vinculacion.rol !== actual.vinculacion?.rol;
+      const cambiaOrganizacion =
+        vinculacion.organizacionId !== undefined &&
+        vinculacion.organizacionId !== actual.vinculacion?.organizacionId;
+
+      if (cambiaRol || cambiaOrganizacion) {
+        throw new ForbiddenException(
+          'Sólo un administrador puede cambiar el rol o la organización de un usuario',
+        );
+      }
+    }
+
     if (identidad.dni !== undefined) {
       await this.assertDniDisponible(identidad.dni, id);
     }
