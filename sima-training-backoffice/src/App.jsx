@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import * as Sentry from '@sentry/react'
 import { useAuth0 } from '@auth0/auth0-react'
 import useNavigation from './hooks/useNavigation'
+import SesionProvider from './core/auth/SesionProvider'
 import { setAuth0TokenGetter, setAuthErrorHandler } from './core/api/client'
 import BackofficeLayout from './pages/BackofficeLayout'
 import ErrorFallback from './components/ErrorFallback'
@@ -75,21 +76,27 @@ export default function App() {
     )
   }
 
+  // SesionProvider va acá adentro y no en main.jsx a propósito: pide
+  // GET /auth/me, que necesita el token ya registrado en client.js.
+  // Envolver la app entera lo haría correr antes de que Auth0 resuelva
+  // la sesión, y el request saldría sin Bearer.
   return (
-    <BackofficeLayout page={page} navigate={navigate}>
-      {/* `sub` es el tramo del hash que sigue a la página, y se usa para dos
+    <SesionProvider>
+      <BackofficeLayout page={page} navigate={navigate}>
+        {/* `sub` es el tramo del hash que sigue a la página, y se usa para dos
           cosas distintas: una sub-vista que vale la pena sobrevivir a un F5
           (`#usuarios/historial/42`, con `setSub`) y una intención de entrada que
           la pantalla consume al montar (`#questions/base/<id>/nivel/<id>`, con
           `replaceSub`). El resto de las pantallas los ignora. */}
-      {/* Solo la pantalla se envuelve, no todo App: si una explota, el sidebar
+        {/* Solo la pantalla se envuelve, no todo App: si una explota, el sidebar
           de BackofficeLayout sigue vivo y se puede navegar a otra. `key={page}`
           fuerza el remount del boundary al cambiar de pantalla — Sentry.ErrorBoundary
           no tiene `resetKeys`, así que sin esto el fallback de una pantalla rota
           quedaría pegado al navegar a una que anda bien. */}
-      <Sentry.ErrorBoundary key={page} fallback={ErrorFallback}>
-        <PageComponent navigate={navigate} sub={sub} setSub={setSub} replaceSub={replaceSub} />
-      </Sentry.ErrorBoundary>
-    </BackofficeLayout>
+        <Sentry.ErrorBoundary key={page} fallback={ErrorFallback}>
+          <PageComponent navigate={navigate} sub={sub} setSub={setSub} replaceSub={replaceSub} />
+        </Sentry.ErrorBoundary>
+      </BackofficeLayout>
+    </SesionProvider>
   )
 }
