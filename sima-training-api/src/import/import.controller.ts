@@ -8,6 +8,8 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { GESTION_NOMINA, SOLO_ADMINISTRADOR } from '../auth/matriz-permisos';
+import { Roles } from '../auth/roles.decorator';
 import { ConfirmarImportPreguntasDto } from './dto/confirmar-import-preguntas.dto';
 import { ConfirmarImportUsuariosDto } from './dto/confirmar-import-usuarios.dto';
 import { ImportService } from './import.service';
@@ -20,6 +22,7 @@ export class ImportController {
 
   @Post('usuarios/preview')
   @UseGuards(JwtAuthGuard)
+  @Roles(...GESTION_NOMINA)
   @UseInterceptors(
     FileInterceptor('file', { limits: { fileSize: MAX_FILE_SIZE } }),
   )
@@ -29,12 +32,14 @@ export class ImportController {
 
   @Post('usuarios/confirm')
   @UseGuards(JwtAuthGuard)
+  @Roles(...GESTION_NOMINA)
   confirmarUsuarios(@Body() dto: ConfirmarImportUsuariosDto) {
     return this.importService.confirmarUsuarios(dto);
   }
 
   @Post('preguntas/preview')
   @UseGuards(JwtAuthGuard)
+  @Roles(...SOLO_ADMINISTRADOR)
   @UseInterceptors(
     FileInterceptor('file', { limits: { fileSize: MAX_FILE_SIZE } }),
   )
@@ -44,6 +49,7 @@ export class ImportController {
 
   @Post('preguntas/confirm')
   @UseGuards(JwtAuthGuard)
+  @Roles(...SOLO_ADMINISTRADOR)
   confirmarPreguntas(@Body() dto: ConfirmarImportPreguntasDto) {
     return this.importService.confirmarPreguntas(dto);
   }

@@ -1,5 +1,7 @@
 import { Controller, Get, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { LECTURA_BACKOFFICE } from '../auth/matriz-permisos';
+import { Roles } from '../auth/roles.decorator';
 import { ResumenService } from './resumen.service';
 
 // Agregados de la pantalla Resumen del backoffice. No expone ningún dato
@@ -12,6 +14,7 @@ export class ResumenController {
 
   @Get('sima-check')
   @UseGuards(JwtAuthGuard)
+  @Roles(...LECTURA_BACKOFFICE)
   simaCheck() {
     return this.resumen.simaCheck();
   }

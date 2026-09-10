@@ -12,6 +12,8 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { LECTURA_BACKOFFICE, SOLO_ADMINISTRADOR } from '../auth/matriz-permisos';
+import { Roles } from '../auth/roles.decorator';
 import { ActivarModuloDto } from './dto/activar-modulo.dto';
 import { AsignarPreguntaItemDto } from './dto/asignar-preguntas.dto';
 import { CreateModuloDto } from './dto/create-modulo.dto';
@@ -27,30 +29,35 @@ export class ModulosController {
 
   @Post()
   @UseGuards(JwtAuthGuard)
+  @Roles(...SOLO_ADMINISTRADOR)
   create(@Body() dto: CreateModuloDto) {
     return this.modulos.create(dto);
   }
 
   @Get()
   @UseGuards(JwtAuthGuard)
+  @Roles(...LECTURA_BACKOFFICE)
   findAll() {
     return this.modulos.findAll();
   }
 
   @Get(':id')
   @UseGuards(JwtAuthGuard)
+  @Roles(...LECTURA_BACKOFFICE)
   findOne(@Param('id', ParseUUIDPipe) id: string) {
     return this.modulos.findOne(id);
   }
 
   @Get(':id/versiones')
   @UseGuards(JwtAuthGuard)
+  @Roles(...LECTURA_BACKOFFICE)
   findVersiones(@Param('id', ParseUUIDPipe) id: string) {
     return this.modulos.findVersiones(id);
   }
 
   @Get(':id/versiones/:versionId')
   @UseGuards(JwtAuthGuard)
+  @Roles(...LECTURA_BACKOFFICE)
   findVersionOne(
     @Param('id', ParseUUIDPipe) id: string,
     @Param('versionId', ParseUUIDPipe) versionId: string,
@@ -60,12 +67,14 @@ export class ModulosController {
 
   @Patch(':id')
   @UseGuards(JwtAuthGuard)
+  @Roles(...SOLO_ADMINISTRADOR)
   update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateModuloDto) {
     return this.modulos.update(id, dto);
   }
 
   @Post(':id/versiones')
   @UseGuards(JwtAuthGuard)
+  @Roles(...SOLO_ADMINISTRADOR)
   crearVersion(@Param('id', ParseUUIDPipe) id: string) {
     return this.modulos.crearVersion(id);
   }
@@ -74,6 +83,7 @@ export class ModulosController {
   // módulo ya tiene un ACTIVO publicado; el service lo valida.
   @Patch(':id/activar')
   @UseGuards(JwtAuthGuard)
+  @Roles(...SOLO_ADMINISTRADOR)
   activar(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: ActivarModuloDto,
@@ -85,6 +95,7 @@ export class ModulosController {
   // era su única versión), esto elimina el módulo entero.
   @Delete(':id/borrador')
   @UseGuards(JwtAuthGuard)
+  @Roles(...SOLO_ADMINISTRADOR)
   cancelarBorrador(@Param('id', ParseUUIDPipe) id: string) {
     return this.modulos.cancelarBorrador(id);
   }
@@ -95,6 +106,7 @@ export class ModulosController {
   // el service rechaza si la versión no es un BORRADOR.
   @Put(':id/criterios')
   @UseGuards(JwtAuthGuard)
+  @Roles(...SOLO_ADMINISTRADOR)
   setCriterios(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: SetCriteriosDto,
@@ -108,6 +120,7 @@ export class ModulosController {
   // rechaza si la versión no es un BORRADOR.
   @Put(':id/parametros')
   @UseGuards(JwtAuthGuard)
+  @Roles(...SOLO_ADMINISTRADOR)
   setParametrosExamen(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: ParametrosExamenDto,
@@ -117,6 +130,7 @@ export class ModulosController {
 
   @Post(':id/preguntas')
   @UseGuards(JwtAuthGuard)
+  @Roles(...SOLO_ADMINISTRADOR)
   asignarPreguntas(
     @Param('id', ParseUUIDPipe) id: string,
     @Body(new ParseArrayPipe({ items: AsignarPreguntaItemDto }))
@@ -127,6 +141,7 @@ export class ModulosController {
 
   @Patch(':id/preguntas/:preguntaId')
   @UseGuards(JwtAuthGuard)
+  @Roles(...SOLO_ADMINISTRADOR)
   setPreguntaActiva(
     @Param('id', ParseUUIDPipe) id: string,
     @Param('preguntaId', ParseUUIDPipe) preguntaId: string,
@@ -139,6 +154,7 @@ export class ModulosController {
   // setPreguntaActiva, que es la baja lógica y también aplica a lo publicado.
   @Delete(':id/preguntas/:preguntaId')
   @UseGuards(JwtAuthGuard)
+  @Roles(...SOLO_ADMINISTRADOR)
   unassignPregunta(
     @Param('id', ParseUUIDPipe) id: string,
     @Param('preguntaId', ParseUUIDPipe) preguntaId: string,
