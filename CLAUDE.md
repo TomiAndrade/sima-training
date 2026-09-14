@@ -28,7 +28,7 @@ MVP de alta fidelidad para validar la plataforma **SIMA TRAINING** de **Ingenier
 - **Prisma 6** (ORM + migraciones)
 - **JWT** para auth básica (sin roles todavía)
 
-> El backoffice ya consume la API real (ver `src/core/api/`) en **Usuarios, Puestos, Centros de Costo, Módulos, Preguntas, Reglas de asignación, Asignaciones y el Resumen de SIMA CHECK**. Siguen mockeadas **Dashboard y Clientes**; se migran ABM por ABM en sprints siguientes. La app tablet (repo aparte, ver arriba) **ya está conectada**: consume `/tablet/*` y no le queda ningún mock de datos. Lo que sigue pendiente ahí es el **offline de datos**, no la conexión.
+> El backoffice ya consume la API real en **todas** sus pantallas (ver `src/core/api/`) — no queda ningún mock de datos, el último (la vieja pantalla "Clientes") se reemplazó por **Organizaciones** al migrar ese ABM. La app tablet (repo aparte, ver arriba) **ya está conectada**: consume `/tablet/*` y no le queda ningún mock de datos. Lo que sigue pendiente ahí es el **offline de datos**, no la conexión.
 
 ## Cómo correr
 
@@ -212,23 +212,9 @@ El AuditLog **ya está implementado, parcialmente** (Story 9, ver más abajo): c
 
 ## Modelo de dominio (frontends mockeados)
 
-> Lo que **sigue** hardcodeado en archivos `.js`. Quedó **una sola pantalla mockeada, Clientes** (`clients.js` + `users.js`); todo el resto del backoffice consume la API real. `sima-check/data/` **se eliminó entera** — el producto SIMA CHECK no tiene un solo mock.
+> No queda **nada** hardcodeado en archivos `.js` — el backoffice entero consume la API real, `core/data/` (la carpeta que tenía `clients.js`/`users.js`, de cuando existía una pantalla "Clientes" mockeada) ya no existe, y `sima-check/data/` **se eliminó entera** — el producto SIMA CHECK no tiene un solo mock.
 
-### Core Platform — entidades compartidas por toda la plataforma
-
-| Entidad | Archivo | Campos |
-|---|---|---|
-| `Client` | `core/data/clients.js` | `id, name, active` |
-| `User` | `core/data/users.js` | `id, name, role, clientId` |
-
-### SIMA CHECK — entidades del producto de capacitaciones
-
-| Entidad | Archivo | Campos |
-|---|---|---|
-
-`status` admite: `'pending' | 'completed' | 'expired'`
-
-⚠️ Esos tres estados son **del mock, no del modelo real**. La `Asignacion` del backend no tiene "pendiente" ni "completada": sus únicos estados son **Vigente** y **Revocada** (`revocadaAt`). Desde el Sprint 8 "completada" **se deriva**, no se persiste como estado: es una asignación vigente que tiene alguna `Sesion` aprobada de ese módulo (aprobar no revoca ni cambia de estado la asignación). La pantalla vieja de Asignaciones encarnaba justamente esa confusión — ver la fila `training-assignments` en la tabla de SIMA CHECK.
+Estas dos tablas listaban las entidades `Client`/`User` de `core/data/` y las de SIMA CHECK cuando ese modelo todavía existía en archivos `.js` — la carpeta entera se eliminó (ver arriba), así que ya no hay nada que documentar acá. Queda igual la advertencia de abajo, porque el motivo por el que la vieja pantalla de Asignaciones estaba mal modelada sigue siendo relevante para no repetir el error: sus estados `'pending' | 'completed' | 'expired'` eran **del mock, no del modelo real**. La `Asignacion` del backend no tiene "pendiente" ni "completada": sus únicos estados son **Vigente** y **Revocada** (`revocadaAt`). Desde el Sprint 8 "completada" **se deriva**, no se persiste como estado: es una asignación vigente que tiene alguna `Sesion` aprobada de ese módulo (aprobar no revoca ni cambia de estado la asignación). La pantalla vieja de Asignaciones encarnaba justamente esa confusión — ver la fila `training-assignments` en la tabla de SIMA CHECK.
 
 ## Modelo de roles
 
@@ -247,7 +233,7 @@ El rol es un campo de `Vinculacion`, no de `Usuario`, y qué roles admite cada o
 
 Tres secciones:
 - **Panel Principal** → Dashboard de plataforma
-- **Administración** → Clientes, Usuarios, Puestos, Centros de Costo
+- **Administración** → Usuarios, Organizaciones, Puestos, Centros de Costo
 - **Productos** → SIMA CHECK (ítem único; resaltado en cualquier sub-página del producto)
 
 ### Dashboard (Panel Principal)
@@ -286,7 +272,7 @@ La barra de tabs y el breadcrumb `SIMA TRAINING › SIMA CHECK › {tab}` se ren
 
 ### Administración (Core)
 
-- **Clientes** — tabla + modal crear/editar + toggle activo/inactivo
+- **Organizaciones** (`Organizaciones.jsx`, reemplazó a la vieja pantalla "Clientes") — **100% backend**, ABM de `Organizacion` contra `GET/POST/PATCH /organizaciones`: tabla + modal crear/editar + toggle Activa/Inactiva. El alta/edición sólo deja elegir entre **CLIENTE** y **SUBCONTRATISTA** — `INTERNA` existe una única vez ("Ingeniería SIMA") y no se ofrece en el `<select>`, para no invitar a crear una segunda por error; si se está editando la interna, el campo Tipo queda fijo con un aviso. Con tipo SUBCONTRATISTA aparece el select de **organización cliente** (`organizacionPadreId`), acotado a los CLIENTE activos (y nunca la propia fila que se edita) — el backend ya rechaza la auto-referencia, esto es sólo para no ofrecerla. Buscador por nombre, en memoria (mismo criterio que Puestos/Centros de Costo — `GET /organizaciones` no acepta `?q=`)
 - **Puestos** y **Centros de Costo** — **100% backend**, dos pantallas gemelas: tabla + modal crear/editar + Desactivar/Activar (baja lógica) + **buscador por nombre**. El buscador filtra **en memoria y no contra la API**: ni `GET /puestos` ni `GET /centros-costo` aceptan un `?q=`, y el catálogo entero ya está cargado igual (hace falta completo para el contador y para poder seguir nombrando un puesto dado de baja), así que a esta escala un request por tecla sería trabajo de más para el mismo resultado. En Puestos lo pide el tamaño (el seed carga 88); en Centros de Costo (16) lo pide la **consistencia** — dos pantallas gemelas donde una se busca y la otra no se lee como que algo falta, no como una decisión. Normaliza **sin acentos** (`normalizarTexto` de `core/format/texto.js`): el catálogo real está lleno de ellos (Albañil, Cañista, Mecánico, Topografía, Logística) y nadie los tipea al buscar. Con búsqueda activa el contador pasa a "X de Y", porque decir "3 puestos registrados" sería mentira
 - **Usuarios** — **100% backend, ya migrado al modelo de vinculación**: lee y escribe la forma anidada (`usuario.vinculacion.rol` / `.organizacion` / `.pares` / `.parPrincipal`), no los campos planos que el backend dejó de exponer. **El alta manual desde el backoffice está fijada a rol ALUMNO** (decisión de producto: la abstracción de roles del sistema todavía no está definida — no hay pantalla para crear un admin/coordinador/auditor nuevo. Los administradores actuales sí son `Usuario`: los tres primeros se dieron de alta a mano contra producción antes de integrar Auth0 —`sima-training-api/scripts/archivo/crear-administradores.ts`, **archivado y no re-ejecutable**: se autenticaba con el `POST /auth/login` que ya no existe—, y **sumar uno nuevo hoy se hace con `sima-training-api/scripts/crear-admin.ts`**, que escribe por Prisma en vez de por HTTP —el `POST /usuarios` está detrás del guard global, así que un script HTTP necesitaría el token de un admin que ya exista— y **es sólo la mitad del alta**: la otra es crear la cuenta en Auth0 con el mismo email, porque el guard nunca crea usuarios y linkea por email en el primer login, ver "Autenticación (Auth0, guard global)" más arriba). Al crear siempre manda `rol: 'ALUMNO'`. **Al editar, el `<select>` de rol existe sólo para un ADMINISTRADOR** (lo decide `useEsAdministrador()`, que sale de `GET /auth/me`); para COORDINADOR y AUDITOR el rol sigue siendo un badge de solo lectura. Y aun para el admin, `vinculacion.rol` **sólo se manda si el select cambió** (`rolTouched`, mismo patrón que `paresTouched`): omitirlo es lo que evita pisar en silencio el rol de alguien al editarle el nombre. Cambiar el rol limpia la organización elegida si la matriz ya no la permite. El backend rechaza con 403 a cualquiera que no sea administrador, así que esto es UI, no el control real — ver [decisiones/autorizacion.md](docs/decisiones/autorizacion.md). El backend sigue soportando los cuatro roles y la matriz tipo-de-organización ↔ rol sin cambios; el frontend tiene una copia chica de esa matriz (`TIPOS_ORG_POR_ROL` en `Usuarios.jsx`, comentada como espejo de `matriz-rol-organizacion.ts`) para filtrar el `<select>` de Organización según el rol efectivo (ALUMNO al crear, el rol cargado al editar) y no ofrecer una combinación que el backend vaya a rechazar con 400 — ya no existe la opción "— Sin organización —" (`organizacionId` es `NOT NULL`). Si el filtro deja el select sin ninguna organización válida, se muestra un mensaje en vez de un `<select>` vacío y se deshabilita Guardar. Las tabs pasaron de rol (Todos/Alumnos/Operadores) a **tipo de organización** (Todas/SIMA/Subcontratistas/Clientes), que es lo que ahora condiciona qué se puede hacer desde el form; la tabla sigue mostrando el rol y la organización reales de cada usuario sin filtrar. Incluye la sección de pares puesto/centro (ver "ABM de pares" más arriba) e "Importar Excel". **"Importar Excel" también quedó fijado a ALUMNO** (mismo criterio que el alta manual): el Excel dejó de tener columnas `rol`/`empresa`/`email` — la organización se elige una sola vez en el modal, antes de subir el archivo, filtrada a los mismos tipos INTERNA/SUBCONTRATISTA que admiten ALUMNO; si no hay ninguna organización de ese tipo, el modal muestra el mismo aviso que el alta manual y no deja analizar el archivo. Desde que el import resuelve Puesto/Centro de Costo contra el catálogo real, el modal ganó un paso de revisión por fila con resolución por grupo (nueva/parecida/duplicada) antes de confirmar — ver "Import de usuarios" en Backend más abajo. **Ojo con `modal?.mode`, no `modal.mode`:** el JSX del bloque de Rol se evalúa siempre al renderizar la página, aunque el modal esté cerrado (`modal` arranca en `null`) — acceder a `modal.mode` sin optional chaining tumbaba toda la pantalla con un `TypeError` apenas se entraba a Usuarios, no solo al abrir el modal. Mismo patrón que el resto del componente: siempre `modal?.campo`.
 
@@ -323,10 +309,7 @@ Al finalizar, el módulo deja de aparecer en pendientes **sólo si aprobó**. No
 
 ## Datos mockeados
 
-Sólo quedan **dos archivos, los dos de la pantalla Clientes**. La app tablet no tiene ninguno y `sima-check/data/` se eliminó entera.
-
-- **Clientes** (`core/data/clients.js`): YPF, Pan American Energy, TotalEnergies, Pluspetrol, Vista Energy
-- **Usuarios** (`core/data/users.js`): 8 cuentas con roles `administrador` o `coordinador`
+**No queda ninguno.** `core/data/` (que tenía `clients.js` y `users.js`, los últimos dos mocks — de la vieja pantalla "Clientes", reemplazada por Organizaciones, ver arriba) ya no existe. La app tablet tampoco tiene ninguno y `sima-check/data/` se eliminó entera.
 
 `usuarios-mock.js`, `training-modules.js`, `training-assignments.js` y `evaluations.js` se eliminaron al migrar el Resumen y el Dashboard. Ojo con el último: sus estados `pending`/`completed` **no existían en el modelo real**, así que los KPIs que los usaban no se migraron, se **reemplazaron**.
 
@@ -414,7 +397,6 @@ sima-training-backoffice/src/
 │   ├── auth/          sesionContext.js (useSesion, useEsAdministrador) ·
 │   │                    SesionProvider.jsx (pide GET /auth/me UNA vez por sesión;
 │   │                    separados por react-refresh/only-export-components)
-│   ├── data/          clients.js · users.js (ÚNICOS mocks que quedan; solo Clients.jsx)
 │   ├── format/        ← helpers compartidos ENTRE CAPAS: version.js (formatVersionNumero,
 │   │                    el número AÑO.MAYOR.MENOR) · badges.js (roleBadge, origenBadge:
 │   │                    objetos planos de clases, NO JSX, a propósito) ·
@@ -437,7 +419,8 @@ sima-training-backoffice/src/
 │   │                    VerIntentoModal.jsx (el detalle de una rendición pregunta por
 │   │                    pregunta; vive acá y no en sima-check/ porque lo abre
 │   │                    HistorialUsuario.jsx, que es de core/)
-│   └── pages/         Clients.jsx (mock) · Usuarios.jsx · Puestos.jsx · CentrosCosto.jsx ·
+│   └── pages/         Usuarios.jsx · Organizaciones.jsx (reemplazó a la vieja Clients.jsx
+│                      mockeada) · Puestos.jsx · CentrosCosto.jsx ·
 │                      HistorialUsuario.jsx (la hoja de vida de una persona; se entra
 │                      desde Usuarios.jsx por early return, no es una página de App.jsx)
 ├── sima-check/
@@ -506,7 +489,7 @@ Están organizadas **por dominio y no por sprint**: el orden cronológico sólo 
 | [asignaciones.md](docs/decisiones/asignaciones.md) | `ReglaAsignacion` y `Asignacion`, el motor `recalcular()`, la vigencia de las aprobaciones y el veredicto de habilitación |
 | [sesiones.md](docs/decisiones/sesiones.md) | `Sesion` y `Respuesta`: la rendición, la corrección, el umbral congelado y la idempotencia |
 | [tablet.md](docs/decisiones/tablet.md) | El namespace HTTP `/tablet`, la autenticación de alumno y la PWA de `sima-check-app` |
-| [auditoria.md](docs/decisiones/auditoria.md) | `AuditLog`: qué se audita, por qué un diff y no un snapshot, y por qué la tabla es polimórfica |
+| [auditoria.md](docs/decisiones/auditoria.md) | `AuditLog`: las seis entidades auditadas, la identidad real del actor, qué datos personales se redactan, por qué un diff y no un snapshot, y por qué la tabla es polimórfica |
 | [infraestructura.md](docs/decisiones/infraestructura.md) | Storage, deploy, el seed con su orden de borrado, y las constraints que Prisma no conoce |
 | [navegacion.md](docs/decisiones/navegacion.md) | Cómo se decide qué pantalla se ve en el backoffice: el hash de la URL, y qué sobrevive a un F5 y qué no |
 
