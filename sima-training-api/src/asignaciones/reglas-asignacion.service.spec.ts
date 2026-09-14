@@ -4,6 +4,8 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
+import { RolUsuario } from '@prisma/client';
+import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AsignacionesService } from './asignaciones.service';
 import { ReglasAsignacionService } from './reglas-asignacion.service';
@@ -48,6 +50,14 @@ describe('ReglasAsignacionService', () => {
     modulo: { findUnique: jest.Mock };
   };
   let asignaciones: { recalcularEnTx: jest.Mock };
+  let audit: { registrar: jest.Mock };
+
+  const actorIdentidad = {
+    actorUsuarioId: 7,
+    actorNombre: 'María',
+    actorApellido: 'Gómez',
+    actorRol: RolUsuario.ADMINISTRADOR,
+  };
 
   beforeEach(async () => {
     prisma = {
@@ -80,12 +90,14 @@ describe('ReglasAsignacionService', () => {
     asignaciones = {
       recalcularEnTx: jest.fn().mockResolvedValue({ creadas: 0, revocadas: 0 }),
     };
+    audit = { registrar: jest.fn().mockResolvedValue(undefined) };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ReglasAsignacionService,
         { provide: PrismaService, useValue: prisma },
         { provide: AsignacionesService, useValue: asignaciones },
+        { provide: AuditService, useValue: audit },
       ],
     }).compile();
 
@@ -460,5 +472,136 @@ describe('ReglasAsignacionService', () => {
         }),
       }),
     );
+  });
+
+  // --- Auditoría -----------------------------------------------------------
+
+  describe('auditoría', () => {
+    // Fixture completa (a diferencia de `reglaExistente`, que sólo trae los
+    // campos que ya usaban los tests de arriba): para que calcularDiff no
+    // mezcle valores reales con `undefined` de campos que esos fixtures nunca
+    // completaron.
+    const reglaCompleta = {
+      id: 'r1',
+      puestoId: 'p-soldador',
+      centroCostoId: 'c-ypf',
+      moduloId: 'm1',
+      activo: true,
+      deletedAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      createdBy: 'backoffice',
+      updatedBy: null,
+    };
+
+    it('alta nueva (sin existente): CREATE con antes:null en todos los campos reales', async () => {
+      prisma.reglaAsignacion.findFirst.mockResolvedValue(null);
+      prisma.reglaAsignacion.create.mockResolvedValue(reglaCompleta);
+
+      await service.create(dto, 'backoffice', actorIdentidad);
+
+      expect(audit.registrar).toHaveBeenCalledWith(prisma, {
+        entidad: 'ReglaAsignacion',
+        entidadId: 'r1',
+        accion: 'CREATE',
+        diff: {
+          id: { antes: null, despues: 'r1' },
+          puestoId: { antes: null, despues: 'p-soldador' },
+          centroCostoId: { antes: null, despues: 'c-ypf' },
+          moduloId: { antes: null, despues: 'm1' },
+          activo: { antes: null, despues: true },
+        },
+        actor: 'backoffice',
+        ...actorIdentidad,
+      });
+    });
+
+    it('revivir una eliminada es CREATE con antes:null — ignora los valores que tenía la fila borrada', async () => {
+      prisma.reglaAsignacion.findFirst
+        .mockResolvedValueOnce(null) // la viva no existe
+        .mockResolvedValueOnce({
+          ...reglaCompleta,
+          activo: false,
+          moduloId: 'm-viejo', // el módulo que tenía ANTES de borrarse
+          deletedAt: new Date('2026-01-01'),
+        });
+      prisma.reglaAsignacion.update.mockResolvedValue(reglaCompleta);
+
+      await service.create(dto, 'backoffice', actorIdentidad);
+
+      const llamada = audit.registrar.mock.calls[0][1];
+      expect(llamada.accion).toBe('CREATE');
+      // `moduloId` real es 'm1' (el de la fila revivida), no 'm-viejo': el
+      // antes viaja null, así que no hay comparación contra el valor previo.
+      expect(llamada.diff.moduloId).toEqual({ antes: null, despues: 'm1' });
+      expect(llamada.diff.activo).toEqual({ antes: null, despues: true });
+    });
+
+    it('reactivar una VIVA-pero-pausada es UPDATE con el antes/despues real', async () => {
+      const pausada = { ...reglaCompleta, activo: false };
+      prisma.reglaAsignacion.findFirst.mockResolvedValue(pausada); // es la "viva"
+      prisma.reglaAsignacion.update.mockResolvedValue(reglaCompleta); // activo: true
+
+      await service.create(dto, 'backoffice', actorIdentidad);
+
+      expect(audit.registrar).toHaveBeenCalledWith(
+        prisma,
+        expect.objectContaining({
+          accion: 'UPDATE',
+          diff: { activo: { antes: false, despues: true } },
+        }),
+      );
+    });
+
+    it('update() real: diff con sólo el campo que cambió', async () => {
+      prisma.reglaAsignacion.findUnique.mockResolvedValue(reglaCompleta);
+      prisma.reglaAsignacion.findFirst.mockResolvedValue(null); // destino libre
+      prisma.reglaAsignacion.update.mockResolvedValue({
+        ...reglaCompleta,
+        moduloId: 'm2',
+      });
+
+      await service.update('r1', { moduloId: 'm2' }, 'backoffice', actorIdentidad);
+
+      expect(audit.registrar).toHaveBeenCalledWith(prisma, {
+        entidad: 'ReglaAsignacion',
+        entidadId: 'r1',
+        accion: 'UPDATE',
+        diff: { moduloId: { antes: 'm1', despues: 'm2' } },
+        actor: 'backoffice',
+        ...actorIdentidad,
+      });
+    });
+
+    it('remove(): DELETE con el antes/despues real de deletedAt, no forzado a null', async () => {
+      prisma.reglaAsignacion.findUnique.mockResolvedValue(reglaCompleta);
+      const fecha = new Date('2026-09-10T12:00:00.000Z');
+      prisma.reglaAsignacion.update.mockResolvedValue({
+        ...reglaCompleta,
+        deletedAt: fecha,
+      });
+
+      await service.remove('r1', 'backoffice', actorIdentidad);
+
+      expect(audit.registrar).toHaveBeenCalledWith(prisma, {
+        entidad: 'ReglaAsignacion',
+        entidadId: 'r1',
+        accion: 'DELETE',
+        diff: { deletedAt: { antes: null, despues: fecha } },
+        actor: 'backoffice',
+        ...actorIdentidad,
+      });
+    });
+
+    it('sin actorIdentidad, el log queda sin las 4 columnas de actor', async () => {
+      prisma.reglaAsignacion.findFirst.mockResolvedValue(null);
+      prisma.reglaAsignacion.create.mockResolvedValue(reglaCompleta);
+
+      await service.create(dto);
+
+      const llamada = audit.registrar.mock.calls[0][1];
+      expect(llamada.actor).toBe('backoffice');
+      expect(llamada.actorUsuarioId).toBeUndefined();
+    });
   });
 });

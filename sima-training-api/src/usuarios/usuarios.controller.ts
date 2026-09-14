@@ -12,6 +12,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
+import { actorDeIdentidad } from '../audit/actor-de-identidad';
 import { AuditService } from '../audit/audit.service';
 import { Actor } from '../auth/actor.decorator';
 import { IdentidadResuelta, JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -36,8 +37,8 @@ export class UsuariosController {
   @Post()
   @UseGuards(JwtAuthGuard)
   @Roles(...SOLO_ADMINISTRADOR)
-  create(@Body() dto: CreateUsuarioDto) {
-    return this.usuarios.create(dto);
+  create(@Body() dto: CreateUsuarioDto, @Actor() actor: IdentidadResuelta) {
+    return this.usuarios.create(dto, 'backoffice', actorDeIdentidad(actor));
   }
 
   @Get()
@@ -84,14 +85,23 @@ export class UsuariosController {
     // default; lo que se manda es el ROL de quien hace el cambio, que es otra
     // cosa: es lo que impide que un COORDINADOR se auto-ascienda tocando
     // `vinculacion.rol` en el body. Ver UsuariosService.update().
-    return this.usuarios.update(id, dto, undefined, actor.rol);
+    return this.usuarios.update(
+      id,
+      dto,
+      undefined,
+      actor.rol,
+      actorDeIdentidad(actor),
+    );
   }
 
   @Delete(':id')
   @UseGuards(JwtAuthGuard)
   @Roles(...GESTION_NOMINA)
   @HttpCode(HttpStatus.NO_CONTENT)
-  async remove(@Param('id', ParseIntPipe) id: number) {
-    await this.usuarios.remove(id);
+  async remove(
+    @Param('id', ParseIntPipe) id: number,
+    @Actor() actor: IdentidadResuelta,
+  ) {
+    await this.usuarios.remove(id, actorDeIdentidad(actor));
   }
 }

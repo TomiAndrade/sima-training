@@ -4,7 +4,8 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
-import { Prisma } from '@prisma/client';
+import { Prisma, RolUsuario } from '@prisma/client';
+import { AuditService } from '../audit/audit.service';
 import { ModulosService } from '../modulos/modulos.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
@@ -45,6 +46,7 @@ describe('PreguntasService', () => {
     guardar: jest.Mock;
     borrar: jest.Mock;
   };
+  let audit: { registrar: jest.Mock };
 
   beforeEach(async () => {
     prisma = {
@@ -73,6 +75,7 @@ describe('PreguntasService', () => {
       guardar: jest.fn().mockResolvedValue(CLAVE),
       borrar: jest.fn().mockResolvedValue(undefined),
     };
+    audit = { registrar: jest.fn().mockResolvedValue(undefined) };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -80,6 +83,7 @@ describe('PreguntasService', () => {
         { provide: PrismaService, useValue: prisma },
         { provide: ModulosService, useValue: modulos },
         { provide: StorageService, useValue: storage },
+        { provide: AuditService, useValue: audit },
       ],
     }).compile();
 
@@ -416,6 +420,97 @@ describe('PreguntasService', () => {
           }),
         }),
       );
+    });
+  });
+
+  describe('auditoría', () => {
+    const actorIdentidad = {
+      actorUsuarioId: 7,
+      actorNombre: 'María',
+      actorApellido: 'Gómez',
+      actorRol: RolUsuario.ADMINISTRADOR,
+    };
+
+    it('create genera un CREATE con antes:null, sin campos redactados', async () => {
+      prisma.pregunta.create.mockResolvedValue({
+        id: 'p1',
+        texto: '¿El casco es obligatorio?',
+        tipo: 'VERDADERO_FALSO',
+        respuestaCorrecta: 'Verdadero',
+        activa: true,
+      });
+
+      await service.create(
+        {
+          texto: '¿El casco es obligatorio?',
+          tipo: 'VERDADERO_FALSO' as any,
+          respuestaCorrecta: 'Verdadero',
+        },
+        actorIdentidad,
+      );
+
+      expect(audit.registrar).toHaveBeenCalledWith(prisma, {
+        entidad: 'Pregunta',
+        entidadId: 'p1',
+        accion: 'CREATE',
+        diff: {
+          id: { antes: null, despues: 'p1' },
+          texto: { antes: null, despues: '¿El casco es obligatorio?' },
+          tipo: { antes: null, despues: 'VERDADERO_FALSO' },
+          respuestaCorrecta: { antes: null, despues: 'Verdadero' },
+          activa: { antes: null, despues: true },
+        },
+        actor: 'backoffice',
+        ...actorIdentidad,
+      });
+    });
+
+    it('setActiva(false) genera un UPDATE con sólo "activa" en el diff', async () => {
+      prisma.pregunta.findUnique.mockResolvedValue({
+        id: '1',
+        texto: 'x',
+        tipo: 'VERDADERO_FALSO',
+        activa: true,
+      });
+      prisma.pregunta.update.mockResolvedValue({
+        id: '1',
+        texto: 'x',
+        tipo: 'VERDADERO_FALSO',
+        activa: false,
+      });
+
+      await service.setActiva('1', false, actorIdentidad);
+
+      expect(audit.registrar).toHaveBeenCalledWith(prisma, {
+        entidad: 'Pregunta',
+        entidadId: '1',
+        accion: 'UPDATE',
+        diff: { activa: { antes: true, despues: false } },
+        actor: 'backoffice',
+        ...actorIdentidad,
+      });
+    });
+
+    it('setActiva sobre una pregunta inexistente es 404 y no audita', async () => {
+      prisma.pregunta.findUnique.mockResolvedValue(null);
+
+      await expect(service.setActiva('x', false)).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+      expect(audit.registrar).not.toHaveBeenCalled();
+    });
+
+    it('sin actorIdentidad, el log queda sin las 4 columnas de actor', async () => {
+      prisma.pregunta.create.mockResolvedValue({ id: 'p1', activa: true });
+
+      await service.create({
+        texto: 'x',
+        tipo: 'VERDADERO_FALSO' as any,
+      });
+
+      const llamada = audit.registrar.mock.calls[0][1];
+      expect(llamada.actor).toBe('backoffice');
+      expect(llamada.actorUsuarioId).toBeUndefined();
     });
   });
 });

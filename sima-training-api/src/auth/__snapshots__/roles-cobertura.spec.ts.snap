@@ -6,6 +6,7 @@ exports[`cobertura de autorización la matriz efectiva no cambió sin querer 1`]
   "POST   /asignaciones                                 ADMINISTRADOR,COORDINADOR",
   "PATCH  /asignaciones/:id/revocar                     ADMINISTRADOR,COORDINADOR",
   "POST   /asignaciones/recalcular/:usuarioId           ADMINISTRADOR,COORDINADOR",
+  "GET    /audit-log                                    ADMINISTRADOR,AUDITOR",
   "GET    /auth/me                                      ADMINISTRADOR,COORDINADOR,AUDITOR",
   "GET    /bases-conocimiento                           ADMINISTRADOR,COORDINADOR,AUDITOR",
   "POST   /bases-conocimiento                           ADMINISTRADOR",

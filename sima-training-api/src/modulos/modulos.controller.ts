@@ -11,7 +11,9 @@ import {
   Put,
   UseGuards,
 } from '@nestjs/common';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { actorDeIdentidad } from '../audit/actor-de-identidad';
+import { Actor } from '../auth/actor.decorator';
+import { IdentidadResuelta, JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { LECTURA_BACKOFFICE, SOLO_ADMINISTRADOR } from '../auth/matriz-permisos';
 import { Roles } from '../auth/roles.decorator';
 import { ActivarModuloDto } from './dto/activar-modulo.dto';
@@ -30,8 +32,8 @@ export class ModulosController {
   @Post()
   @UseGuards(JwtAuthGuard)
   @Roles(...SOLO_ADMINISTRADOR)
-  create(@Body() dto: CreateModuloDto) {
-    return this.modulos.create(dto);
+  create(@Body() dto: CreateModuloDto, @Actor() actor: IdentidadResuelta) {
+    return this.modulos.create(dto, actorDeIdentidad(actor));
   }
 
   @Get()
@@ -68,15 +70,22 @@ export class ModulosController {
   @Patch(':id')
   @UseGuards(JwtAuthGuard)
   @Roles(...SOLO_ADMINISTRADOR)
-  update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateModuloDto) {
-    return this.modulos.update(id, dto);
+  update(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateModuloDto,
+    @Actor() actor: IdentidadResuelta,
+  ) {
+    return this.modulos.update(id, dto, actorDeIdentidad(actor));
   }
 
   @Post(':id/versiones')
   @UseGuards(JwtAuthGuard)
   @Roles(...SOLO_ADMINISTRADOR)
-  crearVersion(@Param('id', ParseUUIDPipe) id: string) {
-    return this.modulos.crearVersion(id);
+  crearVersion(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Actor() actor: IdentidadResuelta,
+  ) {
+    return this.modulos.crearVersion(id, actorDeIdentidad(actor));
   }
 
   // esNuevaLinea (actualización/versión nueva) es obligatorio solo cuando el
@@ -87,8 +96,9 @@ export class ModulosController {
   activar(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: ActivarModuloDto,
+    @Actor() actor: IdentidadResuelta,
   ) {
-    return this.modulos.activar(id, dto.esNuevaLinea);
+    return this.modulos.activar(id, dto.esNuevaLinea, actorDeIdentidad(actor));
   }
 
   // Descarta el borrador en curso. Si el módulo nunca se publicó (el borrador
@@ -96,8 +106,11 @@ export class ModulosController {
   @Delete(':id/borrador')
   @UseGuards(JwtAuthGuard)
   @Roles(...SOLO_ADMINISTRADOR)
-  cancelarBorrador(@Param('id', ParseUUIDPipe) id: string) {
-    return this.modulos.cancelarBorrador(id);
+  cancelarBorrador(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Actor() actor: IdentidadResuelta,
+  ) {
+    return this.modulos.cancelarBorrador(id, actorDeIdentidad(actor));
   }
 
   // Set COMPLETO de criterios de la versión en edición (PUT, no PATCH: el
@@ -110,8 +123,9 @@ export class ModulosController {
   setCriterios(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: SetCriteriosDto,
+    @Actor() actor: IdentidadResuelta,
   ) {
-    return this.modulos.setCriterios(id, dto);
+    return this.modulos.setCriterios(id, dto, actorDeIdentidad(actor));
   }
 
   // Cómo se rinde la versión en edición (cuántas preguntas, umbral, reintentos,
@@ -124,8 +138,9 @@ export class ModulosController {
   setParametrosExamen(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: ParametrosExamenDto,
+    @Actor() actor: IdentidadResuelta,
   ) {
-    return this.modulos.setParametrosExamen(id, dto);
+    return this.modulos.setParametrosExamen(id, dto, actorDeIdentidad(actor));
   }
 
   @Post(':id/preguntas')
@@ -135,8 +150,9 @@ export class ModulosController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body(new ParseArrayPipe({ items: AsignarPreguntaItemDto }))
     items: AsignarPreguntaItemDto[],
+    @Actor() actor: IdentidadResuelta,
   ) {
-    return this.modulos.asignarPreguntas(id, items);
+    return this.modulos.asignarPreguntas(id, items, actorDeIdentidad(actor));
   }
 
   @Patch(':id/preguntas/:preguntaId')
@@ -146,8 +162,14 @@ export class ModulosController {
     @Param('id', ParseUUIDPipe) id: string,
     @Param('preguntaId', ParseUUIDPipe) preguntaId: string,
     @Body() dto: TogglePreguntaDto,
+    @Actor() actor: IdentidadResuelta,
   ) {
-    return this.modulos.setPreguntaActiva(id, preguntaId, dto.activa);
+    return this.modulos.setPreguntaActiva(
+      id,
+      preguntaId,
+      dto.activa,
+      actorDeIdentidad(actor),
+    );
   }
 
   // Unassign duro: solo sobre un BORRADOR (el service lo valida). Distinto de
@@ -158,7 +180,8 @@ export class ModulosController {
   unassignPregunta(
     @Param('id', ParseUUIDPipe) id: string,
     @Param('preguntaId', ParseUUIDPipe) preguntaId: string,
+    @Actor() actor: IdentidadResuelta,
   ) {
-    return this.modulos.unassignPregunta(id, preguntaId);
+    return this.modulos.unassignPregunta(id, preguntaId, actorDeIdentidad(actor));
   }
 }

@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { RolUsuario, TipoPregunta } from '@prisma/client';
 import { Workbook, Worksheet } from 'exceljs';
+import { ActorIdentidad } from '../audit/actor-de-identidad';
 import { ModulosService } from '../modulos/modulos.service';
 import { PreguntasService } from '../preguntas/preguntas.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -325,6 +326,7 @@ export class ImportService {
 
   async confirmarUsuarios(
     dto: ConfirmarImportUsuariosDto,
+    actorIdentidad?: ActorIdentidad,
   ): Promise<ImportResult> {
     const errors: ImportError[] = [];
     let created = 0;
@@ -365,6 +367,7 @@ export class ImportService {
             },
           },
           'import',
+          actorIdentidad,
         );
         created++;
       } catch (err) {

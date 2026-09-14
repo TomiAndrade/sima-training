@@ -20,7 +20,7 @@ import { UsuariosService } from './usuarios.service';
 describe('UsuariosService.update — escalada de privilegios', () => {
   let service: UsuariosService;
   let prisma: {
-    usuario: { findFirst: jest.Mock; update: jest.Mock };
+    usuario: { findFirst: jest.Mock; findUnique: jest.Mock; update: jest.Mock };
     organizacion: { findUnique: jest.Mock };
     vinculacion: { findUnique: jest.Mock; update: jest.Mock };
     vinculacionPuestoCentro: { deleteMany: jest.Mock };
@@ -48,6 +48,7 @@ describe('UsuariosService.update — escalada de privilegios', () => {
     prisma = {
       usuario: {
         findFirst: jest.fn().mockResolvedValue(COORDINADOR_EN_BASE),
+        findUnique: jest.fn().mockResolvedValue(COORDINADOR_EN_BASE),
         update: jest.fn().mockResolvedValue(COORDINADOR_EN_BASE),
       },
       organizacion: {

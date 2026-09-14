@@ -10,7 +10,9 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { actorDeIdentidad } from '../audit/actor-de-identidad';
+import { Actor } from '../auth/actor.decorator';
+import { IdentidadResuelta, JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { GESTION_NOMINA, LECTURA_BACKOFFICE } from '../auth/matriz-permisos';
 import { Roles } from '../auth/roles.decorator';
 import { CreateReglaAsignacionDto } from './dto/create-regla-asignacion.dto';
@@ -25,8 +27,11 @@ export class ReglasAsignacionController {
   @Post()
   @UseGuards(JwtAuthGuard)
   @Roles(...GESTION_NOMINA)
-  create(@Body() dto: CreateReglaAsignacionDto) {
-    return this.reglas.create(dto);
+  create(
+    @Body() dto: CreateReglaAsignacionDto,
+    @Actor() actor: IdentidadResuelta,
+  ) {
+    return this.reglas.create(dto, 'backoffice', actorDeIdentidad(actor));
   }
 
   @Get()
@@ -45,8 +50,9 @@ export class ReglasAsignacionController {
   update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateReglaAsignacionDto,
+    @Actor() actor: IdentidadResuelta,
   ) {
-    return this.reglas.update(id, dto);
+    return this.reglas.update(id, dto, 'backoffice', actorDeIdentidad(actor));
   }
 
   // Baja LÓGICA (deletedAt), no un borrado real: la fila es la única evidencia
@@ -57,7 +63,10 @@ export class ReglasAsignacionController {
   @Delete(':id')
   @UseGuards(JwtAuthGuard)
   @Roles(...GESTION_NOMINA)
-  remove(@Param('id', ParseUUIDPipe) id: string) {
-    return this.reglas.remove(id);
+  remove(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Actor() actor: IdentidadResuelta,
+  ) {
+    return this.reglas.remove(id, 'backoffice', actorDeIdentidad(actor));
   }
 }

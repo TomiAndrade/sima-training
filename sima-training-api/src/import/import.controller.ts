@@ -7,7 +7,9 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { actorDeIdentidad } from '../audit/actor-de-identidad';
+import { Actor } from '../auth/actor.decorator';
+import { IdentidadResuelta, JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { GESTION_NOMINA, SOLO_ADMINISTRADOR } from '../auth/matriz-permisos';
 import { Roles } from '../auth/roles.decorator';
 import { ConfirmarImportPreguntasDto } from './dto/confirmar-import-preguntas.dto';
@@ -33,8 +35,11 @@ export class ImportController {
   @Post('usuarios/confirm')
   @UseGuards(JwtAuthGuard)
   @Roles(...GESTION_NOMINA)
-  confirmarUsuarios(@Body() dto: ConfirmarImportUsuariosDto) {
-    return this.importService.confirmarUsuarios(dto);
+  confirmarUsuarios(
+    @Body() dto: ConfirmarImportUsuariosDto,
+    @Actor() actor: IdentidadResuelta,
+  ) {
+    return this.importService.confirmarUsuarios(dto, actorDeIdentidad(actor));
   }
 
   @Post('preguntas/preview')

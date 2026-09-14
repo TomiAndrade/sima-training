@@ -73,6 +73,80 @@ describe('calcularDiff', () => {
     expect(calcularDiff({ email: undefined }, { email: null })).toEqual({});
     expect(calcularDiff({ email: null }, { email: undefined })).toEqual({});
   });
+
+  it('alta sin valor en un campo no genera entrada — ni siquiera null → null', () => {
+    // deletedAt nace en null: antes (no hay fila) y el valor real son el
+    // mismo "no hay nada", así que no es una entrada de diff.
+    const diff = calcularDiff(null, { nombre: 'Juan', deletedAt: null });
+    expect(diff).toEqual({ nombre: { antes: null, despues: 'Juan' } });
+  });
+
+  describe('camposRedactados', () => {
+    it('alta: un campo redactado con valor real entra como { redactado: true }, sin el valor', () => {
+      const diff = calcularDiff(
+        null,
+        { nombre: 'Juan', dni: '30111222' },
+        [],
+        ['dni'],
+      );
+      expect(diff).toEqual({
+        nombre: { antes: null, despues: 'Juan' },
+        dni: { redactado: true },
+      });
+    });
+
+    it('alta sin valor en el campo redactado: no genera ninguna entrada', () => {
+      // Sin email no hay nada que redactar — mismo criterio que cualquier
+      // otro campo que nace en null (ver el test de arriba).
+      const diff = calcularDiff(null, { nombre: 'Juan', email: null }, [], [
+        'email',
+      ]);
+      expect(diff).toEqual({ nombre: { antes: null, despues: 'Juan' } });
+    });
+
+    it('baja: un campo redactado que tenía valor entra como { redactado: true }', () => {
+      const diff = calcularDiff(
+        { nombre: 'Juan', dni: '30111222' },
+        null,
+        [],
+        ['dni'],
+      );
+      expect(diff).toEqual({
+        nombre: { antes: 'Juan', despues: null },
+        dni: { redactado: true },
+      });
+    });
+
+    it('update: campo redactado que cambió entra como { redactado: true }, nunca los valores', () => {
+      const diff = calcularDiff(
+        { dni: '30111222' },
+        { dni: '30999888' },
+        [],
+        ['dni'],
+      );
+      expect(diff).toEqual({ dni: { redactado: true } });
+    });
+
+    it('update: campo redactado que NO cambió no genera ninguna entrada', () => {
+      const diff = calcularDiff(
+        { nombre: 'Juan', dni: '30111222' },
+        { nombre: 'Ana', dni: '30111222' },
+        [],
+        ['dni'],
+      );
+      expect(diff).toEqual({ nombre: { antes: 'Juan', despues: 'Ana' } });
+    });
+
+    it('un campo puede estar ignorado Y redactado a la vez: gana ignorado (no entra)', () => {
+      const diff = calcularDiff(
+        { dni: '30111222' },
+        { dni: '30999888' },
+        ['dni'],
+        ['dni'],
+      );
+      expect(diff).toEqual({});
+    });
+  });
 });
 
 describe('hayCambios', () => {

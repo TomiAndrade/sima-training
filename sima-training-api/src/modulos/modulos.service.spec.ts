@@ -4,6 +4,8 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
+import { RolUsuario } from '@prisma/client';
+import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { ModulosService } from './modulos.service';
 
@@ -41,6 +43,7 @@ describe('ModulosService', () => {
     pregunta: { count: jest.Mock; findUnique: jest.Mock; findMany: jest.Mock };
     $transaction: jest.Mock;
   };
+  let audit: { registrar: jest.Mock };
 
   beforeEach(async () => {
     prisma = {
@@ -83,9 +86,14 @@ describe('ModulosService', () => {
       },
       $transaction: jest.fn((cb) => cb(prisma)),
     };
+    audit = { registrar: jest.fn().mockResolvedValue(undefined) };
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [ModulosService, { provide: PrismaService, useValue: prisma }],
+      providers: [
+        ModulosService,
+        { provide: PrismaService, useValue: prisma },
+        { provide: AuditService, useValue: audit },
+      ],
     }).compile();
 
     service = module.get(ModulosService);
@@ -185,6 +193,7 @@ describe('ModulosService', () => {
   });
 
   it('update edita nombre/descripcion del módulo', async () => {
+    prisma.modulo.findUnique.mockResolvedValue({ id: 'm1', nombre: 'Viejo' });
     prisma.modulo.update.mockResolvedValue({ id: 'm1', nombre: 'Nuevo' });
     await service.update('m1', { nombre: 'Nuevo' });
     expect(prisma.modulo.update).toHaveBeenCalledWith({
@@ -645,7 +654,10 @@ describe('ModulosService', () => {
     };
 
     it('create los manda a la v1, no al módulo', async () => {
-      prisma.modulo.create.mockResolvedValue({ id: 'm1' });
+      prisma.modulo.create.mockResolvedValue({
+        id: 'm1',
+        versiones: [{ id: 'v1', numeroVersion: 1, estado: 'BORRADOR' }],
+      });
 
       await service.create({ nombre: 'Altura', ...PARAMETROS });
 
@@ -989,5 +1001,313 @@ describe('ModulosService', () => {
     });
     expect(prisma.modulo.delete).toHaveBeenCalledWith({ where: { id: 'm1' } });
     expect(resultado).toEqual({ moduloEliminado: true });
+  });
+
+  describe('auditoría', () => {
+    const actorIdentidad = {
+      actorUsuarioId: 7,
+      actorNombre: 'María',
+      actorApellido: 'Gómez',
+      actorRol: RolUsuario.ADMINISTRADOR,
+    };
+
+    // Lo que pidió verificar el usuario: un cambio de criterios que mueve
+    // MUCHAS preguntas (acá 50) deja UNA sola fila de AuditLog en
+    // ModuloVersion, no una por ModuloVersionPregunta tocada.
+    it('setCriterios que agrega 50 preguntas genera UNA sola fila de auditoría', async () => {
+      prisma.moduloVersion.findFirst.mockImplementation(({ where }) =>
+        where.estado === 'BORRADOR'
+          ? { id: 'v-borrador', estado: 'BORRADOR' }
+          : null,
+      );
+      const pool = Array.from({ length: 50 }, (_, i) => `p${i}`);
+      prisma.moduloVersionCriterio.findMany.mockResolvedValue([
+        { id: 'c1', baseConocimientoId: 'base-1', nivelId: 'nivel-1' },
+      ]);
+      prisma.pregunta.findMany.mockResolvedValue(pool.map((id) => ({ id })));
+      prisma.moduloVersionPregunta.findMany.mockResolvedValue([]);
+      prisma.moduloVersionPregunta.aggregate.mockResolvedValue({
+        _max: { orden: 0 },
+      });
+
+      await service.setCriterios(
+        'm1',
+        { criterios: [{ baseConocimientoId: 'base-1', nivelId: 'nivel-1' }] },
+        actorIdentidad,
+      );
+
+      const llamadasModuloVersion = audit.registrar.mock.calls.filter(
+        (c) => c[1].entidad === 'ModuloVersion',
+      );
+      expect(llamadasModuloVersion).toHaveLength(1);
+      expect(llamadasModuloVersion[0][1]).toEqual({
+        entidad: 'ModuloVersion',
+        entidadId: 'v-borrador',
+        accion: 'UPDATE',
+        diff: {
+          preguntas: { antes: null, despues: { agregadas: 50, quitadas: 0 } },
+        },
+        actor: 'backoffice',
+        ...actorIdentidad,
+      });
+    });
+
+    it('setCriterios idempotente (0 agregadas, 0 quitadas) no genera ninguna fila', async () => {
+      prisma.moduloVersion.findFirst.mockImplementation(({ where }) =>
+        where.estado === 'BORRADOR'
+          ? { id: 'v-borrador', estado: 'BORRADOR' }
+          : null,
+      );
+      prisma.moduloVersionCriterio.findMany.mockResolvedValue([
+        { id: 'c1', baseConocimientoId: 'base-1', nivelId: 'nivel-1' },
+      ]);
+      prisma.pregunta.findMany.mockResolvedValue([{ id: 'p1' }]);
+      prisma.moduloVersionPregunta.findMany.mockResolvedValue([
+        { preguntaId: 'p1', origen: 'CRITERIO', activa: true },
+      ]);
+
+      await service.setCriterios('m1', {
+        criterios: [{ baseConocimientoId: 'base-1', nivelId: 'nivel-1' }],
+      });
+
+      expect(audit.registrar).not.toHaveBeenCalledWith(
+        prisma,
+        expect.objectContaining({ entidad: 'ModuloVersion' }),
+      );
+    });
+
+    it('asignarPreguntas de 3 preguntas genera UNA fila con las tres', async () => {
+      prisma.moduloVersion.findFirst.mockResolvedValue({ id: 'v-borrador' });
+      prisma.pregunta.count.mockResolvedValue(3);
+      prisma.moduloVersionPregunta.createMany.mockResolvedValue({ count: 3 });
+      prisma.moduloVersionPregunta.findMany.mockResolvedValue([]);
+
+      await service.asignarPreguntas(
+        'm1',
+        [{ preguntaId: 'p1' }, { preguntaId: 'p2' }, { preguntaId: 'p3' }],
+        actorIdentidad,
+      );
+
+      expect(audit.registrar).toHaveBeenCalledWith(prisma, {
+        entidad: 'ModuloVersion',
+        entidadId: 'v-borrador',
+        accion: 'UPDATE',
+        diff: {
+          preguntas: { antes: null, despues: { agregadas: ['p1', 'p2', 'p3'] } },
+        },
+        actor: 'backoffice',
+        ...actorIdentidad,
+      });
+    });
+
+    it('setPreguntaActiva registra qué pregunta cambió y a qué valor', async () => {
+      prisma.moduloVersion.findFirst.mockResolvedValue({ id: 'v-borrador' });
+      prisma.moduloVersionPregunta.update.mockResolvedValue({
+        preguntaId: 'p1',
+        activa: false,
+      });
+
+      await service.setPreguntaActiva('m1', 'p1', false, actorIdentidad);
+
+      expect(audit.registrar).toHaveBeenCalledWith(prisma, {
+        entidad: 'ModuloVersion',
+        entidadId: 'v-borrador',
+        accion: 'UPDATE',
+        diff: {
+          pregunta: {
+            antes: { id: 'p1', activa: true },
+            despues: { id: 'p1', activa: false },
+          },
+        },
+        actor: 'backoffice',
+        ...actorIdentidad,
+      });
+    });
+
+    it('unassignPregunta registra la pregunta quitada', async () => {
+      prisma.moduloVersion.findFirst.mockImplementation(({ where }) =>
+        where.estado === 'BORRADOR'
+          ? { id: 'v-borrador', estado: 'BORRADOR' }
+          : null,
+      );
+
+      await service.unassignPregunta('m1', 'p1', actorIdentidad);
+
+      expect(audit.registrar).toHaveBeenCalledWith(prisma, {
+        entidad: 'ModuloVersion',
+        entidadId: 'v-borrador',
+        accion: 'UPDATE',
+        diff: { pregunta: { antes: { id: 'p1' }, despues: null } },
+        actor: 'backoffice',
+        ...actorIdentidad,
+      });
+    });
+
+    it('create: un CREATE de Modulo y un CREATE de ModuloVersion (v1), dos filas distintas', async () => {
+      prisma.modulo.create.mockResolvedValue({
+        id: 'm1',
+        nombre: 'SIMA Básico',
+        activo: true,
+        vigenciaMeses: null,
+        demoPublico: false,
+        versiones: [{ id: 'v1', numeroVersion: 1, estado: 'BORRADOR' }],
+      });
+
+      await service.create({ nombre: 'SIMA Básico' }, actorIdentidad);
+
+      expect(audit.registrar).toHaveBeenCalledWith(
+        prisma,
+        expect.objectContaining({ entidad: 'Modulo', entidadId: 'm1', accion: 'CREATE' }),
+      );
+      expect(audit.registrar).toHaveBeenCalledWith(
+        prisma,
+        expect.objectContaining({
+          entidad: 'ModuloVersion',
+          entidadId: 'v1',
+          accion: 'CREATE',
+        }),
+      );
+    });
+
+    it('update: diff sólo con lo que cambió', async () => {
+      prisma.modulo.findUnique.mockResolvedValue({
+        id: 'm1',
+        nombre: 'Viejo',
+        activo: true,
+      });
+      prisma.modulo.update.mockResolvedValue({
+        id: 'm1',
+        nombre: 'Nuevo',
+        activo: true,
+      });
+
+      await service.update('m1', { nombre: 'Nuevo' }, actorIdentidad);
+
+      expect(audit.registrar).toHaveBeenCalledWith(prisma, {
+        entidad: 'Modulo',
+        entidadId: 'm1',
+        accion: 'UPDATE',
+        diff: { nombre: { antes: 'Viejo', despues: 'Nuevo' } },
+        actor: 'backoffice',
+        ...actorIdentidad,
+      });
+    });
+
+    it('activar con un ACTIVO previo: dos filas de ModuloVersion (la archivada y la publicada)', async () => {
+      const activo = { id: 'v-activo', anio: 2026, mayor: 1, menor: 0 };
+      prisma.moduloVersion.findFirst.mockImplementation(({ where }) =>
+        where.estado === 'BORRADOR' ? { id: 'v-borrador' } : activo,
+      );
+      prisma.moduloVersion.update.mockImplementation(({ where, data }) => ({
+        id: where.id,
+        ...data,
+      }));
+
+      await service.activar('m1', false, actorIdentidad);
+
+      const llamadasModuloVersion = audit.registrar.mock.calls.filter(
+        (c) => c[1].entidad === 'ModuloVersion',
+      );
+      expect(llamadasModuloVersion).toHaveLength(2);
+      expect(llamadasModuloVersion.map((c) => c[1].entidadId).sort()).toEqual(
+        ['v-activo', 'v-borrador'].sort(),
+      );
+      const archivada = llamadasModuloVersion.find(
+        (c) => c[1].entidadId === 'v-activo',
+      )![1];
+      expect(archivada.diff.estado).toEqual({
+        antes: undefined,
+        despues: 'ARCHIVADO',
+      });
+    });
+
+    it('activar la primera publicación (sin ACTIVO previo): una sola fila de ModuloVersion', async () => {
+      prisma.moduloVersion.findFirst.mockImplementation(({ where }) =>
+        where.estado === 'BORRADOR' ? { id: 'v-borrador' } : null,
+      );
+      prisma.moduloVersion.aggregate.mockResolvedValue({ _max: { mayor: 0 } });
+      prisma.moduloVersion.update.mockResolvedValue({
+        id: 'v-borrador',
+        estado: 'ACTIVO',
+      });
+
+      await service.activar('m1', undefined, actorIdentidad);
+
+      const llamadasModuloVersion = audit.registrar.mock.calls.filter(
+        (c) => c[1].entidad === 'ModuloVersion',
+      );
+      expect(llamadasModuloVersion).toHaveLength(1);
+    });
+
+    it('cancelarBorrador (con ACTIVO de respaldo): DELETE de ModuloVersion, sin tocar Modulo', async () => {
+      prisma.moduloVersion.findFirst.mockImplementation(({ where }) =>
+        where.estado === 'BORRADOR' ? { id: 'v-borrador' } : { id: 'v-activo' },
+      );
+
+      await service.cancelarBorrador('m1', actorIdentidad);
+
+      expect(audit.registrar).toHaveBeenCalledWith(prisma, {
+        entidad: 'ModuloVersion',
+        entidadId: 'v-borrador',
+        accion: 'DELETE',
+        diff: { id: { antes: 'v-borrador', despues: null } },
+        actor: 'backoffice',
+        ...actorIdentidad,
+      });
+      expect(audit.registrar).not.toHaveBeenCalledWith(
+        prisma,
+        expect.objectContaining({ entidad: 'Modulo' }),
+      );
+    });
+
+    it('cancelarBorrador (módulo nunca publicado): DELETE de ModuloVersion Y de Modulo', async () => {
+      prisma.moduloVersion.findFirst.mockImplementation(({ where }) =>
+        where.estado === 'BORRADOR' ? { id: 'v-borrador' } : null,
+      );
+      prisma.modulo.findUnique.mockResolvedValue({
+        id: 'm1',
+        nombre: 'Nunca publicado',
+        activo: true,
+      });
+
+      await service.cancelarBorrador('m1', actorIdentidad);
+
+      expect(audit.registrar).toHaveBeenCalledWith(
+        prisma,
+        expect.objectContaining({
+          entidad: 'ModuloVersion',
+          entidadId: 'v-borrador',
+          accion: 'DELETE',
+        }),
+      );
+      expect(audit.registrar).toHaveBeenCalledWith(prisma, {
+        entidad: 'Modulo',
+        entidadId: 'm1',
+        accion: 'DELETE',
+        diff: {
+          id: { antes: 'm1', despues: null },
+          nombre: { antes: 'Nunca publicado', despues: null },
+          activo: { antes: true, despues: null },
+        },
+        actor: 'backoffice',
+        ...actorIdentidad,
+      });
+    });
+
+    it('sin actorIdentidad, el log queda sin las 4 columnas de actor', async () => {
+      prisma.modulo.create.mockResolvedValue({
+        id: 'm1',
+        nombre: 'SIMA Básico',
+        versiones: [{ id: 'v1', numeroVersion: 1, estado: 'BORRADOR' }],
+      });
+
+      await service.create({ nombre: 'SIMA Básico' });
+
+      const llamada = audit.registrar.mock.calls.find(
+        (c) => c[1].entidad === 'Modulo',
+      )![1];
+      expect(llamada.actor).toBe('backoffice');
+      expect(llamada.actorUsuarioId).toBeUndefined();
+    });
   });
 });

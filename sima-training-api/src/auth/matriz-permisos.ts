@@ -67,3 +67,19 @@ export const GESTION_NOMINA: readonly RolUsuario[] = [
 export const SOLO_ADMINISTRADOR: readonly RolUsuario[] = [
   RolUsuario.ADMINISTRADOR,
 ];
+
+/**
+ * El log de auditoría GLOBAL (todas las entidades, no sólo el historial de
+ * una persona). Deliberadamente SIN `COORDINADOR`: administra la nómina día
+ * a día, pero certificar ISO 9001 —para qué existe este log— no es su
+ * trabajo. El AUDITOR sí entra: es justamente el rol pensado para mirar esto
+ * desde afuera.
+ *
+ * Lo usa `GET /audit-log` (`AuditController`), el log global — distinto de
+ * `GET /usuarios/:id/audit-log`, que es el historial de una persona y sigue
+ * en `LECTURA_BACKOFFICE` (incluye COORDINADOR).
+ */
+export const AUDITORIA: readonly RolUsuario[] = [
+  RolUsuario.ADMINISTRADOR,
+  RolUsuario.AUDITOR,
+];
