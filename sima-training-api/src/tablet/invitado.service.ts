@@ -12,6 +12,8 @@ import {
   calcularResultado,
   esCorrecta,
 } from '../sesiones/corregir';
+import { corregirUna } from './corregir-una';
+import { CorregirRespuestaDto } from './dto/corregir-respuesta.dto';
 import { LoginInvitadoDto } from './dto/login-invitado.dto';
 import { RegistrarSesionInvitadoDto } from './dto/registrar-sesion-invitado.dto';
 import { serializarPregunta } from './serializar-pregunta';
@@ -211,6 +213,19 @@ export class InvitadoService {
       },
       preguntas: elegidas.map(serializarPregunta),
     };
+  }
+
+  /**
+   * Corrige UNA respuesta mientras se está rindiendo, igual que el flujo real:
+   * misma función, mismas validaciones, mismo contrato. La demo tiene que
+   * mostrar el producto, no una versión distinta de él.
+   *
+   * Ésta pasa a ser la TERCERA cosa que los dos flujos comparten, con
+   * `sortear()` y `corregir.ts`, y por el mismo motivo que las otras dos: que
+   * la regla viva en un solo lugar es lo que impide que diverjan.
+   */
+  corregir(dto: CorregirRespuestaDto) {
+    return corregirUna(this.prisma, dto);
   }
 
   /**

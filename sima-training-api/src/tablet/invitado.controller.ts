@@ -9,6 +9,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { Public } from '../auth/public.decorator';
+import { CorregirRespuestaDto } from './dto/corregir-respuesta.dto';
 import { LoginInvitadoDto } from './dto/login-invitado.dto';
 import { RegistrarSesionInvitadoDto } from './dto/registrar-sesion-invitado.dto';
 import { InvitadoAuthGuard, NombreInvitado } from './invitado-auth.guard';
@@ -52,6 +53,17 @@ export class InvitadoController {
   @UseGuards(InvitadoAuthGuard)
   examen(@Param('moduloId') moduloId: string) {
     return this.invitado.examen(moduloId);
+  }
+
+  // Espejo exacto de POST /tablet/corregir: el feedback inmediato funciona
+  // igual en la demo. No recibe el nombre del invitado porque corregir no
+  // depende de quién rinde (ver corregir-una.ts).
+  @Post('corregir')
+  @Public()
+  @UseGuards(InvitadoAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  corregir(@Body() dto: CorregirRespuestaDto) {
+    return this.invitado.corregir(dto);
   }
 
   // El nombre sale del TOKEN, nunca del body — ver RegistrarSesionInvitadoDto

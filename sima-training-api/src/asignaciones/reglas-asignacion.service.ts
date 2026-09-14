@@ -5,11 +5,32 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma, ReglaAsignacion } from '@prisma/client';
+import { ActorIdentidad } from '../audit/actor-de-identidad';
+import { AuditService } from '../audit/audit.service';
+import { calcularDiff, hayCambios } from '../audit/calcular-diff';
+import { CAMPOS_TRAZABILIDAD_IGNORADOS } from '../audit/campos-trazabilidad';
 import { PrismaService } from '../prisma/prisma.service';
 import { AsignacionesService } from './asignaciones.service';
 import { CreateReglaAsignacionDto } from './dto/create-regla-asignacion.dto';
 import { FindReglasAsignacionDto } from './dto/find-reglas-asignacion.dto';
 import { UpdateReglaAsignacionDto } from './dto/update-regla-asignacion.dto';
+
+// Arma un objeto NUEVO picking sólo los campos escalares — mismo criterio que
+// organizacionEscalar/vinculacionEscalar: nunca un spread de la fila entera.
+function reglaEscalar(r: ReglaAsignacion): Record<string, unknown> {
+  return {
+    id: r.id,
+    puestoId: r.puestoId,
+    centroCostoId: r.centroCostoId,
+    moduloId: r.moduloId,
+    activo: r.activo,
+    deletedAt: r.deletedAt,
+    createdAt: r.createdAt,
+    updatedAt: r.updatedAt,
+    createdBy: r.createdBy,
+    updatedBy: r.updatedBy,
+  };
+}
 
 // Resumen del recálculo que dispara cualquier cambio de regla. Viaja en la
 // respuesta de las cuatro mutaciones para que el backoffice pueda mostrar la
@@ -39,6 +60,7 @@ export class ReglasAsignacionService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly asignaciones: AsignacionesService,
+    private readonly audit: AuditService,
   ) {}
 
   // Alta de una regla. Si ya existe una fila con el mismo triple se reusa en vez
@@ -48,6 +70,7 @@ export class ReglasAsignacionService {
   async create(
     dto: CreateReglaAsignacionDto,
     actor = 'backoffice',
+    actorIdentidad?: ActorIdentidad,
   ): Promise<ReglaConRecalculo> {
     await this.assertReferenciasExisten(dto);
 
@@ -106,6 +129,23 @@ export class ReglasAsignacionService {
           throw err;
         }
 
+        // Reactivar una VIVA-pero-pausada (existente === viva, activo=false,
+        // deleted_at ya null) es un UPDATE real: nada revivió, sólo se sacó la
+        // pausa. Revivir una ELIMINADA (existente === eliminada, deleted_at →
+        // null) es un HECHO DE NEGOCIO de alta ("esta regla volvió a
+        // aplicar"), no un update — mismo criterio que auditarAltaVinculacion
+        // en UsuariosService: `antes` viaja null, ignorando los valores que
+        // tenía la fila eliminada.
+        const accion = existente && !eliminada ? 'UPDATE' : 'CREATE';
+        await this.auditarReglaAsignacion(
+          tx,
+          accion,
+          accion === 'UPDATE' ? existente : null,
+          regla,
+          actor,
+          actorIdentidad,
+        );
+
         const recalculo = await this.recalcularCentro(
           tx,
           regla.centroCostoId,
@@ -157,6 +197,7 @@ export class ReglasAsignacionService {
     id: string,
     dto: UpdateReglaAsignacionDto,
     actor = 'backoffice',
+    actorIdentidad?: ActorIdentidad,
   ): Promise<ReglaConRecalculo> {
     if (dto.moduloId === undefined && dto.activo === undefined) {
       throw new BadRequestException(
@@ -204,6 +245,15 @@ export class ReglasAsignacionService {
           throw err;
         }
 
+        await this.auditarReglaAsignacion(
+          tx,
+          'UPDATE',
+          regla,
+          actualizada,
+          actor,
+          actorIdentidad,
+        );
+
         const recalculo = await this.recalcularCentro(
           tx,
           actualizada.centroCostoId,
@@ -221,8 +271,9 @@ export class ReglasAsignacionService {
     id: string,
     activo: boolean,
     actor = 'backoffice',
+    actorIdentidad?: ActorIdentidad,
   ): Promise<ReglaConRecalculo> {
-    return this.update(id, { activo }, actor);
+    return this.update(id, { activo }, actor, actorIdentidad);
   }
 
   // Eliminar = BAJA LÓGICA (deletedAt), nunca un DELETE. La fila es la única
@@ -232,7 +283,11 @@ export class ReglasAsignacionService {
   // eliminada deja de existir a todos los efectos (listado, matching, índices).
   // El recálculo va después de la baja y en la misma transacción: el motor tiene
   // que leer la base ya sin la regla para revocar las AUTOMATICA que justificaba.
-  async remove(id: string, actor = 'backoffice'): Promise<ReglaConRecalculo> {
+  async remove(
+    id: string,
+    actor = 'backoffice',
+    actorIdentidad?: ActorIdentidad,
+  ): Promise<ReglaConRecalculo> {
     return this.prisma.$transaction(
       async (tx) => {
         const existente = await tx.reglaAsignacion.findUnique({
@@ -249,6 +304,19 @@ export class ReglasAsignacionService {
           data: { deletedAt: new Date(), updatedBy: actor },
         });
 
+        // DELETE con el antes/despues REAL (a diferencia de UsuariosService con
+        // Vinculacion, que fuerza despues:null porque ahí la fila ni se toca):
+        // acá sí hay una escritura real, así que el diff muestra `deletedAt`
+        // pasando de null a la fecha — más útil que ocultarlo.
+        await this.auditarReglaAsignacion(
+          tx,
+          'DELETE',
+          existente,
+          regla,
+          actor,
+          actorIdentidad,
+        );
+
         const recalculo = await this.recalcularCentro(
           tx,
           regla.centroCostoId,
@@ -258,6 +326,38 @@ export class ReglasAsignacionService {
       },
       { timeout: TX_TIMEOUT_MS },
     );
+  }
+
+  // Si el diff da vacío, no llama a registrar() — el chequeo se hace ACÁ y no
+  // se delega en AuditService: mismo criterio que auditarVinculacion en
+  // UsuariosService y auditarOrganizacion en OrganizacionesService, para que
+  // se pueda testear con AuditService mockeado.
+  private async auditarReglaAsignacion(
+    tx: Prisma.TransactionClient,
+    accion: 'CREATE' | 'UPDATE' | 'DELETE',
+    antes: ReglaAsignacion | null,
+    despues: ReglaAsignacion | null,
+    actor: string,
+    actorIdentidad?: ActorIdentidad,
+  ) {
+    const referencia = antes ?? despues;
+    if (!referencia) return;
+
+    const diff = calcularDiff(
+      antes ? reglaEscalar(antes) : null,
+      despues ? reglaEscalar(despues) : null,
+      CAMPOS_TRAZABILIDAD_IGNORADOS,
+    );
+    if (!hayCambios(diff)) return;
+
+    await this.audit.registrar(tx, {
+      entidad: 'ReglaAsignacion',
+      entidadId: referencia.id,
+      accion,
+      diff,
+      actor,
+      ...actorIdentidad,
+    });
   }
 
   // Recalcula a todas las personas que una regla de este centro puede alcanzar,

@@ -78,6 +78,32 @@ La `url` es **relativa** (`UPLOADS_PREFIX + clave`, sin ningún `BASE_URL`) porq
 
 ---
 
+### Feedback inmediato: se corrige de a una, la correcta NUNCA viaja en el examen
+
+La app pinta cada opción verde o roja apenas se la toca. Para eso hay que saber si acertó **antes** de terminar de rendir, y había exactamente dos caminos:
+
+**(a) Mandar `respuestaCorrecta` en el payload del examen.** Descartado, y no por prolijidad: la PWA es pública y se entra sólo con un DNI, así que cualquiera con una laptop y el DNI de un compañero abre las devtools, lee el JSON **antes de contestar** y saca 100% en una certificación de seguridad laboral. Eso no debilita la garantía de `serializar-pregunta.ts`, la elimina.
+
+**(b) Corregir de a una contra el backend** (`POST /tablet/corregir`). Es lo que se hizo. La correcta se entrega recién **después** de que la respuesta quedó comprometida — en la app es definitiva al tocar —, que es exactamente la diferencia que importa: se puede aprender de lo que se falló, no adivinar antes de contestar.
+
+El costo es real pero menor de lo que parece: son 12–15 requests más por examen, y **no agrega una dependencia nueva de red** porque la app ya necesita conectividad para pedir el examen y para registrar (el offline sigue pendiente).
+
+**Qué pasa cuando una corrección falla.** Se reintenta dos veces con esperas de 400 y 800 ms (`core/reintentarRequest.js`), porque a mitad de un examen la mayoría de los fallos de red son momentáneos — un túnel, un cambio de antena, la tablet que se durmió medio segundo — y darse por vencido al primer intento deja una pregunta sin verificar por algo que se arreglaba solo. Se reintenta **sólo** ante error de red o 5xx: un 400 (pregunta que no pertenece a la versión) o un 401 van a fallar igual las tres veces, y reintentarlos sólo hace esperar de más para llegar al mismo lugar.
+
+Si ni con reintentos, **la evaluación no se corta**: la opción queda gris, se avanza casi de inmediato y la respuesta viaja igual al cerrar la sesión, donde se calcula el resultado que vale. **Sin cartel durante el examen** — la persona está rindiendo, no es el momento de explicarle un problema de red — pero **sí se cuenta**, y el repaso lo declara: ver abajo.
+
+Lo que el endpoint **no** hace: no persiste nada, no mira el tope de reintentos (eso se aplica al servir el examen) y no filtra por `activa` — mismo criterio que `crearSesion()`. Lo que sí valida, y es lo que lo sostiene, es el **pivot**: sin esa comprobación sería un oráculo para pedir la correcta de cualquier pregunta del banco por id. El hueco que queda —probar las opciones de a una con `curl`, porque el examen servido no se persiste— está aceptado y anotado en [`../pendientes.md`](../pendientes.md).
+
+`corregir-una.ts` recibe **Prisma por parámetro** en vez de vivir en `SesionesService`: es la única forma de que los dos flujos usen la misma función sin acoplar `InvitadoService` a Sesiones, de la que hoy no depende.
+
+### El repaso del final no pide nada al backend
+
+La pantalla de "qué fallé" (enunciado, qué eligió, cuál era) se arma **con lo que ya devolvió la corrección de a una**, acumulado mientras se rendía. No hay un segundo endpoint que entregue las correctas de a muchas: `GET /sesiones/:id` sigue siendo exclusivo del backoffice, que es lo que impide que alguien con su propio `sesionId` se baje las respuestas de su examen recién desaprobado.
+
+Se muestra **apruebe o no**: el objetivo es que la persona se vaya sabiendo lo que no sabía, y eso no depende de si llegó al umbral.
+
+**Las que no se pudieron verificar se declaran arriba del listado**, en ámbar (una advertencia sobre lo que falta, no un error de la persona), con cuántas fueron y por qué el repaso puede estar incompleto: si una de ésas estuvo mal, no está en la lista, y callarlo hace que el repaso mienta por omisión. Ese aviso es también el motivo por el que el repaso se ofrece **aunque no haya ninguna incorrecta**: el caso en que fallaron todas las correcciones sería, si no, justo el único en el que la persona no se entera de nada. **Costo aceptado**: quien desapruebe y reintente va a repetir algunas preguntas sabiendo la respuesta — el sorteo saca 12–15 de un pool de 26–63. Es la consecuencia buscada de enseñar el error, no un efecto colateral.
+
 ## El modo invitado
 
 Alguien que **no está en el sistema** prueba la app dando sólo su nombre. El caso real es una tablet en la oficina y alguien que pasa y quiere ver de qué se trata; el mismo dispositivo tiene que seguir sirviendo para que una persona de la nómina rinda de verdad.
@@ -155,7 +181,13 @@ Las **imágenes de las preguntas** tampoco entran, y no por una decisión de est
 
 ### El ícono maskable lleva fondo sólido y el logo al ~60% del lienzo
 
-A diferencia de `icon-192` e `icon-512`, que son transparentes: Android recorta el ícono maskable a la forma que use el launcher del dispositivo (círculo, squircle, etc.), y un logo a tamaño completo sobre fondo transparente queda cortado por los bordes si esa forma es más chica que el lienzo.
+Android recorta el ícono maskable a la forma que use el launcher del dispositivo (círculo, squircle, etc.), y un logo a tamaño completo sobre fondo transparente queda cortado por los bordes si esa forma es más chica que el lienzo.
+
+### Todos los íconos llevan fondo negro, no sólo el maskable
+
+El maskable y el `apple-touch-icon` lo tuvieron primero; `icon-192`, `icon-512` y el favicon quedaron transparentes un tiempo y **se ven mal justamente donde más se miran**: son los `purpose: any`, o sea los que Chrome usa en el diálogo de instalación y en el launcher cuando no aplica el maskable. Sobre el blanco que les pone el sistema, el logo pierde sus partes blancas.
+
+Se aplanaron **componiendo sobre el arte existente**, no regenerándolos desde el logo: el dibujo es idéntico, lo único que cambia es el fondo. Y el `background_color` del manifest —que es el color del splash, no el del ícono— pasó a negro por lo mismo: en blanco, un ícono de fondo negro entraba con un marco de contraste en el primer frame de la app. El `theme_color` **sigue rojo**: ése es la barra de estado, y ahí el acento de marca está bien.
 
 ### El banner de actualización se muestra sólo en dos pantallas
 

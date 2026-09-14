@@ -4,7 +4,11 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { ModuloVersion, Prisma, TipoPregunta } from '@prisma/client';
+import { ModuloVersion, Pregunta, Prisma, TipoPregunta } from '@prisma/client';
+import { ActorIdentidad } from '../audit/actor-de-identidad';
+import { AuditService } from '../audit/audit.service';
+import { calcularDiff, hayCambios } from '../audit/calcular-diff';
+import { CAMPOS_TRAZABILIDAD_IGNORADOS } from '../audit/campos-trazabilidad';
 import { ModulosService } from '../modulos/modulos.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -41,12 +45,36 @@ const PREGUNTA_CLASIFICACION = {
   nivel: { select: { id: true, nombre: true, orden: true } },
 } satisfies Prisma.PreguntaInclude;
 
+// Arma un objeto NUEVO picking sólo los campos escalares — mismo criterio que
+// organizacionEscalar/reglaEscalar: nunca un spread de la fila entera (acá
+// además traería `base`/`nivel` si el caller pasó una fila con
+// PREGUNTA_CLASIFICACION incluido).
+function preguntaEscalar(p: Pregunta): Record<string, unknown> {
+  return {
+    id: p.id,
+    texto: p.texto,
+    tipo: p.tipo,
+    opciones: p.opciones,
+    respuestaCorrecta: p.respuestaCorrecta,
+    imagen: p.imagen,
+    puntajeMax: p.puntajeMax,
+    activa: p.activa,
+    baseConocimientoId: p.baseConocimientoId,
+    nivelId: p.nivelId,
+    fuente: p.fuente,
+    createdAt: p.createdAt,
+    updatedAt: p.updatedAt,
+    createdBy: p.createdBy,
+  };
+}
+
 @Injectable()
 export class PreguntasService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly modulos: ModulosService,
     private readonly storage: StorageService,
+    private readonly audit: AuditService,
   ) {}
 
   // Reglas cruzadas entre campos, que el DTO no puede expresar (class-validator
@@ -74,22 +102,32 @@ export class PreguntasService {
 
   // TODO(sprint futuro): detección de preguntas duplicadas/similares
   // (pg_trgm o embeddings) antes de crear. Fuera de alcance de este sprint.
-  async create(dto: CreatePreguntaDto) {
+  async create(dto: CreatePreguntaDto, actorIdentidad?: ActorIdentidad) {
     this.validarOpciones(dto);
     const { opciones, ...rest } = dto;
     const fuente = await this.resolverFuente(dto);
-    try {
-      return await this.prisma.pregunta.create({
-        data: {
-          ...rest,
-          ...(fuente !== undefined ? { fuente } : {}),
-          ...(opciones ? { opciones: opciones as Prisma.InputJsonValue } : {}),
-        },
-        include: PREGUNTA_CLASIFICACION,
-      });
-    } catch (err) {
-      throw this.traducirErrorDeClasificacion(err);
-    }
+
+    return this.prisma.$transaction(async (tx) => {
+      let pregunta: Prisma.PreguntaGetPayload<{
+        include: typeof PREGUNTA_CLASIFICACION;
+      }>;
+      try {
+        pregunta = await tx.pregunta.create({
+          data: {
+            ...rest,
+            ...(fuente !== undefined ? { fuente } : {}),
+            ...(opciones
+              ? { opciones: opciones as Prisma.InputJsonValue }
+              : {}),
+          },
+          include: PREGUNTA_CLASIFICACION,
+        });
+      } catch (err) {
+        throw this.traducirErrorDeClasificacion(err);
+      }
+      await this.auditarPregunta(tx, null, pregunta, actorIdentidad);
+      return pregunta;
+    });
   }
 
   // La coherencia base↔nivel la garantiza la base de datos (FK compuesta +
@@ -270,11 +308,23 @@ export class PreguntasService {
   // mutarse aunque sea para dar de baja una pregunta. activa=true: NO
   // restaura los pivots (asimetría intencional; el admin reactiva módulo por
   // módulo).
-  async setActiva(id: string, activa: boolean) {
-    await this.findOne(id);
+  async setActiva(
+    id: string,
+    activa: boolean,
+    actorIdentidad?: ActorIdentidad,
+  ) {
+    return this.prisma.$transaction(async (tx) => {
+      // El "antes" se lee DENTRO de la transacción — mismo criterio que
+      // OrganizacionesService/ReglasAsignacionService: es lo que usa el diff
+      // de auditoría, así que tiene que ser el estado inmediatamente anterior
+      // a ESTE cambio. Reemplaza al `findOne(id)` de afuera que hacía esto
+      // antes (mismo 404, ahora resuelto en el mismo viaje a la base).
+      const antes = await tx.pregunta.findUnique({ where: { id } });
+      if (!antes) {
+        throw new NotFoundException(`Pregunta ${id} no encontrada`);
+      }
 
-    if (!activa) {
-      return this.prisma.$transaction(async (tx) => {
+      if (!activa) {
         const pregunta = await tx.pregunta.update({
           where: { id },
           data: { activa: false },
@@ -287,14 +337,48 @@ export class PreguntasService {
           },
           data: { activa: false },
         });
+        await this.auditarPregunta(tx, antes, pregunta, actorIdentidad);
         return pregunta;
-      });
-    }
+      }
 
-    return this.prisma.pregunta.update({
-      where: { id },
-      data: { activa: true },
-      include: PREGUNTA_CLASIFICACION,
+      const pregunta = await tx.pregunta.update({
+        where: { id },
+        data: { activa: true },
+        include: PREGUNTA_CLASIFICACION,
+      });
+      await this.auditarPregunta(tx, antes, pregunta, actorIdentidad);
+      return pregunta;
+    });
+  }
+
+  // Si el diff da vacío, no llama a registrar() — el chequeo se hace ACÁ y no
+  // se delega en AuditService: mismo criterio que el resto de las entidades
+  // auditadas (Organizacion, ReglaAsignacion, Vinculacion), para que se pueda
+  // testear con AuditService mockeado. Sin campos redactados: una Pregunta no
+  // tiene datos personales.
+  private async auditarPregunta(
+    tx: Prisma.TransactionClient,
+    antes: Pregunta | null,
+    despues: Pregunta | null,
+    actorIdentidad?: ActorIdentidad,
+  ) {
+    const referencia = antes ?? despues;
+    if (!referencia) return;
+
+    const diff = calcularDiff(
+      antes ? preguntaEscalar(antes) : null,
+      despues ? preguntaEscalar(despues) : null,
+      CAMPOS_TRAZABILIDAD_IGNORADOS,
+    );
+    if (!hayCambios(diff)) return;
+
+    await this.audit.registrar(tx, {
+      entidad: 'Pregunta',
+      entidadId: referencia.id,
+      accion: antes === null ? 'CREATE' : 'UPDATE',
+      diff,
+      actor: 'backoffice',
+      ...actorIdentidad,
     });
   }
 

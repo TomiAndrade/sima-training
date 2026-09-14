@@ -11,8 +11,10 @@ import {
   calcularVeredicto,
 } from '../asignaciones/veredicto';
 import { AsignacionesService } from '../asignaciones/asignaciones.service';
+import { ActorIdentidad } from '../audit/actor-de-identidad';
 import { AuditService } from '../audit/audit.service';
 import { calcularDiff, hayCambios } from '../audit/calcular-diff';
+import { CAMPOS_TRAZABILIDAD_IGNORADOS } from '../audit/campos-trazabilidad';
 import { entidadIdPar } from '../audit/entidad-id';
 import { PrismaService } from '../prisma/prisma.service';
 import { SesionesService } from '../sesiones/sesiones.service';
@@ -36,16 +38,6 @@ const USUARIO_INCLUDE = {
 type UsuarioConVinculacion = Prisma.UsuarioGetPayload<{
   include: typeof USUARIO_INCLUDE;
 }>;
-
-// Story 9 (auditoría) — campos de trazabilidad, ignorados siempre en el diff
-// de Vinculacion: cambian en cada escritura y no son parte de lo que audita
-// esta story.
-const CAMPOS_TRAZABILIDAD_IGNORADOS = [
-  'createdAt',
-  'updatedAt',
-  'createdBy',
-  'updatedBy',
-];
 
 // Shapes ESTRUCTURALES chicos, con sólo los campos que importan para auditar
 // — no un tipo generado de Prisma. Así los helpers de abajo aceptan tanto la
@@ -72,10 +64,50 @@ type ParParaAudit = {
   activo: boolean;
 };
 
+// La identidad PURA de Usuario (ver README.md — Usuario no tiene rol ni
+// organización, eso vive en Vinculacion). `authProviderId` NO está acá a
+// propósito: es un identificador interno de Auth0, nadie lo edita a mano, y
+// no se audita ni siquiera redactado — no entra ni como campo ignorado, para
+// que quede explícito que directamente no forma parte de lo que esto mira.
+type UsuarioParaAudit = {
+  id: number;
+  nombre: string;
+  apellido: string;
+  dni: string;
+  email: string | null;
+  deletedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+  createdBy: string | null;
+  updatedBy: string | null;
+};
+
+// dni y email son datos personales: se audita QUE cambiaron, nunca a qué
+// (decisión del sprint de auditoría — ver docs/decisiones/auditoria.md).
+// nombre/apellido sí viajan completos: son necesarios para identificar a la
+// persona en el propio historial de auditoría, y no son tan sensibles como
+// un documento o un email.
+const CAMPOS_REDACTADOS_USUARIO = ['dni', 'email'];
+
 // Arman un objeto NUEVO picking sólo los campos declarados — nunca un spread
 // del objeto recibido. Un spread arrastraría `organizacion` / `puesto` /
 // `centroCosto` (las relaciones de USUARIO_INCLUDE) al diff, y esas no son
 // parte de lo que se audita acá.
+function usuarioEscalar(u: UsuarioParaAudit): Record<string, unknown> {
+  return {
+    id: u.id,
+    nombre: u.nombre,
+    apellido: u.apellido,
+    dni: u.dni,
+    email: u.email,
+    deletedAt: u.deletedAt,
+    createdAt: u.createdAt,
+    updatedAt: u.updatedAt,
+    createdBy: u.createdBy,
+    updatedBy: u.updatedBy,
+  };
+}
+
 function vinculacionEscalar(v: VinculacionParaAudit): Record<string, unknown> {
   return {
     id: v.id,
@@ -110,8 +142,14 @@ export class UsuariosService {
   ) {}
 
   // `actor` va a created_by/updated_by: 'backoffice' en el ABM, 'import' cuando
-  // la llama ImportService.
-  async create(dto: CreateUsuarioDto, actor = 'backoffice') {
+  // la llama ImportService. `actorIdentidad` es la identidad REAL (de
+  // @Actor()) para las 4 columnas nuevas del AuditLog — ninguna de las dos
+  // cosas reemplaza a la otra, ver actor-de-identidad.ts.
+  async create(
+    dto: CreateUsuarioDto,
+    actor = 'backoffice',
+    actorIdentidad?: ActorIdentidad,
+  ) {
     const { vinculacion, ...identidad } = dto;
     const pares = await this.paresValidados(vinculacion.pares);
     await this.assertRolPermitido(vinculacion.organizacionId, vinculacion.rol);
@@ -172,8 +210,26 @@ export class UsuariosService {
         // vinculada"—, no un evento de base de datos —"se insertó una
         // fila"—. Por eso CREATE, con el mismo helper que el alta nueva.
         if (revivido.vinculacion) {
-          await this.auditarAltaVinculacion(tx, revivido.vinculacion, actor);
+          await this.auditarAltaVinculacion(
+            tx,
+            revivido.vinculacion,
+            actor,
+            actorIdentidad,
+          );
         }
+        // Mismo criterio que la Vinculacion de arriba, y por la misma razón:
+        // aunque la fila de Usuario ya existiera (nunca se borra físico), el
+        // hecho que importa es "esta persona volvió a estar en el sistema" —
+        // los valores que tenía ANTES de la baja no son parte de ese hecho,
+        // por eso `antes: null` y no un diff contra el estado pre-baja.
+        await this.auditarUsuario(
+          tx,
+          'CREATE',
+          null,
+          revivido,
+          actor,
+          actorIdentidad,
+        );
         return this.aRespuesta(revivido);
       });
     }
@@ -207,8 +263,14 @@ export class UsuariosService {
           include: USUARIO_INCLUDE,
         });
         if (creado.vinculacion) {
-          await this.auditarAltaVinculacion(tx, creado.vinculacion, actor);
+          await this.auditarAltaVinculacion(
+            tx,
+            creado.vinculacion,
+            actor,
+            actorIdentidad,
+          );
         }
+        await this.auditarUsuario(tx, 'CREATE', null, creado, actor, actorIdentidad);
         return this.aRespuesta(creado);
       });
     }
@@ -222,8 +284,14 @@ export class UsuariosService {
       });
       await this.asignaciones.recalcularEnTx(tx, creado.id, actor);
       if (creado.vinculacion) {
-        await this.auditarAltaVinculacion(tx, creado.vinculacion, actor);
+        await this.auditarAltaVinculacion(
+          tx,
+          creado.vinculacion,
+          actor,
+          actorIdentidad,
+        );
       }
+      await this.auditarUsuario(tx, 'CREATE', null, creado, actor, actorIdentidad);
       return this.aRespuesta(creado);
     });
   }
@@ -352,6 +420,7 @@ export class UsuariosService {
     dto: UpdateUsuarioDto,
     actor = 'backoffice',
     actorRol?: RolUsuario,
+    actorIdentidad?: ActorIdentidad,
   ) {
     const actual = await this.prisma.usuario.findFirst({
       where: { id, deletedAt: null },
@@ -423,6 +492,9 @@ export class UsuariosService {
         where: { usuarioId: id },
         include: { puestosCentros: true },
       });
+      // Mismo criterio, para la identidad de Usuario (sexta entidad
+      // auditada): fresco y DENTRO de la transacción, no `actual` de arriba.
+      const usuarioAntes = await tx.usuario.findUnique({ where: { id } });
 
       if (puestosCentros) {
         // Reemplazo completo del set de pares. El borrado va primero y en la
@@ -494,6 +566,7 @@ export class UsuariosService {
         vinculacionAntes,
         vinculacionDespues,
         actor,
+        actorIdentidad,
       );
       const vinculacionId = vinculacionAntes?.id ?? vinculacionDespues?.id;
       if (vinculacionId) {
@@ -503,18 +576,34 @@ export class UsuariosService {
           vinculacionAntes?.puestosCentros ?? [],
           vinculacionDespues?.puestosCentros ?? [],
           actor,
+          actorIdentidad,
         );
       }
+      // `actualizado` (no una lectura aparte) SÍ alcanza acá, a diferencia de
+      // `vinculacionDespues`: son las columnas propias de la fila de Usuario,
+      // no una relación con un include que algún día pueda ganar un filtro.
+      await this.auditarUsuario(
+        tx,
+        'UPDATE',
+        usuarioAntes,
+        actualizado,
+        actor,
+        actorIdentidad,
+      );
 
       return this.aRespuesta(actualizado);
     });
   }
 
   // Baja lógica: marca deletedAt, no borra la fila (trazabilidad).
-  async remove(id: number) {
+  async remove(id: number, actorIdentidad?: ActorIdentidad) {
     await this.findOne(id); // valida existencia (o 404) sin usar el resultado
 
     return this.prisma.$transaction(async (tx) => {
+      // Fresco y DENTRO de la transacción, mismo criterio que en update() —
+      // acá además es la única lectura de la fila de Usuario antes de
+      // tocarla, no hay un `actual` externo del que reusar nada.
+      const usuarioAntes = await tx.usuario.findUnique({ where: { id } });
       const vinculacion = await tx.vinculacion.findUnique({
         where: { usuarioId: id },
         include: { puestosCentros: true },
@@ -538,8 +627,20 @@ export class UsuariosService {
           // se hardcodea el mismo vocabulario que usa el resto del código en
           // vez de sumarle un parámetro nuevo al método sólo para esto.
           'backoffice',
+          actorIdentidad,
         );
       }
+      // La fila de Usuario SÍ se toca acá (a diferencia de Vinculacion,
+      // arriba): `deletedAt` pasa de null a la fecha, con el antes/despues
+      // real — mismo criterio que ReglaAsignacion.remove().
+      await this.auditarUsuario(
+        tx,
+        'DELETE',
+        usuarioAntes,
+        usuario,
+        'backoffice',
+        actorIdentidad,
+      );
       return usuario;
     });
   }
@@ -557,6 +658,7 @@ export class UsuariosService {
     antes: VinculacionParaAudit | null,
     despues: VinculacionParaAudit | null,
     actor: string,
+    actorIdentidad?: ActorIdentidad,
   ) {
     const referencia = antes ?? despues;
     if (!referencia) return;
@@ -574,6 +676,39 @@ export class UsuariosService {
       accion,
       diff,
       actor,
+      ...actorIdentidad,
+    });
+  }
+
+  // Identidad de Usuario (nombre/apellido/dni/email — ver usuarioEscalar).
+  // Mismo patrón que auditarVinculacion: el chequeo de "sin cambios" se hace
+  // ACÁ, no en AuditService.
+  private async auditarUsuario(
+    tx: Prisma.TransactionClient,
+    accion: 'CREATE' | 'UPDATE' | 'DELETE',
+    antes: UsuarioParaAudit | null,
+    despues: UsuarioParaAudit | null,
+    actor: string,
+    actorIdentidad?: ActorIdentidad,
+  ) {
+    const referencia = antes ?? despues;
+    if (!referencia) return;
+
+    const diff = calcularDiff(
+      antes ? usuarioEscalar(antes) : null,
+      despues ? usuarioEscalar(despues) : null,
+      CAMPOS_TRAZABILIDAD_IGNORADOS,
+      CAMPOS_REDACTADOS_USUARIO,
+    );
+    if (!hayCambios(diff)) return;
+
+    await this.audit.registrar(tx, {
+      entidad: 'Usuario',
+      entidadId: String(referencia.id),
+      accion,
+      diff,
+      actor,
+      ...actorIdentidad,
     });
   }
 
@@ -588,6 +723,7 @@ export class UsuariosService {
     antes: ParParaAudit[],
     despues: ParParaAudit[],
     actor: string,
+    actorIdentidad?: ActorIdentidad,
   ) {
     // clave = entidadIdPar(...) directamente: ya es el entidadId completo,
     // no hace falta reconstruirlo después (ver ../audit/entidad-id.ts, única
@@ -623,6 +759,7 @@ export class UsuariosService {
               : 'UPDATE',
         diff,
         actor,
+        ...actorIdentidad,
       });
     }
   }
@@ -634,14 +771,23 @@ export class UsuariosService {
     tx: Prisma.TransactionClient,
     vinculacion: VinculacionParaAudit & { puestosCentros: ParParaAudit[] },
     actor: string,
+    actorIdentidad?: ActorIdentidad,
   ) {
-    await this.auditarVinculacion(tx, 'CREATE', null, vinculacion, actor);
+    await this.auditarVinculacion(
+      tx,
+      'CREATE',
+      null,
+      vinculacion,
+      actor,
+      actorIdentidad,
+    );
     await this.auditarPares(
       tx,
       vinculacion.id,
       [],
       vinculacion.puestosCentros,
       actor,
+      actorIdentidad,
     );
   }
 

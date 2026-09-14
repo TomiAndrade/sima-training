@@ -4,7 +4,11 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { ModuloVersion, Prisma } from '@prisma/client';
+import { Modulo, ModuloVersion, Prisma } from '@prisma/client';
+import { ActorIdentidad } from '../audit/actor-de-identidad';
+import { AuditService } from '../audit/audit.service';
+import { calcularDiff, Diff, hayCambios } from '../audit/calcular-diff';
+import { CAMPOS_TRAZABILIDAD_IGNORADOS } from '../audit/campos-trazabilidad';
 import { PrismaService } from '../prisma/prisma.service';
 import { AsignarPreguntaItemDto } from './dto/asignar-preguntas.dto';
 import { CreateModuloDto } from './dto/create-modulo.dto';
@@ -26,16 +30,58 @@ const CRITERIO_INCLUDE = {
 const claveCriterio = (baseConocimientoId: string, nivelId?: string | null) =>
   `${baseConocimientoId}::${nivelId ?? '*'}`;
 
+// Mismo criterio que organizacionEscalar/reglaEscalar: picking explícito, nunca
+// un spread de la fila entera (acá además traería `versiones` si el caller pasó
+// un Modulo con esa relación incluida).
+function moduloEscalar(m: Modulo): Record<string, unknown> {
+  return {
+    id: m.id,
+    nombre: m.nombre,
+    descripcion: m.descripcion,
+    activo: m.activo,
+    vigenciaMeses: m.vigenciaMeses,
+    demoPublico: m.demoPublico,
+    createdAt: m.createdAt,
+    createdBy: m.createdBy,
+  };
+}
+
+// Columnas PROPIAS de ModuloVersion: ciclo de vida, numeración pública y "cómo
+// se rinde". El CONTENIDO (preguntas/criterios) no son columnas de esta fila —
+// sus cambios se auditan aparte, ver auditarContenidoModuloVersion.
+function moduloVersionEscalar(v: ModuloVersion): Record<string, unknown> {
+  return {
+    id: v.id,
+    moduloId: v.moduloId,
+    numeroVersion: v.numeroVersion,
+    estado: v.estado,
+    anio: v.anio,
+    mayor: v.mayor,
+    menor: v.menor,
+    activadaEn: v.activadaEn,
+    esNuevaLinea: v.esNuevaLinea,
+    preguntasPorExamen: v.preguntasPorExamen,
+    umbralAprobacion: v.umbralAprobacion,
+    maxIntentos: v.maxIntentos,
+    esperaEntreIntentosMinutos: v.esperaEntreIntentosMinutos,
+    createdAt: v.createdAt,
+    createdBy: v.createdBy,
+  };
+}
+
 @Injectable()
 export class ModulosService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly audit: AuditService,
+  ) {}
 
   // Crea el módulo y su ModuloVersion v1 en BORRADOR (una sola operación atómica).
   //
   // Los parámetros de examen se destructuran aparte y NO entran en el spread: son
   // columnas de la versión, no del módulo. Un `...dto` a secas los mandaría a
   // modulo.create y Prisma rechazaría el campo desconocido.
-  create(dto: CreateModuloDto) {
+  create(dto: CreateModuloDto, actorIdentidad?: ActorIdentidad) {
     const {
       preguntasPorExamen,
       umbralAprobacion,
@@ -44,20 +90,34 @@ export class ModulosService {
       ...modulo
     } = dto;
 
-    return this.prisma.modulo.create({
-      data: {
-        ...modulo,
-        versiones: {
-          create: {
-            numeroVersion: 1,
-            preguntasPorExamen,
-            umbralAprobacion,
-            maxIntentos,
-            esperaEntreIntentosMinutos,
+    return this.prisma.$transaction(async (tx) => {
+      const creado = await tx.modulo.create({
+        data: {
+          ...modulo,
+          versiones: {
+            create: {
+              numeroVersion: 1,
+              preguntasPorExamen,
+              umbralAprobacion,
+              maxIntentos,
+              esperaEntreIntentosMinutos,
+            },
           },
         },
-      },
-      include: { versiones: true },
+        include: { versiones: true },
+      });
+      // Dos entidades cambian en un solo request — Modulo (el contenedor) y su
+      // ModuloVersion v1 (el contenido) — así que son dos filas, cada una con
+      // su propio entidadId. Mismo criterio que Usuario/Vinculacion en un alta.
+      await this.auditarModulo(tx, 'CREATE', null, creado, actorIdentidad);
+      await this.auditarModuloVersion(
+        tx,
+        'CREATE',
+        null,
+        creado.versiones[0],
+        actorIdentidad,
+      );
+      return creado;
     });
   }
 
@@ -199,28 +259,33 @@ export class ModulosService {
   }
 
   // Edición de metadata del módulo (nombre/descripcion).
-  async update(moduloId: string, dto: UpdateModuloDto) {
-    try {
-      return await this.prisma.modulo.update({
+  async update(
+    moduloId: string,
+    dto: UpdateModuloDto,
+    actorIdentidad?: ActorIdentidad,
+  ) {
+    return this.prisma.$transaction(async (tx) => {
+      // El "antes" DENTRO de la transacción reemplaza el catch(P2025) de
+      // antes: mismo 404, pero ahora hay una lectura previa para el diff de
+      // auditoría (mismo criterio que Organizacion/ReglaAsignacion).
+      const antes = await tx.modulo.findUnique({ where: { id: moduloId } });
+      if (!antes) {
+        throw new NotFoundException(`Módulo ${moduloId} no encontrado`);
+      }
+      const actualizado = await tx.modulo.update({
         where: { id: moduloId },
         data: dto,
       });
-    } catch (err) {
-      if (
-        err instanceof Prisma.PrismaClientKnownRequestError &&
-        err.code === 'P2025'
-      ) {
-        throw new NotFoundException(`Módulo ${moduloId} no encontrado`);
-      }
-      throw err;
-    }
+      await this.auditarModulo(tx, 'UPDATE', antes, actualizado, actorIdentidad);
+      return actualizado;
+    });
   }
 
   // Crea un BORRADOR nuevo copiando las preguntas del ACTIVO. La elección de
   // cómo numerarlo (actualización/versión nueva) se pospone a `activar` — acá
   // no se pregunta nada, para no obligar a decidir antes de saber cuánto se
   // va a terminar cambiando.
-  async crearVersion(moduloId: string) {
+  async crearVersion(moduloId: string, actorIdentidad?: ActorIdentidad) {
     const modulo = await this.prisma.modulo.findUnique({
       where: { id: moduloId },
     });
@@ -259,48 +324,53 @@ export class ModulosService {
       where: { moduloVersionId: base.id },
     });
 
-    return this.prisma.moduloVersion.create({
-      data: {
-        moduloId,
-        numeroVersion,
-        estado: 'BORRADOR',
-        createdBy: 'backoffice',
-        // Los parámetros de examen se HEREDAN del ACTIVO, igual que las preguntas
-        // y los criterios: un borrador es la foto de lo publicado. Sin esto,
-        // editar un módulo le resetearía el umbral (y el tope de intentos) al
-        // default global en silencio, que es lo último que uno quiere descubrir
-        // después de publicar.
-        preguntasPorExamen: base.preguntasPorExamen,
-        umbralAprobacion: base.umbralAprobacion,
-        maxIntentos: base.maxIntentos,
-        esperaEntreIntentosMinutos: base.esperaEntreIntentosMinutos,
-        preguntas: {
-          create: pivots.map((p) => ({
-            preguntaId: p.preguntaId,
-            orden: p.orden,
-            obligatoria: p.obligatoria,
-            activa: p.activa,
-            origen: p.origen,
-          })),
+    return this.prisma.$transaction(async (tx) => {
+      const nueva = await tx.moduloVersion.create({
+        data: {
+          moduloId,
+          numeroVersion,
+          estado: 'BORRADOR',
+          createdBy: 'backoffice',
+          // Los parámetros de examen se HEREDAN del ACTIVO, igual que las
+          // preguntas y los criterios: un borrador es la foto de lo
+          // publicado. Sin esto, editar un módulo le resetearía el umbral (y
+          // el tope de intentos) al default global en silencio, que es lo
+          // último que uno quiere descubrir después de publicar.
+          preguntasPorExamen: base.preguntasPorExamen,
+          umbralAprobacion: base.umbralAprobacion,
+          maxIntentos: base.maxIntentos,
+          esperaEntreIntentosMinutos: base.esperaEntreIntentosMinutos,
+          preguntas: {
+            create: pivots.map((p) => ({
+              preguntaId: p.preguntaId,
+              orden: p.orden,
+              obligatoria: p.obligatoria,
+              activa: p.activa,
+              origen: p.origen,
+            })),
+          },
+          // Los criterios se copian JUNTO con los pivots ya materializados y
+          // NO se vuelven a resolver: el borrador nace como la foto exacta
+          // de lo publicado. Que las preguntas nuevas de una base no entren
+          // solas es el costo aceptado del snapshot (ver
+          // docs/pendientes.md) — entran recién cuando el admin vuelve a
+          // guardar los criterios desde el borrador, que es un acto
+          // explícito y previsualizado.
+          criterios: {
+            create: criterios.map((c) => ({
+              baseConocimientoId: c.baseConocimientoId,
+              nivelId: c.nivelId,
+              createdBy: 'backoffice',
+            })),
+          },
         },
-        // Los criterios se copian JUNTO con los pivots ya materializados y NO se
-        // vuelven a resolver: el borrador nace como la foto exacta de lo
-        // publicado. Que las preguntas nuevas de una base no entren solas es el
-        // costo aceptado del snapshot (ver docs/pendientes.md) — entran recién
-        // cuando el admin vuelve a guardar los criterios desde el borrador, que
-        // es un acto explícito y previsualizado.
-        criterios: {
-          create: criterios.map((c) => ({
-            baseConocimientoId: c.baseConocimientoId,
-            nivelId: c.nivelId,
-            createdBy: 'backoffice',
-          })),
+        include: {
+          preguntas: { include: { pregunta: true }, orderBy: { orden: 'asc' } },
+          criterios: { include: CRITERIO_INCLUDE },
         },
-      },
-      include: {
-        preguntas: { include: { pregunta: true }, orderBy: { orden: 'asc' } },
-        criterios: { include: CRITERIO_INCLUDE },
-      },
+      });
+      await this.auditarModuloVersion(tx, 'CREATE', null, nueva, actorIdentidad);
+      return nueva;
     });
   }
 
@@ -309,7 +379,11 @@ export class ModulosService {
   // `esNuevaLinea` (actualización/versión nueva) se decide recién acá, no al
   // crear el borrador — es obligatorio solo cuando ya hay un ACTIVO publicado
   // del cual derivar el número; en la primera publicación no hay de qué elegir.
-  async activar(moduloId: string, esNuevaLinea?: boolean) {
+  async activar(
+    moduloId: string,
+    esNuevaLinea?: boolean,
+    actorIdentidad?: ActorIdentidad,
+  ) {
     const borrador = await this.prisma.moduloVersion.findFirst({
       where: { moduloId, estado: 'BORRADOR' },
     });
@@ -333,12 +407,19 @@ export class ModulosService {
 
     return this.prisma.$transaction(async (tx) => {
       if (activo) {
-        await tx.moduloVersion.update({
+        const archivada = await tx.moduloVersion.update({
           where: { id: activo.id },
           data: { estado: 'ARCHIVADO' },
         });
+        await this.auditarModuloVersion(
+          tx,
+          'UPDATE',
+          activo,
+          archivada,
+          actorIdentidad,
+        );
       }
-      return tx.moduloVersion.update({
+      const publicada = await tx.moduloVersion.update({
         where: { id: borrador.id },
         data: {
           estado: 'ACTIVO',
@@ -349,10 +430,25 @@ export class ModulosService {
           activadaEn: new Date(),
         },
       });
+      // Dos filas posibles, cada una con su propio entidadId — no es "una
+      // acción, un log" sino "dos entidades ModuloVersion cambiaron" (la que
+      // se archiva y la que se publica), cuando hay una ACTIVO previa.
+      await this.auditarModuloVersion(
+        tx,
+        'UPDATE',
+        borrador,
+        publicada,
+        actorIdentidad,
+      );
+      return publicada;
     });
   }
 
-  async asignarPreguntas(moduloId: string, items: AsignarPreguntaItemDto[]) {
+  async asignarPreguntas(
+    moduloId: string,
+    items: AsignarPreguntaItemDto[],
+    actorIdentidad?: ActorIdentidad,
+  ) {
     const borrador = await this.prisma.moduloVersion.findFirst({
       where: { moduloId, estado: 'BORRADOR' },
     });
@@ -372,31 +468,49 @@ export class ModulosService {
     });
     let siguienteOrden = agregado._max.orden ?? 0;
 
-    try {
-      await this.prisma.moduloVersionPregunta.createMany({
-        data: items.map((item) => ({
-          moduloVersionId: borrador.id,
-          preguntaId: item.preguntaId,
-          orden: item.orden ?? (siguienteOrden += 1),
-          obligatoria: item.obligatoria ?? true,
-        })),
-      });
-    } catch (err) {
-      if (
-        err instanceof Prisma.PrismaClientKnownRequestError &&
-        err.code === 'P2002'
-      ) {
-        throw new ConflictException(
-          'Una o más preguntas ya están asignadas a esta versión del módulo',
-        );
+    return this.prisma.$transaction(async (tx) => {
+      try {
+        await tx.moduloVersionPregunta.createMany({
+          data: items.map((item) => ({
+            moduloVersionId: borrador.id,
+            preguntaId: item.preguntaId,
+            orden: item.orden ?? (siguienteOrden += 1),
+            obligatoria: item.obligatoria ?? true,
+          })),
+        });
+      } catch (err) {
+        if (
+          err instanceof Prisma.PrismaClientKnownRequestError &&
+          err.code === 'P2002'
+        ) {
+          throw new ConflictException(
+            'Una o más preguntas ya están asignadas a esta versión del módulo',
+          );
+        }
+        throw err;
       }
-      throw err;
-    }
 
-    return this.prisma.moduloVersionPregunta.findMany({
-      where: { moduloVersionId: borrador.id },
-      include: { pregunta: true },
-      orderBy: { orden: 'asc' },
+      // UNA fila para todo el llamado, no una por pregunta asignada — mismo
+      // criterio que setCriterios: lo que cambió es el CONTENIDO de esta
+      // versión, y eso es un solo hecho de auditoría aunque mueva varias
+      // filas de ModuloVersionPregunta (que no es una entidad auditada).
+      await this.auditarContenidoModuloVersion(
+        tx,
+        borrador.id,
+        {
+          preguntas: {
+            antes: null,
+            despues: { agregadas: items.map((i) => i.preguntaId) },
+          },
+        },
+        actorIdentidad,
+      );
+
+      return tx.moduloVersionPregunta.findMany({
+        where: { moduloVersionId: borrador.id },
+        include: { pregunta: true },
+        orderBy: { orden: 'asc' },
+      });
     });
   }
 
@@ -407,6 +521,7 @@ export class ModulosService {
     moduloId: string,
     preguntaId: string,
     activa: boolean,
+    actorIdentidad?: ActorIdentidad,
   ) {
     const version = await this.versionParaEditar(moduloId);
     if (!version) {
@@ -430,28 +545,45 @@ export class ModulosService {
       }
     }
 
-    try {
-      return await this.prisma.moduloVersionPregunta.update({
-        where: {
-          moduloVersionId_preguntaId: {
-            moduloVersionId: version.id,
-            preguntaId,
+    return this.prisma.$transaction(async (tx) => {
+      let actualizado;
+      try {
+        actualizado = await tx.moduloVersionPregunta.update({
+          where: {
+            moduloVersionId_preguntaId: {
+              moduloVersionId: version.id,
+              preguntaId,
+            },
+          },
+          data: { activa },
+          include: { pregunta: true },
+        });
+      } catch (err) {
+        if (
+          err instanceof Prisma.PrismaClientKnownRequestError &&
+          err.code === 'P2025'
+        ) {
+          throw new NotFoundException(
+            `La pregunta ${preguntaId} no está asignada a este módulo`,
+          );
+        }
+        throw err;
+      }
+
+      await this.auditarContenidoModuloVersion(
+        tx,
+        version.id,
+        {
+          pregunta: {
+            antes: { id: preguntaId, activa: !activa },
+            despues: { id: preguntaId, activa },
           },
         },
-        data: { activa },
-        include: { pregunta: true },
-      });
-    } catch (err) {
-      if (
-        err instanceof Prisma.PrismaClientKnownRequestError &&
-        err.code === 'P2025'
-      ) {
-        throw new NotFoundException(
-          `La pregunta ${preguntaId} no está asignada a este módulo`,
-        );
-      }
-      throw err;
-    }
+        actorIdentidad,
+      );
+
+      return actualizado;
+    });
   }
 
   // Unassign duro: saca la pregunta del borrador (borra el pivot, no lo
@@ -461,7 +593,11 @@ export class ModulosService {
   // borrador, "Desactivar" deja la fila (atenuada, se puede reactivar) y
   // "Quitar" la saca del todo — evita que el editor se llene de preguntas
   // descartadas que ya nadie va a reactivar.
-  async unassignPregunta(moduloId: string, preguntaId: string) {
+  async unassignPregunta(
+    moduloId: string,
+    preguntaId: string,
+    actorIdentidad?: ActorIdentidad,
+  ) {
     const version = await this.versionParaEditar(moduloId);
     if (!version) {
       throw new NotFoundException(`El módulo ${moduloId} no tiene versiones`);
@@ -499,13 +635,21 @@ export class ModulosService {
       );
     }
 
-    await this.prisma.moduloVersionPregunta.delete({
-      where: {
-        moduloVersionId_preguntaId: {
-          moduloVersionId: version.id,
-          preguntaId,
+    await this.prisma.$transaction(async (tx) => {
+      await tx.moduloVersionPregunta.delete({
+        where: {
+          moduloVersionId_preguntaId: {
+            moduloVersionId: version.id,
+            preguntaId,
+          },
         },
-      },
+      });
+      await this.auditarContenidoModuloVersion(
+        tx,
+        version.id,
+        { pregunta: { antes: { id: preguntaId }, despues: null } },
+        actorIdentidad,
+      );
     });
   }
 
@@ -523,7 +667,11 @@ export class ModulosService {
   // (= volver al default global), igual que PUT /:id/criterios con un array
   // vacío. Sin el `?? null`, Prisma dropea los undefined y un campo borrado
   // desde el backoffice se quedaría con el valor viejo.
-  async setParametrosExamen(moduloId: string, dto: ParametrosExamenDto) {
+  async setParametrosExamen(
+    moduloId: string,
+    dto: ParametrosExamenDto,
+    actorIdentidad?: ActorIdentidad,
+  ) {
     const version = await this.versionParaEditar(moduloId);
     if (!version) {
       throw new NotFoundException(`El módulo ${moduloId} no tiene versiones`);
@@ -534,14 +682,26 @@ export class ModulosService {
       );
     }
 
-    return this.prisma.moduloVersion.update({
-      where: { id: version.id },
-      data: {
-        preguntasPorExamen: dto.preguntasPorExamen ?? null,
-        umbralAprobacion: dto.umbralAprobacion ?? null,
-        maxIntentos: dto.maxIntentos ?? null,
-        esperaEntreIntentosMinutos: dto.esperaEntreIntentosMinutos ?? null,
-      },
+    return this.prisma.$transaction(async (tx) => {
+      const actualizada = await tx.moduloVersion.update({
+        where: { id: version.id },
+        data: {
+          preguntasPorExamen: dto.preguntasPorExamen ?? null,
+          umbralAprobacion: dto.umbralAprobacion ?? null,
+          maxIntentos: dto.maxIntentos ?? null,
+          esperaEntreIntentosMinutos: dto.esperaEntreIntentosMinutos ?? null,
+        },
+      });
+      // `version` (ya fetched arriba por versionParaEditar) alcanza como
+      // "antes" — no hace falta una lectura extra dentro de la transacción.
+      await this.auditarModuloVersion(
+        tx,
+        'UPDATE',
+        version,
+        actualizada,
+        actorIdentidad,
+      );
+      return actualizada;
     });
   }
 
@@ -552,7 +712,11 @@ export class ModulosService {
   // crea y BORRA pivots, así que sobre un ACTIVO/ARCHIVADO rompería la
   // inmutabilidad del historial. Un módulo publicado se cambia creando un
   // borrador (POST /:id/versiones) y editando ahí.
-  async setCriterios(moduloId: string, dto: SetCriteriosDto) {
+  async setCriterios(
+    moduloId: string,
+    dto: SetCriteriosDto,
+    actorIdentidad?: ActorIdentidad,
+  ) {
     const version = await this.versionParaEditar(moduloId);
     if (!version) {
       throw new NotFoundException(`El módulo ${moduloId} no tiene versiones`);
@@ -598,6 +762,29 @@ export class ModulosService {
           where: { moduloVersionId: version.id },
           include: CRITERIO_INCLUDE,
         });
+
+        // UNA fila para todo el llamado, nunca una por pregunta movida:
+        // resolverCriterios() ya devuelve el resumen agregado
+        // (agregadas/quitadas), así que ESO es el diff — no hace falta (ni
+        // se quiere) una entrada por cada ModuloVersionPregunta tocada.
+        // Un guardado idempotente (0 agregadas, 0 quitadas) no genera fila.
+        if (resolucion.agregadas > 0 || resolucion.quitadas > 0) {
+          await this.auditarContenidoModuloVersion(
+            tx,
+            version.id,
+            {
+              preguntas: {
+                antes: null,
+                despues: {
+                  agregadas: resolucion.agregadas,
+                  quitadas: resolucion.quitadas,
+                },
+              },
+            },
+            actorIdentidad,
+          );
+        }
+
         return { version, criterios, resolucion };
       });
     } catch (err) {
@@ -750,7 +937,10 @@ export class ModulosService {
   // Si el borrador era su única versión (el módulo nunca se publicó), no
   // tiene sentido dejar un módulo sin ninguna versión, así que se elimina el
   // módulo entero junto con el borrador.
-  async cancelarBorrador(moduloId: string) {
+  async cancelarBorrador(
+    moduloId: string,
+    actorIdentidad?: ActorIdentidad,
+  ) {
     const borrador = await this.prisma.moduloVersion.findFirst({
       where: { moduloId, estado: 'BORRADOR' },
     });
@@ -774,12 +964,120 @@ export class ModulosService {
         where: { moduloVersionId: borrador.id },
       });
       await tx.moduloVersion.delete({ where: { id: borrador.id } });
+      // DELETE real (no soft-delete: ModuloVersion no tiene deletedAt) —
+      // `despues: null` porque la fila deja de existir de verdad, a
+      // diferencia de ReglaAsignacion.remove() que sólo marca un flag.
+      await this.auditarModuloVersion(
+        tx,
+        'DELETE',
+        borrador,
+        null,
+        actorIdentidad,
+      );
 
       if (!activo) {
+        // Sin ACTIVO de respaldo, cancelar el único borrador se lleva el
+        // módulo entero — también un DELETE real, mismo criterio de arriba.
+        const moduloAntes = await tx.modulo.findUnique({
+          where: { id: moduloId },
+        });
         await tx.modulo.delete({ where: { id: moduloId } });
+        if (moduloAntes) {
+          await this.auditarModulo(tx, 'DELETE', moduloAntes, null, actorIdentidad);
+        }
         return { moduloEliminado: true };
       }
       return { moduloEliminado: false };
+    });
+  }
+
+  // --- Auditoría -----------------------------------------------------------
+
+  // Si el diff da vacío, no llama a registrar() — mismo criterio que el resto
+  // de las entidades auditadas (Organizacion, ReglaAsignacion, Pregunta,
+  // Usuario/Vinculacion): el chequeo se hace ACÁ, testeable con AuditService
+  // mockeado.
+  private async auditarModulo(
+    tx: Prisma.TransactionClient,
+    accion: 'CREATE' | 'UPDATE' | 'DELETE',
+    antes: Modulo | null,
+    despues: Modulo | null,
+    actorIdentidad?: ActorIdentidad,
+  ) {
+    const referencia = antes ?? despues;
+    if (!referencia) return;
+
+    const diff = calcularDiff(
+      antes ? moduloEscalar(antes) : null,
+      despues ? moduloEscalar(despues) : null,
+      CAMPOS_TRAZABILIDAD_IGNORADOS,
+    );
+    if (!hayCambios(diff)) return;
+
+    await this.audit.registrar(tx, {
+      entidad: 'Modulo',
+      entidadId: referencia.id,
+      accion,
+      diff,
+      actor: 'backoffice',
+      ...actorIdentidad,
+    });
+  }
+
+  // Cambios en las columnas PROPIAS de una ModuloVersion (estado, numeración
+  // pública, parámetros de examen). Para cambios de CONTENIDO (preguntas,
+  // criterios) ver auditarContenidoModuloVersion — son dos cosas distintas:
+  // acá antes/despues son dos filas reales, ahí es un diff armado a mano.
+  private async auditarModuloVersion(
+    tx: Prisma.TransactionClient,
+    accion: 'CREATE' | 'UPDATE' | 'DELETE',
+    antes: ModuloVersion | null,
+    despues: ModuloVersion | null,
+    actorIdentidad?: ActorIdentidad,
+  ) {
+    const referencia = antes ?? despues;
+    if (!referencia) return;
+
+    const diff = calcularDiff(
+      antes ? moduloVersionEscalar(antes) : null,
+      despues ? moduloVersionEscalar(despues) : null,
+      CAMPOS_TRAZABILIDAD_IGNORADOS,
+    );
+    if (!hayCambios(diff)) return;
+
+    await this.audit.registrar(tx, {
+      entidad: 'ModuloVersion',
+      entidadId: referencia.id,
+      accion,
+      diff,
+      actor: 'backoffice',
+      ...actorIdentidad,
+    });
+  }
+
+  // Cambios en el CONTENIDO de una versión — qué preguntas tiene, cuáles
+  // trajeron los criterios — donde la entidad que cambia de verdad
+  // (ModuloVersionPregunta/ModuloVersionCriterio) no es una de las auditadas.
+  // UNA fila por LLAMADO, no por fila de pivot tocada: `asignarPreguntas` con
+  // 30 preguntas, o `setCriterios` con un criterio que mueve 50, generan una
+  // sola entrada acá — el `diff` ya viene armado por el caller con el
+  // resumen agregado (ver setCriterios/asignarPreguntas/setPreguntaActiva/
+  // unassignPregunta), no se recalcula nada acá.
+  private async auditarContenidoModuloVersion(
+    tx: Prisma.TransactionClient,
+    versionId: string,
+    diff: Diff,
+    actorIdentidad?: ActorIdentidad,
+  ) {
+    if (!hayCambios(diff)) return;
+
+    await this.audit.registrar(tx, {
+      entidad: 'ModuloVersion',
+      entidadId: versionId,
+      accion: 'UPDATE',
+      diff,
+      actor: 'backoffice',
+      ...actorIdentidad,
     });
   }
 

@@ -1,6 +1,6 @@
 import { NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
-import { Prisma } from '@prisma/client';
+import { Prisma, RolUsuario } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from './audit.service';
 
@@ -71,6 +71,62 @@ describe('AuditService.registrar', () => {
 
     expect(tx.auditLog.create).toHaveBeenCalled();
     expect(prisma.auditLog.create).not.toHaveBeenCalled();
+  });
+
+  it('con identidad real, las cuatro columnas de actor viajan al create', async () => {
+    const diff = { nombre: { antes: 'Juan', despues: 'Ana' } };
+
+    await service.registrar(tx as unknown as Prisma.TransactionClient, {
+      entidad: 'Usuario',
+      entidadId: '1',
+      accion: 'UPDATE',
+      diff,
+      actor: 'backoffice',
+      actorUsuarioId: 7,
+      actorNombre: 'María',
+      actorApellido: 'Gómez',
+      actorRol: RolUsuario.ADMINISTRADOR,
+    });
+
+    expect(tx.auditLog.create).toHaveBeenCalledWith({
+      data: {
+        entidad: 'Usuario',
+        entidadId: '1',
+        accion: 'UPDATE',
+        diff,
+        actor: 'backoffice',
+        actorUsuarioId: 7,
+        actorNombre: 'María',
+        actorApellido: 'Gómez',
+        actorRol: 'ADMINISTRADOR',
+      },
+    });
+  });
+
+  it('sin identidad (import/seed), las cuatro columnas de actor quedan undefined — Prisma las graba NULL', async () => {
+    const diff = { nombre: { antes: 'Juan', despues: 'Ana' } };
+
+    await service.registrar(tx as unknown as Prisma.TransactionClient, {
+      entidad: 'Usuario',
+      entidadId: '1',
+      accion: 'UPDATE',
+      diff,
+      actor: 'import',
+    });
+
+    expect(tx.auditLog.create).toHaveBeenCalledWith({
+      data: {
+        entidad: 'Usuario',
+        entidadId: '1',
+        accion: 'UPDATE',
+        diff,
+        actor: 'import',
+        actorUsuarioId: undefined,
+        actorNombre: undefined,
+        actorApellido: undefined,
+        actorRol: undefined,
+      },
+    });
   });
 });
 
@@ -204,5 +260,87 @@ describe('AuditService.listarPorUsuario', () => {
     const result = await service.listarPorUsuario(1);
 
     expect(result).toEqual([logDelete, logCreate]);
+  });
+});
+
+describe('AuditService.listarGlobal', () => {
+  let service: AuditService;
+  let prisma: {
+    auditLog: { findMany: jest.Mock; count: jest.Mock };
+  };
+
+  beforeEach(async () => {
+    prisma = {
+      auditLog: { findMany: jest.fn(), count: jest.fn() },
+    };
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [AuditService, { provide: PrismaService, useValue: prisma }],
+    }).compile();
+
+    service = module.get(AuditService);
+
+    prisma.auditLog.findMany.mockResolvedValue([]);
+    prisma.auditLog.count.mockResolvedValue(0);
+  });
+
+  it('sin filtros: where vacío, page/limit por default', async () => {
+    await service.listarGlobal({});
+
+    expect(prisma.auditLog.findMany).toHaveBeenCalledWith({
+      where: {},
+      orderBy: { createdAt: 'desc' },
+      skip: 0,
+      take: 50,
+    });
+  });
+
+  it('combina entidad + actorRol + actorUsuarioId con AND', async () => {
+    await service.listarGlobal({
+      entidad: 'Modulo',
+      actorRol: RolUsuario.ADMINISTRADOR,
+      actorUsuarioId: 7,
+    });
+
+    expect(prisma.auditLog.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          entidad: 'Modulo',
+          actorRol: 'ADMINISTRADOR',
+          actorUsuarioId: 7,
+        },
+      }),
+    );
+  });
+
+  it('desde/hasta arman un rango sobre createdAt', async () => {
+    const desde = new Date('2026-01-01T00:00:00.000Z');
+    const hasta = new Date('2026-01-31T23:59:59.999Z');
+
+    await service.listarGlobal({ desde, hasta });
+
+    expect(prisma.auditLog.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { createdAt: { gte: desde, lte: hasta } },
+      }),
+    );
+  });
+
+  it('pagina con skip/take derivados de page/limit', async () => {
+    await service.listarGlobal({ page: 3, limit: 20 });
+
+    expect(prisma.auditLog.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ skip: 40, take: 20 }),
+    );
+  });
+
+  it('devuelve data/total/page/limit', async () => {
+    const log = { id: 'l1', entidad: 'Modulo' };
+    prisma.auditLog.findMany.mockResolvedValue([log]);
+    prisma.auditLog.count.mockResolvedValue(1);
+
+    const result = await service.listarGlobal({ page: 2, limit: 10 });
+
+    expect(result).toEqual({ data: [log], total: 1, page: 2, limit: 10 });
   });
 });

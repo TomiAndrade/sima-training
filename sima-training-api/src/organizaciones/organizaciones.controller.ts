@@ -8,7 +8,9 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { actorDeIdentidad } from '../audit/actor-de-identidad';
+import { Actor } from '../auth/actor.decorator';
+import { IdentidadResuelta, JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { LECTURA_BACKOFFICE, SOLO_ADMINISTRADOR } from '../auth/matriz-permisos';
 import { Roles } from '../auth/roles.decorator';
 import { CreateOrganizacionDto } from './dto/create-organizacion.dto';
@@ -22,8 +24,11 @@ export class OrganizacionesController {
   @Post()
   @UseGuards(JwtAuthGuard)
   @Roles(...SOLO_ADMINISTRADOR)
-  create(@Body() dto: CreateOrganizacionDto) {
-    return this.organizaciones.create(dto);
+  create(
+    @Body() dto: CreateOrganizacionDto,
+    @Actor() actor: IdentidadResuelta,
+  ) {
+    return this.organizaciones.create(dto, actorDeIdentidad(actor));
   }
 
   @Get()
@@ -46,7 +51,8 @@ export class OrganizacionesController {
   update(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateOrganizacionDto,
+    @Actor() actor: IdentidadResuelta,
   ) {
-    return this.organizaciones.update(id, dto);
+    return this.organizaciones.update(id, dto, actorDeIdentidad(actor));
   }
 }

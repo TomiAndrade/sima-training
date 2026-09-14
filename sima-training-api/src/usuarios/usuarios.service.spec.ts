@@ -44,6 +44,7 @@ describe('UsuariosService', () => {
       findMany: jest.Mock;
       count: jest.Mock;
       findFirst: jest.Mock;
+      findUnique: jest.Mock;
       update: jest.Mock;
     };
     organizacion: { findUnique: jest.Mock };
@@ -68,6 +69,7 @@ describe('UsuariosService', () => {
         findMany: jest.fn(),
         count: jest.fn(),
         findFirst: jest.fn(),
+        findUnique: jest.fn(),
         update: jest.fn(),
       },
       organizacion: { findUnique: jest.fn() },
@@ -91,6 +93,11 @@ describe('UsuariosService', () => {
     // con que esta lectura nueva no reviente; los tests de auditoría lo
     // pisan con un estado previo real.
     prisma.vinculacion.findUnique.mockResolvedValue(null);
+    // Mismo criterio para la identidad de Usuario (sexta entidad auditada),
+    // pero el default inocuo acá es el MISMO fixture que ya usa `update` para
+    // el "después" (usuarioConVinculacion()): antes === después → diff vacío
+    // → ningún log de 'Usuario' en los tests que no lo pisan a propósito.
+    prisma.usuario.findUnique.mockResolvedValue(usuarioConVinculacion());
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -914,6 +921,252 @@ describe('UsuariosService', () => {
           actor: 'backoffice',
         }),
       );
+    });
+
+    // --- Identidad de Usuario (sexta entidad, con campos redactados) -------
+
+    describe('identidad de Usuario', () => {
+      const actorIdentidad = {
+        actorUsuarioId: 7,
+        actorNombre: 'María',
+        actorApellido: 'Gómez',
+        actorRol: RolUsuario.ADMINISTRADOR,
+      };
+
+      it('create (sin pares): CREATE con nombre/apellido completos y dni/email redactados', async () => {
+        prisma.usuario.create.mockResolvedValue({
+          id: 9,
+          nombre: 'Carlos',
+          apellido: 'Ruiz',
+          dni: '40555666',
+          email: 'carlos@sima.com',
+          vinculacion: null,
+        });
+
+        await service.create(
+          {
+            nombre: 'Carlos',
+            apellido: 'Ruiz',
+            dni: '40555666',
+            email: 'carlos@sima.com',
+            vinculacion: vinculacionSima,
+          } as any,
+          'backoffice',
+          actorIdentidad,
+        );
+
+        expect(audit.registrar).toHaveBeenCalledWith(prisma, {
+          entidad: 'Usuario',
+          entidadId: '9',
+          accion: 'CREATE',
+          diff: {
+            id: { antes: null, despues: 9 },
+            nombre: { antes: null, despues: 'Carlos' },
+            apellido: { antes: null, despues: 'Ruiz' },
+            dni: { redactado: true },
+            email: { redactado: true },
+          },
+          actor: 'backoffice',
+          ...actorIdentidad,
+        });
+      });
+
+      it('update: nombre/apellido viajan completos, dni/email como { redactado: true }', async () => {
+        // Dos queries DISTINTAS comparten el mismo mock: el chequeo de
+        // existencia (por `id`) y assertDniDisponible (por `dni`, para que
+        // el DNI nuevo no choque con otro usuario). Se distinguen por forma
+        // del `where`, igual que el test de "revivir" más abajo distingue
+        // por `deletedAt`.
+        prisma.usuario.findFirst.mockImplementation(({ where }) =>
+          'dni' in where
+            ? Promise.resolve(null)
+            : Promise.resolve(usuarioConVinculacion()),
+        );
+        prisma.usuario.findUnique.mockResolvedValue({
+          id: 1,
+          nombre: 'Ana',
+          apellido: 'Paz',
+          dni: '30111222',
+          email: 'ana.vieja@sima.com',
+        });
+        prisma.usuario.update.mockResolvedValue({
+          id: 1,
+          nombre: 'Ana María',
+          apellido: 'Paz',
+          dni: '30999888',
+          email: 'ana.vieja@sima.com',
+        });
+
+        await service.update(
+          1,
+          { nombre: 'Ana María', dni: '30999888' },
+          'backoffice',
+          undefined,
+          actorIdentidad,
+        );
+
+        expect(audit.registrar).toHaveBeenCalledWith(prisma, {
+          entidad: 'Usuario',
+          entidadId: '1',
+          accion: 'UPDATE',
+          diff: {
+            nombre: { antes: 'Ana', despues: 'Ana María' },
+            dni: { redactado: true },
+          },
+          actor: 'backoffice',
+          ...actorIdentidad,
+        });
+      });
+
+      it('update que no toca identidad no genera ningún log de Usuario', async () => {
+        const fijo = {
+          id: 1,
+          nombre: 'Ana',
+          apellido: 'Paz',
+          dni: '30111222',
+          email: 'ana@sima.com',
+        };
+        prisma.usuario.findFirst.mockResolvedValue(usuarioConVinculacion());
+        prisma.usuario.findUnique.mockResolvedValue(fijo);
+        prisma.usuario.update.mockResolvedValue(fijo);
+
+        await service.update(1, {}, 'backoffice', undefined, actorIdentidad);
+
+        expect(audit.registrar).not.toHaveBeenCalledWith(
+          prisma,
+          expect.objectContaining({ entidad: 'Usuario' }),
+        );
+      });
+
+      it('remove(): DELETE de Usuario con el antes/despues real de deletedAt', async () => {
+        const fecha = new Date('2026-09-10T12:00:00.000Z');
+        prisma.usuario.findFirst.mockResolvedValue({ id: 3, vinculacion: null });
+        prisma.usuario.findUnique.mockResolvedValue({
+          id: 3,
+          nombre: 'Luis',
+          apellido: 'Gil',
+          dni: '12345678',
+          email: null,
+          deletedAt: null,
+        });
+        prisma.usuario.update.mockResolvedValue({
+          id: 3,
+          nombre: 'Luis',
+          apellido: 'Gil',
+          dni: '12345678',
+          email: null,
+          deletedAt: fecha,
+        });
+        prisma.vinculacion.findUnique.mockResolvedValue(null);
+
+        await service.remove(3, actorIdentidad);
+
+        expect(audit.registrar).toHaveBeenCalledWith(prisma, {
+          entidad: 'Usuario',
+          entidadId: '3',
+          accion: 'DELETE',
+          diff: { deletedAt: { antes: null, despues: fecha } },
+          actor: 'backoffice',
+          ...actorIdentidad,
+        });
+      });
+
+      it('revivir: CREATE con antes:null — ignora los valores que tenía antes de la baja', async () => {
+        prisma.usuario.findFirst.mockImplementation(({ where }) =>
+          where.deletedAt && typeof where.deletedAt === 'object'
+            ? Promise.resolve({ id: 5 })
+            : Promise.resolve(null),
+        );
+        // El "antes de la baja" tenía otro nombre y otro email — no tienen
+        // que aparecer en el diff: el hecho que se audita es "alta", no
+        // "corrección", aunque la fila de Usuario nunca se haya borrado físico.
+        prisma.usuario.findUnique.mockResolvedValue({
+          id: 5,
+          nombre: 'Nombre Viejo',
+          apellido: 'Apellido Viejo',
+          dni: '30111222',
+          email: 'viejo@sima.com',
+          deletedAt: new Date('2025-01-01'),
+        });
+        prisma.usuario.update.mockResolvedValue({
+          id: 5,
+          nombre: 'Ana',
+          apellido: 'Paz',
+          dni: '30111222',
+          email: 'nuevo@sima.com',
+          deletedAt: null,
+          vinculacion: null,
+        });
+
+        await service.create(
+          {
+            nombre: 'Ana',
+            apellido: 'Paz',
+            dni: '30111222',
+            email: 'nuevo@sima.com',
+            vinculacion: vinculacionSima,
+          } as any,
+          'backoffice',
+          actorIdentidad,
+        );
+
+        const llamada = audit.registrar.mock.calls.find(
+          (c) => c[1].entidad === 'Usuario',
+        )![1];
+        expect(llamada.accion).toBe('CREATE');
+        expect(llamada.diff.nombre).toEqual({ antes: null, despues: 'Ana' });
+        expect(llamada.diff.email).toEqual({ redactado: true });
+      });
+
+      it('authProviderId nunca entra al diff, ni siquiera redactado', async () => {
+        prisma.usuario.findFirst.mockResolvedValue(usuarioConVinculacion());
+        prisma.usuario.findUnique.mockResolvedValue({
+          id: 1,
+          nombre: 'Ana',
+          apellido: 'Paz',
+          dni: '30111222',
+          authProviderId: 'auth0|viejo',
+        });
+        prisma.usuario.update.mockResolvedValue({
+          id: 1,
+          nombre: 'Ana',
+          apellido: 'Paz',
+          dni: '30111222',
+          authProviderId: 'auth0|nuevo',
+        });
+
+        await service.update(1, {}, 'backoffice');
+
+        // Ni nombre/apellido/dni cambiaron (diff vacío de ese lado) ni
+        // authProviderId puede aparecer — usuarioEscalar() ni lo lee.
+        expect(audit.registrar).not.toHaveBeenCalledWith(
+          prisma,
+          expect.objectContaining({ entidad: 'Usuario' }),
+        );
+      });
+
+      it('sin actorIdentidad, el log de Usuario queda sin las 4 columnas de actor', async () => {
+        prisma.usuario.create.mockResolvedValue({
+          id: 9,
+          nombre: 'Carlos',
+          apellido: 'Ruiz',
+          dni: '40555666',
+          vinculacion: null,
+        });
+
+        await service.create({
+          nombre: 'Carlos',
+          apellido: 'Ruiz',
+          dni: '40555666',
+          vinculacion: vinculacionSima,
+        } as any);
+
+        const llamada = audit.registrar.mock.calls.find(
+          (c) => c[1].entidad === 'Usuario',
+        )![1];
+        expect(llamada.actor).toBe('backoffice');
+        expect(llamada.actorUsuarioId).toBeUndefined();
+      });
     });
   });
 });

@@ -1,8 +1,21 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { AuditLog, Prisma } from '@prisma/client';
+import { AuditLog, Prisma, RolUsuario } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { ActorIdentidad } from './actor-de-identidad';
 import { Diff, hayCambios } from './calcular-diff';
 import { entidadIdParPrefix } from './entidad-id';
+
+// Filtros del log global (AuditService.listarGlobal). Ids crudos, sin
+// resolver nombres — eso lo hace la pantalla (ver docs/decisiones/auditoria.md).
+export interface FindAuditLogQuery {
+  entidad?: string;
+  actorRol?: RolUsuario;
+  actorUsuarioId?: number;
+  desde?: Date;
+  hasta?: Date;
+  page?: number;
+  limit?: number;
+}
 
 // Escribe filas en AuditLog. El diff en sí lo calcula calcular-diff.ts
 // (funciones puras, sin I/O); este service es la única pieza que toca Prisma.
@@ -26,7 +39,7 @@ export class AuditService {
       accion: 'CREATE' | 'UPDATE' | 'DELETE';
       diff: Diff;
       actor: string;
-    },
+    } & Partial<ActorIdentidad>,
   ): Promise<void> {
     // Un UPDATE que no cambió ningún campo no es un evento: no hay nada que
     // reconstruir después, y escribirlo igual sólo ensucia el historial de
@@ -42,6 +55,14 @@ export class AuditService {
         accion: entrada.accion,
         diff: entrada.diff as Prisma.InputJsonValue,
         actor: entrada.actor,
+        // Las cuatro son opcionales (Partial<ActorIdentidad>): un caller sin
+        // IdentidadResuelta (import antes de sumarle @Actor(), seeds,
+        // scripts) las deja undefined y Prisma las graba NULL — mismo
+        // resultado que las filas de antes de esta columna.
+        actorUsuarioId: entrada.actorUsuarioId,
+        actorNombre: entrada.actorNombre,
+        actorApellido: entrada.actorApellido,
+        actorRol: entrada.actorRol,
       },
     });
   }
@@ -96,5 +117,50 @@ export class AuditService {
       },
       orderBy: { createdAt: 'desc' },
     });
+  }
+
+  // Log GLOBAL, transversal a todas las entidades — a diferencia de
+  // listarPorUsuario(), acá sí hace falta paginar: no hay un límite natural
+  // como "los pares de una persona", puede crecer a miles de filas.
+  //
+  // Devuelve ids crudos, sin resolver nombres (puestoId/moduloId/etc. tal
+  // cual están en el diff) — la pantalla que lo consume ya tiene los
+  // catálogos cargados para eso, mismo criterio que HistorialUsuario.jsx hoy.
+  async listarGlobal(query: FindAuditLogQuery): Promise<{
+    data: AuditLog[];
+    total: number;
+    page: number;
+    limit: number;
+  }> {
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 50;
+
+    const where: Prisma.AuditLogWhereInput = {
+      ...(query.entidad ? { entidad: query.entidad } : {}),
+      ...(query.actorRol ? { actorRol: query.actorRol } : {}),
+      ...(query.actorUsuarioId !== undefined
+        ? { actorUsuarioId: query.actorUsuarioId }
+        : {}),
+      ...(query.desde || query.hasta
+        ? {
+            createdAt: {
+              ...(query.desde ? { gte: query.desde } : {}),
+              ...(query.hasta ? { lte: query.hasta } : {}),
+            },
+          }
+        : {}),
+    };
+
+    const [data, total] = await Promise.all([
+      this.prisma.auditLog.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      this.prisma.auditLog.count({ where }),
+    ]);
+
+    return { data, total, page, limit };
   }
 }

@@ -11,6 +11,7 @@ import {
 } from '@nestjs/common';
 import { Response } from 'express';
 import { Public } from '../auth/public.decorator';
+import { CorregirRespuestaDto } from './dto/corregir-respuesta.dto';
 import { LoginTabletDto } from './dto/login-tablet.dto';
 import { RegistrarSesionTabletDto } from './dto/registrar-sesion-tablet.dto';
 import { TabletAuthGuard, UsuarioTablet } from './tablet-auth.guard';
@@ -60,6 +61,23 @@ export class TabletController {
     @Param('moduloId') moduloId: string,
   ) {
     return this.tablet.examen(usuarioId, moduloId);
+  }
+
+  // Corrige UNA respuesta en el momento de tocarla, para el feedback inmediato
+  // de la app. 200 y no 201: no crea nada, la respuesta se persiste recién al
+  // cerrar la sesión.
+  //
+  // Va detrás de TabletAuthGuard como el resto: sin token no se corrige nada.
+  // El guard no verifica que el examen sea suyo —el CONTENIDO es el mismo para
+  // cualquiera que rinda esa versión, mismo criterio que GET examen— y lo que
+  // impide pedir la respuesta de una pregunta cualquiera del banco es el pivot
+  // que valida corregirUna().
+  @Post('corregir')
+  @Public()
+  @UseGuards(TabletAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  corregir(@Body() dto: CorregirRespuestaDto) {
+    return this.tablet.corregir(dto);
   }
 
   // El usuarioId sale del token — NUNCA del body, ver RegistrarSesionTabletDto

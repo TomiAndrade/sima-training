@@ -10,6 +10,8 @@ import { JwtService, JwtSignOptions } from '@nestjs/jwt';
 import { AsignacionesService } from '../asignaciones/asignaciones.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { SesionesService } from '../sesiones/sesiones.service';
+import { corregirUna } from './corregir-una';
+import { CorregirRespuestaDto } from './dto/corregir-respuesta.dto';
 import { serializarPregunta } from './serializar-pregunta';
 import { LoginTabletDto } from './dto/login-tablet.dto';
 import { RegistrarSesionTabletDto } from './dto/registrar-sesion-tablet.dto';
@@ -302,6 +304,18 @@ export class TabletService {
       },
       preguntas: elegidas.map(serializarPregunta),
     };
+  }
+
+  // Corrige UNA respuesta mientras la persona todavía está rindiendo, para que
+  // la app pinte la opción verde o roja al tocarla. Delega en corregirUna(), que
+  // es la misma función que usa el modo invitado — ver ahí por qué esto existe
+  // en vez de mandar `respuestaCorrecta` junto con el examen.
+  //
+  // No recibe el usuarioId y no es un descuido: corregir no depende de quién
+  // rinde. Lo que ata la respuesta a un examen legítimo es el pivot
+  // (moduloVersion, pregunta), que se valida adentro.
+  corregir(dto: CorregirRespuestaDto) {
+    return corregirUna(this.prisma, dto);
   }
 
   // Registra el resultado de una rendición. Delega TODO en

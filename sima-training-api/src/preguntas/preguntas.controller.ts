@@ -13,7 +13,9 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { actorDeIdentidad } from '../audit/actor-de-identidad';
+import { Actor } from '../auth/actor.decorator';
+import { IdentidadResuelta, JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { LECTURA_BACKOFFICE, SOLO_ADMINISTRADOR } from '../auth/matriz-permisos';
 import { Roles } from '../auth/roles.decorator';
 import { MAX_IMAGEN_SIZE } from '../storage/formato-imagen';
@@ -29,8 +31,8 @@ export class PreguntasController {
   @Post()
   @UseGuards(JwtAuthGuard)
   @Roles(...SOLO_ADMINISTRADOR)
-  create(@Body() dto: CreatePreguntaDto) {
-    return this.preguntas.create(dto);
+  create(@Body() dto: CreatePreguntaDto, @Actor() actor: IdentidadResuelta) {
+    return this.preguntas.create(dto, actorDeIdentidad(actor));
   }
 
   // Imagen del enunciado. Sin `storage` en el interceptor: multer usa
@@ -75,7 +77,8 @@ export class PreguntasController {
   setActiva(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: TogglePreguntaActivaDto,
+    @Actor() actor: IdentidadResuelta,
   ) {
-    return this.preguntas.setActiva(id, dto.activa);
+    return this.preguntas.setActiva(id, dto.activa, actorDeIdentidad(actor));
   }
 }

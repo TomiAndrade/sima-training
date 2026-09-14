@@ -861,31 +861,59 @@ enum AccionAudit {
 // auditoría le pega directo al propósito de la tabla. Por eso no hay
 // updatedAt/updatedBy/deletedAt, sólo createdAt.
 //
-// `actor` es String libre y no FK a Usuario: hoy los actores son los mismos
-// strings genéricos que ya usa createdBy ("backoffice", "import", "tablet")
-// porque no existen cuentas de sistema todavía (ver la matriz de roles en
-// README.md). El día que existan, se guarda el id de esa cuenta ahí mismo,
-// sin migrar nada.
+// `actor` es String libre y no FK a Usuario: son los strings de CANAL
+// ("backoffice", "import", "tablet") — no una identidad. Esa columna no
+// cambia de significado con las cuatro de abajo: sigue diciendo por dónde
+// entró el cambio, no quién lo hizo.
+//
+// `actorUsuarioId`/`actorNombre`/`actorApellido`/`actorRol`: la identidad
+// REAL del actor, agregadas cuando @Actor() (RolesGuard) ya estaba disponible
+// para leerla. Las CUATRO nullable, y a propósito no se migran las filas
+// viejas: quedan con `actor` en su string de canal y estas cuatro en null —
+// no hay valor real que rellenar ahí sin inventarlo. `actorUsuarioId` es un
+// Int simple y SIN FK a Usuario: ponerle una FK ataría una tabla polimórfica
+// e inmutable a que la fila de Usuario nunca se borre (hoy es soft-delete,
+// pero igual es un acoplamiento que esta tabla no necesita) — el filtro por
+// actor en el log global va por esta columna y por `actorRol`, nunca por
+// join. `actorNombre`/`actorApellido` son sólo para mostrar, se congelan en
+// el momento del cambio (si la persona cambia de nombre después, la fila
+// vieja sigue diciendo el nombre de entonces — coherente con que el resto
+// del diff tampoco se actualiza retroactivamente).
 //
 // `diff` es jsonb con la forma `{ campo: { antes, despues } }`, SOLO los
-// campos que cambiaron — no una foto completa de la fila. La forma varía por
-// entidad y nunca se consulta por adentro (ni filtro ni índice sobre su
-// contenido), sólo se lee entera para mostrarla: no hay razón para forzarle
-// una columna tipada.
+// campos que cambiaron — no una foto completa de la fila. Un campo puede
+// venir también como `{ campo: { redactado: true } }`: son los datos
+// personales que se decidió NO guardar (ej. dni/email de Usuario) — el log
+// dice que ese campo cambió, nunca el valor, ni el de antes ni el de
+// después. La forma varía por entidad y nunca se consulta por adentro (ni
+// filtro ni índice sobre su contenido), sólo se lee entera para mostrarla:
+// no hay razón para forzarle una columna tipada.
 model AuditLog {
-  id        String      @id @default(uuid())
+  id        String       @id @default(uuid())
   entidad   String
-  entidadId String      @map("entidad_id")
+  entidadId String       @map("entidad_id")
   accion    AccionAudit
   diff      Json
   actor     String
-  createdAt DateTime    @default(now()) @map("created_at")
+  createdAt DateTime     @default(now()) @map("created_at")
+
+  // Identidad real del actor (ver comentario arriba). Nullable: las filas
+  // anteriores a esta migración no la tienen, y algunos canales (import,
+  // scripts) pueden seguir sin una IdentidadResuelta que mapear.
+  actorUsuarioId Int?        @map("actor_usuario_id")
+  actorNombre    String?     @map("actor_nombre")
+  actorApellido  String?     @map("actor_apellido")
+  actorRol       RolUsuario? @map("actor_rol")
 
   // El compuesto sirve al caso de uso real (paso 4 de esta story): "el log de
   // esta persona", filtrando por (entidad, entidadId). El de createdAt sirve
-  // a un log global ordenado por fecha — no existe todavía, pero es la
-  // lectura obvia siguiente y no cuesta nada adelantarlo.
+  // al log global ordenado por fecha. Los de actorUsuarioId/actorRol son los
+  // dos ejes de filtro del log global (ver AuditService.listarGlobal) —
+  // btree simples, sin WHERE: NULL no rompe nada, sólo no matchea ningún
+  // filtro por actor (coherente: las filas viejas no tienen actor real).
   @@index([entidad, entidadId])
   @@index([createdAt])
+  @@index([actorUsuarioId])
+  @@index([actorRol])
   @@map("audit_logs")
 }
