@@ -86,7 +86,11 @@ La app pinta cada opción verde o roja apenas se la toca. Para eso hay que saber
 
 **(b) Corregir de a una contra el backend** (`POST /tablet/corregir`). Es lo que se hizo. La correcta se entrega recién **después** de que la respuesta quedó comprometida — en la app es definitiva al tocar —, que es exactamente la diferencia que importa: se puede aprender de lo que se falló, no adivinar antes de contestar.
 
-El costo es real pero menor de lo que parece: son 12–15 requests más por examen, y **no agrega una dependencia nueva de red** porque la app ya necesita conectividad para pedir el examen y para registrar (el offline sigue pendiente). Si una corrección falla, **la evaluación no se corta**: no se pinta color, se avanza casi de inmediato y la respuesta viaja igual al cerrar la sesión, donde se calcula el resultado que vale.
+El costo es real pero menor de lo que parece: son 12–15 requests más por examen, y **no agrega una dependencia nueva de red** porque la app ya necesita conectividad para pedir el examen y para registrar (el offline sigue pendiente).
+
+**Qué pasa cuando una corrección falla.** Se reintenta dos veces con esperas de 400 y 800 ms (`core/reintentarRequest.js`), porque a mitad de un examen la mayoría de los fallos de red son momentáneos — un túnel, un cambio de antena, la tablet que se durmió medio segundo — y darse por vencido al primer intento deja una pregunta sin verificar por algo que se arreglaba solo. Se reintenta **sólo** ante error de red o 5xx: un 400 (pregunta que no pertenece a la versión) o un 401 van a fallar igual las tres veces, y reintentarlos sólo hace esperar de más para llegar al mismo lugar.
+
+Si ni con reintentos, **la evaluación no se corta**: la opción queda gris, se avanza casi de inmediato y la respuesta viaja igual al cerrar la sesión, donde se calcula el resultado que vale. **Sin cartel durante el examen** — la persona está rindiendo, no es el momento de explicarle un problema de red — pero **sí se cuenta**, y el repaso lo declara: ver abajo.
 
 Lo que el endpoint **no** hace: no persiste nada, no mira el tope de reintentos (eso se aplica al servir el examen) y no filtra por `activa` — mismo criterio que `crearSesion()`. Lo que sí valida, y es lo que lo sostiene, es el **pivot**: sin esa comprobación sería un oráculo para pedir la correcta de cualquier pregunta del banco por id. El hueco que queda —probar las opciones de a una con `curl`, porque el examen servido no se persiste— está aceptado y anotado en [`../pendientes.md`](../pendientes.md).
 
@@ -96,7 +100,9 @@ Lo que el endpoint **no** hace: no persiste nada, no mira el tope de reintentos 
 
 La pantalla de "qué fallé" (enunciado, qué eligió, cuál era) se arma **con lo que ya devolvió la corrección de a una**, acumulado mientras se rendía. No hay un segundo endpoint que entregue las correctas de a muchas: `GET /sesiones/:id` sigue siendo exclusivo del backoffice, que es lo que impide que alguien con su propio `sesionId` se baje las respuestas de su examen recién desaprobado.
 
-Se muestra **apruebe o no**: el objetivo es que la persona se vaya sabiendo lo que no sabía, y eso no depende de si llegó al umbral. **Costo aceptado**: quien desapruebe y reintente va a repetir algunas preguntas sabiendo la respuesta — el sorteo saca 12–15 de un pool de 26–63. Es la consecuencia buscada de enseñar el error, no un efecto colateral.
+Se muestra **apruebe o no**: el objetivo es que la persona se vaya sabiendo lo que no sabía, y eso no depende de si llegó al umbral.
+
+**Las que no se pudieron verificar se declaran arriba del listado**, en ámbar (una advertencia sobre lo que falta, no un error de la persona), con cuántas fueron y por qué el repaso puede estar incompleto: si una de ésas estuvo mal, no está en la lista, y callarlo hace que el repaso mienta por omisión. Ese aviso es también el motivo por el que el repaso se ofrece **aunque no haya ninguna incorrecta**: el caso en que fallaron todas las correcciones sería, si no, justo el único en el que la persona no se entera de nada. **Costo aceptado**: quien desapruebe y reintente va a repetir algunas preguntas sabiendo la respuesta — el sorteo saca 12–15 de un pool de 26–63. Es la consecuencia buscada de enseñar el error, no un efecto colateral.
 
 ## El modo invitado
 
