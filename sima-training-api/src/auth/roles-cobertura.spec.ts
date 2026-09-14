@@ -120,7 +120,7 @@ describe('cobertura de autorización', () => {
     // Si este número cambia es porque se agregó o sacó un endpoint. No es un
     // valor mágico: es la red que hace que los dos tests de abajo no pasen
     // en verde por estar mirando una lista vacía.
-    expect(rutas).toHaveLength(73);
+    expect(rutas).toHaveLength(75);
   });
 
   it('ninguna ruta queda sin @Roles() ni @Public()', () => {
