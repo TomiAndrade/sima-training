@@ -15,6 +15,8 @@ MVP de alta fidelidad para validar la plataforma **SIMA TRAINING** de **Ingenier
 | `sima-training-api/` | **Backend** NestJS + PostgreSQL + Prisma (Sprint 1) | 3000 |
 | `sima-training-backoffice/` | Backoffice de la plataforma SIMA TRAINING | 5173 |
 
+Los dos frontends (el backoffice y la app tablet, que vive en su propio repo) son dev servers de Vite y tomaban el mismo default, así que **el segundo en arrancar saltaba solo a 5174** y cuál era cuál dependía del orden. Hoy cada uno declara el suyo con `strictPort`: **backoffice 5173, app tablet 5174** (y 4173/4174 para `preview`). Si el puerto está ocupado el server falla en vez de mudarse en silencio a uno que nadie tiene anotado.
+
 ## Stack técnico
 
 **Frontend** (`sima-training-backoffice`):
