@@ -1,5 +1,6 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import { createPortal } from 'react-dom'
+import usePanelFlotante from './usePanelFlotante'
 
 const inputCls =
   'w-full bg-white border border-slate-300 rounded px-3 py-2 text-slate-900 text-sm focus:outline-none focus:border-red-600'
@@ -10,8 +11,6 @@ const inputCls =
 // gana la que aparece después en el CSS generado, no en el string.
 const triggerCls =
   'bg-white border border-slate-300 rounded px-3 py-2 text-slate-900 text-sm focus:outline-none focus:border-red-600'
-
-const PANEL_ALTO = 280 // alto máximo estimado del panel, para decidir si abre hacia arriba
 
 // Sin acentos y en minúsculas: el catálogo real mezcla códigos (S31, OB308) con
 // nombres, y nadie tipea el acento al buscar.
@@ -26,16 +25,9 @@ const normalizar = (s) =>
 // Existe como componente aparte y no como un prop `single` de MultiSelectFilter
 // porque casi todo lo que los diferencia son comportamientos OPUESTOS
 // (seleccionar todos vs opción vacía, quedarse abierto vs cerrar al elegir), y
-// eso deja la mitad del componente detrás de condicionales.
-//
-// **El panel va en un portal a `document.body`, con `position: fixed`.** No es
-// decoración: la mitad de los consumidores están dentro de un `Modal`, cuyo
-// cuerpo es `overflow-y-auto` — un panel `absolute` ahí adentro queda recortado
-// por ese contenedor y las opciones de abajo se vuelven inalcanzables sin
-// scrollear el modal. Con `fixed` fuera del árbol del modal, el panel flota
-// sobre todo. El costo es que hay que cerrarlo si algo scrollea (si no, queda
-// pegado en la pantalla mientras el disparador se va), y de eso se ocupa el
-// listener de scroll en fase de captura, que también ve el scroll del modal.
+// eso deja la mitad del componente detrás de condicionales. Lo que sí comparten
+// es cómo se abre, se ubica y se cierra el panel: eso vive en
+// `usePanelFlotante` (portal a document.body + position fixed, con el porqué).
 export default function SearchableSelect({
   options,
   value,
@@ -48,62 +40,11 @@ export default function SearchableSelect({
   disabled = false,
   className = 'w-full',
 }) {
-  const [open, setOpen] = useState(false)
   const [q, setQ] = useState('')
-  const [coords, setCoords] = useState(null)
-  const triggerRef = useRef(null)
-  const panelRef = useRef(null)
+  const { open, setOpen, coords, triggerRef, panelRef } = usePanelFlotante()
 
   const seleccionada = options.find((o) => o.id === value)
   const label = seleccionada?.label ?? (value ? value : placeholder)
-
-  const posicionar = () => {
-    const el = triggerRef.current
-    if (!el) return
-    const r = el.getBoundingClientRect()
-    // Si abajo no entra pero arriba sí, abre hacia arriba. Con poco lugar en
-    // los dos lados se queda abajo y el panel scrollea por dentro.
-    const abajo = window.innerHeight - r.bottom
-    const haciaArriba = abajo < PANEL_ALTO && r.top > abajo
-    setCoords({
-      left: r.left,
-      width: r.width,
-      ...(haciaArriba
-        ? { bottom: window.innerHeight - r.top + 4 }
-        : { top: r.bottom + 4 }),
-    })
-  }
-
-  useLayoutEffect(() => {
-    if (open) posicionar()
-  }, [open])
-
-  useEffect(() => {
-    if (!open) return
-
-    const onClickOutside = (e) => {
-      // El panel vive en un portal, así que no está dentro de triggerRef:
-      // hay que chequear los dos nodos o se cerraría al tocar sus opciones.
-      if (triggerRef.current?.contains(e.target)) return
-      if (panelRef.current?.contains(e.target)) return
-      setOpen(false)
-    }
-    const onScrollOrResize = () => setOpen(false)
-    const onKey = (e) => { if (e.key === 'Escape') setOpen(false) }
-
-    document.addEventListener('mousedown', onClickOutside)
-    // Captura: los eventos de scroll no burbujean, y el que importa acá es el
-    // del cuerpo del modal, no el de window.
-    window.addEventListener('scroll', onScrollOrResize, true)
-    window.addEventListener('resize', onScrollOrResize)
-    document.addEventListener('keydown', onKey)
-    return () => {
-      document.removeEventListener('mousedown', onClickOutside)
-      window.removeEventListener('scroll', onScrollOrResize, true)
-      window.removeEventListener('resize', onScrollOrResize)
-      document.removeEventListener('keydown', onKey)
-    }
-  }, [open])
 
   const abrir = () => {
     if (disabled) return
@@ -148,9 +89,11 @@ export default function SearchableSelect({
             ref={panelRef}
             role="listbox"
             style={{ position: 'fixed', ...coords }}
-            className="z-[60] bg-white border border-slate-200 rounded shadow-lg"
+            className="z-[60] bg-white border border-slate-200 rounded shadow-lg flex flex-col"
           >
-            <div className="p-2 border-b border-slate-100">
+            {/* El buscador no se achica: el `maxHeight` del panel lo absorbe
+                la lista scrolleando por dentro. */}
+            <div className="p-2 border-b border-slate-100 flex-shrink-0">
               <input
                 autoFocus
                 className={inputCls}
@@ -159,7 +102,7 @@ export default function SearchableSelect({
                 placeholder={searchPlaceholder}
               />
             </div>
-            <div className="max-h-56 overflow-y-auto divide-y divide-slate-100">
+            <div className="flex-1 min-h-0 overflow-y-auto divide-y divide-slate-100">
               {/* La opción vacía no se filtra con la búsqueda: es la salida
                   para limpiar el filtro y tiene que estar siempre a mano. */}
               {emptyLabel !== undefined && (
