@@ -437,6 +437,8 @@ sima-training-backoffice/src/
 │                      ReglasAsignacion.jsx · TrainingAssignments.jsx
 ├── pages/             BackofficeLayout.jsx · Dashboard.jsx
 ├── components/        Button · Modal · Table · StatCard · MultiSelectFilter · SearchableSelect
+│                      · usePanelFlotante.js (lo único que comparten los dos
+│                       desplegables: el panel en portal + fixed, y cuándo se cierra)
 │                      (Table tiene un prop `alignTop` opt-in, default false:
 │                       alinea las celdas arriba en vez de al medio, el default
 │                       de un <td>. Lo pasa sólo Usuarios.jsx, cuya celda de
@@ -461,7 +463,7 @@ Con el catálogo real —**88 puestos**, 16 centros de costo— un `<select>` na
 
 Se aplicó **sólo donde la lista es larga** — Puesto y Centro de costo, en los cuatro lugares donde aparecen: los filtros de Usuarios, `ParesPuestoCentro` (el form de carga de una persona), el resolver de `ImportUsuariosModal` y el modal de Reglas. Los desplegables cortos (base, nivel, organización, tipo de pregunta, respuesta correcta, la acción del import) **siguen siendo `<select>` nativos**: abrir un panel con buscador para elegir entre tres opciones agrega un paso en vez de sacarlo.
 
-**El panel se renderiza en un portal a `document.body` con `position: fixed`**, y eso no es decoración: la mitad de los consumidores viven dentro de un `Modal`, cuyo cuerpo es `overflow-y-auto` — un panel `absolute` ahí adentro queda **recortado** por ese contenedor. El costo es que el panel se cierra ante cualquier scroll (listener en fase de captura, porque los eventos de scroll no burbujean y el que importa es el del cuerpo del modal).
+**El panel de los dos se renderiza en un portal a `document.body` con `position: fixed`**, y eso no es decoración: la mitad de los consumidores viven dentro de un `Modal`, cuyo cuerpo es `overflow-y-auto` — un panel `absolute` ahí adentro queda **recortado** por ese contenedor y, peor, le agrega scroll al cuerpo del modal: clickear esa barra es un `mousedown` "afuera" del desplegable y lo cerraba, así que se podía scrollear con la ruedita pero no con la barra. El costo es que el panel se cierra ante cualquier scroll **salvo el de su propia lista** (listener en fase de captura, porque los eventos de scroll no burbujean y el que importa es el del cuerpo del modal). Todo eso —abrir, ubicar, cerrar— vive en el hook **`usePanelFlotante`**, compartido por los dos componentes: es la única parte que tienen en común, y tenerla en uno solo fue exactamente el bug.
 
 `opcionesCatalogo()` (`core/format/catalogo.js`) adapta una fila de catálogo a `{ id, label }` y estampa el sufijo `" (inactivo)"` que Usuarios y `ParesPuestoCentro` ya venían repitiendo a mano.
 

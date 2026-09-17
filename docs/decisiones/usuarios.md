@@ -123,16 +123,23 @@ Los dos son "desplegable con buscador arriba" y comparten el lenguaje visual, pe
 | Extra arriba | "Seleccionar todos" | opción vacía ("Todos los puestos") |
 | Al elegir | queda abierto | cierra |
 
-Un prop `single` en el existente dejaba la mitad del componente detrás de condicionales, y las dos mitades no comparten ni el contrato de datos. También se descartó extraer primero un primitivo común (dropdown + click-afuera + input): habría que tocar un componente que hoy anda para ahorrar ~30 líneas de shell, y el único consumidor del primitivo serían esos dos.
+Un prop `single` en el existente dejaba la mitad del componente detrás de condicionales, y las dos mitades no comparten ni el contrato de datos. Se descartó también extraer un primitivo común que se llevara el shell entero (dropdown + input + lista): ahí lo común son ~30 líneas de markup y lo distinto es todo lo demás. Lo que **sí** se extrajo, y por un bug concreto (ver abajo), es el comportamiento del panel —abrir, ubicar y cerrar— en `usePanelFlotante`: eso no es markup compartido sino una regla sutil que estaba en un componente y no en el otro, y que en el que faltaba estaba rota.
 
-### El panel va en un portal porque si no el `Modal` lo recorta
+### El panel va en un portal, y de eso se ocupa `usePanelFlotante` para los dos
 
-`Modal` renderiza su cuerpo como `<div className="p-5 overflow-y-auto">`. Un panel `absolute` dentro de ese contenedor queda **recortado por él**: las opciones que caen fuera del alto del modal se vuelven inalcanzables. Y la mitad de los consumidores de `SearchableSelect` viven adentro de un modal — `ParesPuestoCentro`, el resolver del import y el alta de Reglas.
+`Modal` renderiza su cuerpo como `<div className="p-5 overflow-y-auto">`. Un panel `absolute` dentro de ese contenedor queda **recortado por él**: las opciones que caen fuera del alto del modal se vuelven inalcanzables. Y la mitad de los consumidores viven adentro de un modal — `ParesPuestoCentro`, el resolver del import y el alta de Reglas.
 
-Por eso el panel se renderiza con `createPortal` en `document.body` y `position: fixed`, con las coordenadas calculadas del `getBoundingClientRect()` del disparador (y abriendo hacia arriba si abajo no entra). Las dos consecuencias, las dos resueltas en el componente:
+Por eso el panel se renderiza con `createPortal` en `document.body` y `position: fixed`, con las coordenadas calculadas del `getBoundingClientRect()` del disparador.
+
+**El panel no elige su alto: se lo da el lugar que hay** (`maxHeight`), y lo que sobra lo absorbe la lista scrolleando por dentro. Se abre **hacia abajo** salvo que abajo no entre un panel usable (200 px) y arriba haya más lugar. La primera versión decidía con "¿entra el panel entero?" contra un alto estimado a mano, y con eso el desplegable del último campo de un modal saltaba para arriba **siempre**, tapando el formulario que la persona estaba completando — aunque abajo hubiera lugar de sobra para media docena de opciones. Un desplegable que se muda de lado sorprende más que uno que scrollea.
+
+**Esto valió primero sólo para `SearchableSelect`, y ahí estuvo el bug.** `MultiSelectFilter` siguió con su panel `absolute`, y adentro del modal de "+ Nueva regla" el segundo síntoma del recorte resultó peor que el primero: el panel desbordado le agrega **scroll al cuerpo del modal**. Clickear esa barra de scroll es un `mousedown` cuyo target es el cuerpo del modal — o sea "afuera" del desplegable —, así que el panel se cerraba en el acto y con él desaparecía la barra que se estaba por arrastrar. Con la ruedita andaba (ese componente no escuchaba `scroll`), con la barra era imposible: un desplegable que sólo se podía scrollear de una de las dos formas. La barra la creaba el propio panel, así que la solución no es detectar el click en la barra sino **no generar el desborde**: con `fixed` fuera del árbol del modal, el caso deja de existir.
+
+Las consecuencias del `fixed`, las tres resueltas en `usePanelFlotante` — que es por qué ese comportamiento se comparte en vez de estar copiado dos veces:
 
 - **Click-afuera tiene que mirar dos nodos.** El panel ya no está dentro del disparador en el DOM, así que chequear sólo `triggerRef` cerraría el panel al tocar sus propias opciones.
 - **Hay que cerrarlo ante cualquier scroll**, o el panel queda flotando en la pantalla mientras el disparador se va. El listener va en **fase de captura**: los eventos de scroll no burbujean, y el que importa acá es el del cuerpo del modal, no el de `window`.
+- **...pero el scroll de la lista interna del panel NO cierra nada.** Esa captura tan amplia ve también el scroll de las propias opciones, que no mueve el disparador ni un píxel: sin el `if (panelRef.current?.contains(e.target)) return`, scrollear la lista cierra el panel — el mismo bug de arriba por otra puerta.
 
 ### Sólo donde la lista es larga
 
