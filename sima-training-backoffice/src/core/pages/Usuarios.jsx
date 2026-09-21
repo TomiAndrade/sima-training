@@ -11,7 +11,7 @@ import ImportUsuariosModal from '../components/ImportUsuariosModal'
 import ParesPuestoCentro from '../components/ParesPuestoCentro'
 import HistorialUsuario from './HistorialUsuario'
 import { roleBadge } from '../format/badges'
-import { useEsAdministrador } from '../auth/sesionContext'
+import { useEsAdministrador, useSesion } from '../auth/sesionContext'
 import { opcionesCatalogo } from '../format/catalogo'
 
 // Decisión de producto: el backoffice solo da de alta ALUMNOS por ahora (la
@@ -94,6 +94,12 @@ export default function Usuarios({ sub = [], setSub = () => {} }) {
   // Es UI nada más: quien decide de verdad es el backend, que rechaza con 403
   // a cualquiera que no sea administrador (UsuariosService.update).
   const esAdministrador = useEsAdministrador()
+  // `cargandoSesion`/`errorSesion` distinguen "todavía no sabemos" de "sabemos
+  // que no es admin" — con sólo `esAdministrador` los dos casos se ven iguales
+  // (false), y eso es lo que hacía que un fallo al pedir /auth/me se leyera
+  // como "sin permiso" en vez de "no se pudo verificar". Mientras no esté
+  // resuelto, el select de Rol no se habilita — ver el bloque de abajo.
+  const { cargando: cargandoSesion, error: errorSesion, recargar: recargarSesion } = useSesion()
 
   const [modal, setModal] = useState(null)
   const [form, setForm] = useState(emptyForm)
@@ -696,6 +702,36 @@ export default function Usuarios({ sub = [], setSub = () => {} }) {
               >
                 {ROL_ALTA.toLowerCase()}
               </span>
+            ) : cargandoSesion ? (
+              // Todavía no sabemos si quien mira es administrador: no se
+              // ofrece el select (ni editable ni "solo lectura, no sos
+              // admin" — sería una afirmación que todavía no se puede hacer).
+              <>
+                <span
+                  className={`inline-block px-2.5 py-1 rounded-full text-xs font-semibold capitalize ${roleBadge[form.rol] ?? 'bg-slate-100 text-slate-600'}`}
+                >
+                  {form.rol.toLowerCase()}
+                </span>
+                <p className="text-slate-400 text-xs mt-1">Verificando permisos…</p>
+              </>
+            ) : errorSesion ? (
+              <>
+                <span
+                  className={`inline-block px-2.5 py-1 rounded-full text-xs font-semibold capitalize ${roleBadge[form.rol] ?? 'bg-slate-100 text-slate-600'}`}
+                >
+                  {form.rol.toLowerCase()}
+                </span>
+                <p className="text-red-600 text-xs mt-1">
+                  No pudimos cargar tus permisos.{' '}
+                  <button
+                    type="button"
+                    className="underline hover:no-underline"
+                    onClick={recargarSesion}
+                  >
+                    Reintentar
+                  </button>
+                </p>
+              </>
             ) : esAdministrador ? (
               <>
                 <select

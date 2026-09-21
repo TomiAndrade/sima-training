@@ -8,12 +8,17 @@ export const SesionContext = createContext({
   identidad: null,
   cargando: true,
   error: null,
+  recargar: () => {},
 })
 
 /**
- * La identidad del usuario logueado: `{ identidad, cargando, error }`, donde
- * `identidad` es lo que devuelve GET /auth/me (id, nombre, apellido, email,
- * rol, organizacionId).
+ * La identidad del usuario logueado: `{ identidad, cargando, error, recargar }`,
+ * donde `identidad` es lo que devuelve GET /auth/me (id, nombre, apellido,
+ * email, rol, organizacionId). `cargando`/`error` son mutuamente excluyentes
+ * de `identidad` en null por dos motivos distintos — un consumidor que
+ * necesite tratarlos distinto (ej. no ofrecer una acción sensible mientras no
+ * se sabe todavía) no puede asumir "sin identidad = sin permiso" sin mirar
+ * los dos. `recargar()` reintenta el pedido a /auth/me.
  */
 export function useSesion() {
   return useContext(SesionContext)

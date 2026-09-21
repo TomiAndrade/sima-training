@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useLayoutEffect } from 'react'
 import * as Sentry from '@sentry/react'
 import { useAuth0 } from '@auth0/auth0-react'
 import useNavigation from './hooks/useNavigation'
@@ -56,15 +56,30 @@ export default function App() {
   // Se registra recién cuando hay sesión: mientras tanto client.js rechaza
   // cualquier request autenticado (no debería pasar, el return de abajo lo
   // evita, pero es la guarda barata).
-  useEffect(() => {
+  //
+  // useLayoutEffect y no useEffect: en el mismo commit donde `isAuthenticated`
+  // pasa a true, App dibuja SesionProvider por primera vez, y SesionProvider
+  // dispara su propio efecto (GET /auth/me) apenas monta. Los efectos pasivos
+  // (useEffect) de un commit corren hijo-antes-que-padre, así que un
+  // useEffect acá perdía la carrera: el fetch de /auth/me salía antes de que
+  // este efecto registrara el token getter, y client.js lo rechazaba con
+  // "Auth0 todavía no está listo" (identidad quedaba en null). Los efectos de
+  // layout, en cambio, corren TODOS —de toda la rama que se está montando—
+  // antes que CUALQUIER efecto pasivo del mismo commit, así que este registro
+  // queda listo antes de que SesionProvider pida /auth/me.
+  useLayoutEffect(() => {
     if (isAuthenticated) setAuth0TokenGetter(() => getAccessTokenSilently())
   }, [isAuthenticated, getAccessTokenSilently])
 
+  // Mismo motivo que el de arriba: tiene que estar registrado antes de que
+  // cualquier request autenticado (el de /auth/me incluido) pueda fallar y
+  // necesitar este handler.
+  //
   // Cuando la sesión ya no se puede renovar sola (getAccessTokenSilently()
   // tira, o el backend sigue rechazando el token con 401 después de
   // reintentar) client.js llama a esto en vez de dejar la pantalla que
   // disparó el request colgada con una promesa rechazada.
-  useEffect(() => {
+  useLayoutEffect(() => {
     setAuthErrorHandler(() => loginWithRedirect())
   }, [loginWithRedirect])
 
