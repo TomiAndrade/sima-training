@@ -64,4 +64,13 @@ export class CreatePreguntaDto {
   @IsOptional()
   @IsString()
   fuente?: string;
+
+  // El alta manual desde el backoffice corre la detección de posibles
+  // duplicados (mismo criterio que el import, ver similitud.ts) y devuelve
+  // 409 si encuentra algo. Este flag es cómo el cliente confirma que ya vio
+  // la advertencia y quiere crear igual — sin él, un segundo POST con el
+  // mismo texto vuelve a cortar en el mismo 409 (ver PreguntasService.create).
+  @IsOptional()
+  @IsBoolean()
+  confirmarDuplicado?: boolean;
 }

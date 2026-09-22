@@ -9,6 +9,7 @@ import { ActorIdentidad } from '../audit/actor-de-identidad';
 import { AuditService } from '../audit/audit.service';
 import { calcularDiff, hayCambios } from '../audit/calcular-diff';
 import { CAMPOS_TRAZABILIDAD_IGNORADOS } from '../audit/campos-trazabilidad';
+import { clasificar, RefSimilitud, toRef } from '../import/similitud';
 import { ModulosService } from '../modulos/modulos.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -100,11 +101,35 @@ export class PreguntasService {
     }
   }
 
-  // TODO(sprint futuro): detección de preguntas duplicadas/similares
-  // (pg_trgm o embeddings) antes de crear. Fuera de alcance de este sprint.
-  async create(dto: CreatePreguntaDto, actorIdentidad?: ActorIdentidad) {
+  // `verificarDuplicados` es opt-in y default false a propósito: el import
+  // (ImportService.confirmarPreguntas) llama a este mismo create() por fila
+  // sin pasarlo, porque esas filas ya se revisaron contra el banco en el
+  // preview y el usuario decidió ahí qué importar — repetir el chequeo acá
+  // las bloquearía de nuevo sin que el import tenga forma de confirmar.
+  // El único caller que lo pide es PreguntasController (alta manual).
+  async create(
+    dto: CreatePreguntaDto,
+    actorIdentidad?: ActorIdentidad,
+    opciones: { verificarDuplicados?: boolean } = {},
+  ) {
     this.validarOpciones(dto);
-    const { opciones, ...rest } = dto;
+
+    if (opciones.verificarDuplicados && !dto.confirmarDuplicado) {
+      const posibleDuplicado = await this.buscarPosibleDuplicado(dto.texto);
+      if (posibleDuplicado) {
+        throw new ConflictException({
+          message:
+            'Encontramos preguntas similares. Revisalas antes de continuar.',
+          estado: posibleDuplicado.estado,
+          similar: posibleDuplicado.similar,
+        });
+      }
+    }
+
+    const { opciones: opcionesDto, ...rest } = dto;
+    // `confirmarDuplicado` es señal para este método, no una columna de
+    // Pregunta: se descarta acá para que no llegue al `data` del create.
+    delete rest.confirmarDuplicado;
     const fuente = await this.resolverFuente(dto);
 
     return this.prisma.$transaction(async (tx) => {
@@ -116,8 +141,8 @@ export class PreguntasService {
           data: {
             ...rest,
             ...(fuente !== undefined ? { fuente } : {}),
-            ...(opciones
-              ? { opciones: opciones as Prisma.InputJsonValue }
+            ...(opcionesDto
+              ? { opciones: opcionesDto as Prisma.InputJsonValue }
               : {}),
           },
           include: PREGUNTA_CLASIFICACION,
@@ -155,6 +180,20 @@ export class PreguntasService {
       );
     }
     return err;
+  }
+
+  // Mismo criterio que el import de preguntas (ver src/import/similitud.ts):
+  // Dice sobre trigramas de caracteres, umbral UMBRAL_PARECIDA, contra TODO el
+  // banco (activas y papelera), sin distinguir por tipo de pregunta — no se
+  // inventa un criterio nuevo para el alta manual, se reusa el mismo. `null`
+  // si no hay nada 'duplicada' ni 'parecida'.
+  private async buscarPosibleDuplicado(texto: string) {
+    const banco = await this.prisma.pregunta.findMany({
+      select: { id: true, texto: true },
+    });
+    const refs: RefSimilitud[] = banco.map((p) => toRef(p.texto, p.id));
+    const resultado = clasificar(texto, refs);
+    return resultado.estado === 'nueva' ? null : resultado;
   }
 
   // La `fuente` de una pregunta se congela al crearla: se copia de la base si

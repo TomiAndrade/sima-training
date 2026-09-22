@@ -215,6 +215,41 @@ describe('GlobalExceptionFilter', () => {
     });
   });
 
+  it('un HttpException con campos extra en el body (ej. 409 de posible duplicado) los deja pasar', () => {
+    const filter = new GlobalExceptionFilter(crearLoggerMock());
+    const { host, response } = crearHost();
+
+    filter.catch(
+      new ConflictException({
+        message: 'Encontramos preguntas similares. Revisalas antes de continuar.',
+        estado: 'parecida',
+        similar: { preguntaId: 'p1', texto: 'El uso del casco...', score: 0.82 },
+      }),
+      host,
+    );
+
+    expect(response.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        statusCode: 409,
+        message: 'Encontramos preguntas similares. Revisalas antes de continuar.',
+        estado: 'parecida',
+        similar: { preguntaId: 'p1', texto: 'El uso del casco...', score: 0.82 },
+      }),
+    );
+  });
+
+  it('un ConflictException simple (solo string) no agrega campos extra vacíos', () => {
+    const filter = new GlobalExceptionFilter(crearLoggerMock());
+    const { host, response } = crearHost();
+
+    filter.catch(new ConflictException('dup'), host);
+
+    const body = response.json.mock.calls[0][0] as Record<string, unknown>;
+    expect(Object.keys(body).sort()).toEqual(
+      ['error', 'message', 'requestId', 'statusCode'].sort(),
+    );
+  });
+
   it('un 4xx de negocio NO reporta a Sentry (sería puro ruido)', () => {
     const filter = new GlobalExceptionFilter(crearLoggerMock());
     const { host } = crearHost();

@@ -40,7 +40,13 @@ async function parse(res) {
   const body = text ? JSON.parse(text) : null
   if (!res.ok) {
     const message = body?.message ?? `Error ${res.status}`
-    throw new Error(Array.isArray(message) ? message.join(', ') : message)
+    const err = new Error(Array.isArray(message) ? message.join(', ') : message)
+    // Campos extra del body de error (ej. `estado`/`similar` del 409 de
+    // posible duplicado en POST /preguntas — ver GlobalExceptionFilter en el
+    // backend), para que el caller pueda reaccionar a algo más que el texto.
+    err.status = res.status
+    err.body = body
+    throw err
   }
   return body
 }

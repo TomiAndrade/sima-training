@@ -21,6 +21,12 @@ interface RespuestaError {
   status: number;
   message: string | string[];
   error: string;
+  // Campos de negocio propios de la excepción (ej. los candidatos de un 409 de
+  // posible duplicado) — cualquier clave del body que no sea message/error/
+  // statusCode viaja tal cual hasta el cliente. Sin esto, un
+  // `new ConflictException({ message, similar })` perdía `similar` en el
+  // camino: este filtro solo leía message/error del body.
+  extra?: Record<string, unknown>;
 }
 
 const MENSAJE_GENERICO = 'Error interno del servidor';
@@ -37,11 +43,21 @@ function resolverRespuesta(exception: unknown): RespuestaError {
     if (typeof body === 'string') {
       return { status, message: body, error: exception.name };
     }
-    const objeto = body as { message?: string | string[]; error?: string };
+    const objeto = body as {
+      message?: string | string[];
+      error?: string;
+      statusCode?: number;
+      [key: string]: unknown;
+    };
+    const CAMPOS_RESERVADOS = new Set(['message', 'error', 'statusCode']);
+    const extraEntries = Object.entries(objeto).filter(
+      ([clave]) => !CAMPOS_RESERVADOS.has(clave),
+    );
     return {
       status,
       message: objeto.message ?? exception.message,
       error: objeto.error ?? exception.name,
+      extra: extraEntries.length ? Object.fromEntries(extraEntries) : undefined,
     };
   }
   // Cualquier excepción no controlada: nunca se expone su mensaje ni su stack al
@@ -77,7 +93,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     // imprimir y la línea queda como "sin-request-id" aunque la respuesta al
     // cliente sí lleve el id real — justo el caso que rompe la correlación.
     runWithRequestId(requestId, () => {
-      const { status, message, error } = resolverRespuesta(exception);
+      const { status, message, error, extra } = resolverRespuesta(exception);
 
       const linea = `${request.method} ${request.originalUrl} → ${status}`;
       if (status >= 500) {
@@ -107,7 +123,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       response.setHeader(REQUEST_ID_HEADER, requestId);
       response
         .status(status)
-        .json({ statusCode: status, message, error, requestId });
+        .json({ statusCode: status, message, error, requestId, ...extra });
     });
   }
 }

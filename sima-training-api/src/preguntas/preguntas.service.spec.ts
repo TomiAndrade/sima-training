@@ -423,6 +423,101 @@ describe('PreguntasService', () => {
     });
   });
 
+  describe('detección de posibles duplicados (alta manual)', () => {
+    const BANCO = [
+      { id: 'p1', texto: 'El uso del casco es obligatorio en todas las áreas' },
+      { id: 'p2', texto: 'Se debe reportar todo incidente al supervisor' },
+    ];
+
+    it('sin verificarDuplicados (comportamiento del import): crea sin consultar el banco', async () => {
+      prisma.pregunta.create.mockResolvedValue({ id: 'p3' });
+      await service.create({
+        texto: 'El uso del casco es obligatorio en todas las áreas',
+        tipo: 'VERDADERO_FALSO' as any,
+      });
+      expect(prisma.pregunta.findMany).not.toHaveBeenCalled();
+      expect(prisma.pregunta.create).toHaveBeenCalled();
+    });
+
+    it('con verificarDuplicados, un texto sin relación con el banco se crea normalmente', async () => {
+      prisma.pregunta.findMany.mockResolvedValue(BANCO);
+      prisma.pregunta.create.mockResolvedValue({ id: 'p3' });
+      await service.create(
+        { texto: '¿Cada cuánto se recarga un matafuego?', tipo: 'VERDADERO_FALSO' as any },
+        undefined,
+        { verificarDuplicados: true },
+      );
+      expect(prisma.pregunta.create).toHaveBeenCalled();
+    });
+
+    it('con verificarDuplicados, un texto duplicado no crea y tira 409 con el candidato', async () => {
+      prisma.pregunta.findMany.mockResolvedValue(BANCO);
+      const promesa = service.create(
+        { texto: 'el uso del CASCO es obligatorio en todas las areas', tipo: 'VERDADERO_FALSO' as any },
+        undefined,
+        { verificarDuplicados: true },
+      );
+      await expect(promesa).rejects.toBeInstanceOf(ConflictException);
+      expect(prisma.pregunta.create).not.toHaveBeenCalled();
+
+      try {
+        await service.create(
+          { texto: 'el uso del CASCO es obligatorio en todas las areas', tipo: 'VERDADERO_FALSO' as any },
+          undefined,
+          { verificarDuplicados: true },
+        );
+      } catch (err) {
+        const body = (err as ConflictException).getResponse() as any;
+        expect(body.estado).toBe('duplicada');
+        expect(body.similar.preguntaId).toBe('p1');
+      }
+    });
+
+    it('con verificarDuplicados, un texto parecido no crea y tira 409 con el score', async () => {
+      prisma.pregunta.findMany.mockResolvedValue(BANCO);
+      const promesa = service.create(
+        { texto: 'El uso del casco es obligatorio en todas las zonas', tipo: 'VERDADERO_FALSO' as any },
+        undefined,
+        { verificarDuplicados: true },
+      );
+      await expect(promesa).rejects.toBeInstanceOf(ConflictException);
+      expect(prisma.pregunta.create).not.toHaveBeenCalled();
+    });
+
+    it('confirmarDuplicado:true saltea el chequeo y crea igual', async () => {
+      prisma.pregunta.create.mockResolvedValue({ id: 'p3' });
+      await service.create(
+        {
+          texto: 'el uso del CASCO es obligatorio en todas las areas',
+          tipo: 'VERDADERO_FALSO' as any,
+          confirmarDuplicado: true,
+        },
+        undefined,
+        { verificarDuplicados: true },
+      );
+      expect(prisma.pregunta.findMany).not.toHaveBeenCalled();
+      expect(prisma.pregunta.create).toHaveBeenCalled();
+    });
+
+    it('confirmarDuplicado no viaja al data del create (no es columna de Pregunta)', async () => {
+      prisma.pregunta.create.mockResolvedValue({ id: 'p3' });
+      await service.create(
+        {
+          texto: 'x',
+          tipo: 'VERDADERO_FALSO' as any,
+          confirmarDuplicado: true,
+        },
+        undefined,
+        { verificarDuplicados: true },
+      );
+      expect(prisma.pregunta.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.not.objectContaining({ confirmarDuplicado: expect.anything() }),
+        }),
+      );
+    });
+  });
+
   describe('auditoría', () => {
     const actorIdentidad = {
       actorUsuarioId: 7,

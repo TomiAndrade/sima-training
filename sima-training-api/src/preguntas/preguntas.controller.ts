@@ -32,7 +32,12 @@ export class PreguntasController {
   @UseGuards(JwtAuthGuard)
   @Roles(...SOLO_ADMINISTRADOR)
   create(@Body() dto: CreatePreguntaDto, @Actor() actor: IdentidadResuelta) {
-    return this.preguntas.create(dto, actorDeIdentidad(actor));
+    // Único caller que pide verificación de duplicados: el import confirma
+    // fila por fila sin pasar esta opción (ver el comentario en
+    // PreguntasService.create).
+    return this.preguntas.create(dto, actorDeIdentidad(actor), {
+      verificarDuplicados: true,
+    });
   }
 
   // Imagen del enunciado. Sin `storage` en el interceptor: multer usa

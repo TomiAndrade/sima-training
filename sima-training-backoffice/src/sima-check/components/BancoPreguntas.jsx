@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Button from '../../components/Button'
 import Modal from '../../components/Modal'
 import MultiSelectFilter from '../../components/MultiSelectFilter'
@@ -7,6 +7,7 @@ import { modulosApi } from '../../core/api/modulos'
 import { basesConocimientoApi } from '../../core/api/basesConocimiento'
 import { backendTypeBadge } from '../../core/format/tipoPregunta'
 import { LETRAS_OPCION, marcaOpcion, opcionesDe } from '../../core/format/opcionesPregunta'
+import EstadoSimilitudBadge from '../../core/components/estadoSimilitudBadge'
 
 // Componentes compartidos para gestionar el banco de preguntas de un módulo
 // (versión BORRADOR) contra la API real. Los usan tanto la tab "Preguntas"
@@ -534,6 +535,18 @@ export function NuevaPreguntaModal({ onClose, backendId, onAssigned, onAssign })
   const [correctaFile, setCorrectaFile] = useState(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
+  // Cuando el backend detecta un posible duplicado (409 de POST /preguntas)
+  // guarda acá { estado, similar, payload }: el payload ya armado (con las
+  // claves de imagen ya subidas), para poder reintentar con
+  // confirmarDuplicado:true sin volver a subir nada. "Revisar" solo oculta
+  // esto (setDuplicadoInfo(null)) y vuelve al form — no lo usa para limpiar.
+  const [duplicadoInfo, setDuplicadoInfo] = useState(null)
+  // File → clave de storage ya subida, para no volver a subir la misma
+  // imagen si el usuario va y viene entre el form y el aviso de duplicado
+  // (handleGuardar puede llamarse varias veces sobre los mismos File).
+  // Se vacía recién cuando la pregunta se crea o el modal se cierra de
+  // verdad (ver limpiarImagenesSubidas).
+  const subidasCache = useRef(new Map())
 
   const necesitaOpciones = form.tipo === 'OPCION_MULTIPLE' || form.tipo === 'OPCIONES_IMAGEN'
   const opcionesSonImagen = form.tipo === 'OPCIONES_IMAGEN'
@@ -613,6 +626,62 @@ export function NuevaPreguntaModal({ onClose, backendId, onAssigned, onAssign })
     [modules],
   )
 
+  // Sube `file` solo si no está ya en la cache (mismo File → misma clave).
+  // Así, volver de "Revisar" y guardar de nuevo sin tocar la imagen no la
+  // vuelve a subir ni deja un archivo huérfano del intento anterior.
+  const asegurarSubida = async (file) => {
+    if (!file) return undefined
+    const cacheada = subidasCache.current.get(file)
+    if (cacheada) return cacheada
+    const { imagen } = await preguntasApi.subirImagen(file)
+    subidasCache.current.set(file, imagen)
+    return imagen
+  }
+
+  // Borra TODAS las imágenes subidas en esta sesión del modal (de cualquier
+  // intento previo) y vacía la cache. Solo corresponde cuando la pregunta
+  // efectivamente no se va a crear: al cerrar/cancelar de verdad, o cuando el
+  // alta falla por algo que no sea el aviso de duplicado.
+  const limpiarImagenesSubidas = async () => {
+    const claves = [...new Set(subidasCache.current.values())]
+    subidasCache.current.clear()
+    if (claves.length) {
+      await Promise.allSettled(claves.map((c) => preguntasApi.borrarImagen(c)))
+    }
+  }
+
+  // POST /preguntas + asignación a módulos. Si el backend devuelve 409 con
+  // estado/similar (posible duplicado sin confirmar todavía), no lo trata
+  // como error: devuelve `{ duplicado }` para que el caller decida qué
+  // mostrar, en vez de tirar y disparar la limpieza de imágenes.
+  const crearYAsignar = async (payload, confirmarDuplicado) => {
+    let pregunta
+    try {
+      pregunta = await preguntasApi.create(
+        confirmarDuplicado ? { ...payload, confirmarDuplicado: true } : payload,
+      )
+    } catch (err) {
+      if (!confirmarDuplicado && err.status === 409 && err.body?.estado) {
+        return { duplicado: { estado: err.body.estado, similar: err.body.similar } }
+      }
+      throw err
+    }
+
+    // Asigna a cada módulo elegido. El orden lo appendea el backend (sin orden).
+    for (const moduloId of selectedModuleIds) {
+      if (onAssign && moduloId === backendId) {
+        onAssign(pregunta)
+      } else {
+        await modulosApi.asignarPreguntas(moduloId, [
+          { preguntaId: pregunta.id, obligatoria: true },
+        ])
+      }
+    }
+    if (!onAssign) await onAssigned()
+    onClose()
+    return {}
+  }
+
   const handleGuardar = async () => {
     if (!form.texto.trim()) {
       setError('El enunciado es obligatorio')
@@ -643,21 +712,14 @@ export function NuevaPreguntaModal({ onClose, backendId, onAssigned, onAssign })
 
     setSaving(true)
     setError(null)
-    // Claves subidas en este intento, para poder limpiarlas si el alta no llega
-    // a completarse.
-    const subidas = []
     let creada = false
     try {
-      const imagen = imagenFile ? (await preguntasApi.subirImagen(imagenFile)).imagen : undefined
-      if (imagen) subidas.push(imagen)
+      const imagen = await asegurarSubida(imagenFile)
 
       let opciones
       let respuestaCorrecta = form.respuestaCorrecta.trim() || undefined
       if (opcionesSonImagen) {
-        opciones = await Promise.all(
-          files.map(async (f) => (await preguntasApi.subirImagen(f)).imagen),
-        )
-        subidas.push(...opciones)
+        opciones = await Promise.all(files.map((f) => asegurarSubida(f)))
         // Recién acá existen las claves: la opción correcta se venía trackeando
         // por referencia al File, y su clave es la que quedó en su misma
         // posición del array subido.
@@ -666,7 +728,7 @@ export function NuevaPreguntaModal({ onClose, backendId, onAssigned, onAssign })
         opciones = form.opciones.filter(Boolean)
       }
 
-      const pregunta = await preguntasApi.create({
+      const payload = {
         texto: form.texto.trim(),
         tipo: form.tipo,
         respuestaCorrecta,
@@ -676,55 +738,101 @@ export function NuevaPreguntaModal({ onClose, backendId, onAssigned, onAssign })
         nivelId: form.nivelId || undefined,
         ...(opciones ? { opciones } : {}),
         imagen,
-      })
-      creada = true
-
-      // Asigna a cada módulo elegido. El orden lo appendea el backend (sin orden).
-      for (const moduloId of selectedModuleIds) {
-        if (onAssign && moduloId === backendId) {
-          onAssign(pregunta)
-        } else {
-          await modulosApi.asignarPreguntas(moduloId, [
-            { preguntaId: pregunta.id, obligatoria: true },
-          ])
-        }
       }
-      if (!onAssign) await onAssigned()
-      onClose()
+
+      // Primer intento: siempre sin confirmar, aunque el usuario ya haya
+      // pasado por un aviso de duplicado antes — confirmarDuplicado nunca
+      // queda pegado de una vuelta anterior, cada Guardar vuelve a chequear.
+      const resultado = await crearYAsignar(payload, false)
+      if (resultado.duplicado) {
+        // No se creó: es una advertencia, no un error. Las imágenes ya
+        // subidas NO se limpian acá — si el usuario confirma "crear de todas
+        // formas" se reusan tal cual, y si vuelve a "Revisar" siguen
+        // asociadas al form para el próximo Guardar (ver asegurarSubida).
+        setDuplicadoInfo({ ...resultado.duplicado, payload })
+        return
+      }
+      creada = true
     } catch (err) {
       // Solo si la pregunta no llegó a crearse: una vez creada, las imágenes
       // están en uso (el backend rechaza borrarlas) y el error es de otra cosa,
       // como la asignación a un módulo. La limpieza no tapa el error real.
-      if (!creada) {
-        await Promise.allSettled(subidas.map((c) => preguntasApi.borrarImagen(c)))
-      }
+      if (!creada) await limpiarImagenesSubidas()
       setError(err.message)
     } finally {
       setSaving(false)
     }
   }
 
+  const handleConfirmarDuplicado = async () => {
+    if (!duplicadoInfo) return
+    setSaving(true)
+    setError(null)
+    try {
+      await crearYAsignar(duplicadoInfo.payload, true)
+    } catch (err) {
+      await limpiarImagenesSubidas()
+      setDuplicadoInfo(null)
+      setError(err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // "Revisar": vuelve al formulario a editar, no abandona la carga. El form
+  // (texto, tipo, opciones, base/nivel, módulos) nunca se tocó al mostrar el
+  // aviso, así que sigue tal cual; las imágenes ya subidas tampoco se tocan
+  // (siguen en subidasCache) — el próximo Guardar las reusa si no cambiaron.
+  const handleVolverAFormulario = () => {
+    setDuplicadoInfo(null)
+  }
+
+  // Cierre real del modal (botón Cancelar del form, X, Escape, click afuera):
+  // acá sí se abandona la carga, así que se limpia cualquier imagen que haya
+  // quedado subida y sin usar.
+  const handleCerrarModal = async () => {
+    await limpiarImagenesSubidas()
+    onClose()
+  }
+
   return (
     <Modal
       open
-      onClose={onClose}
-      title="Nueva pregunta"
+      onClose={handleCerrarModal}
+      title={duplicadoInfo ? 'Posible pregunta duplicada' : 'Nueva pregunta'}
       size="lg"
       footer={
-        <>
-          <Button variant="secondary" onClick={onClose}>Cancelar</Button>
-          <Button onClick={handleGuardar} disabled={saving}>{saving ? 'Guardando...' : selectedModuleIds.size > 0 ? 'Crear y asignar' : 'Crear'}</Button>
-        </>
+        duplicadoInfo ? (
+          <>
+            <Button variant="secondary" onClick={handleVolverAFormulario} disabled={saving}>Revisar</Button>
+            <Button onClick={handleConfirmarDuplicado} disabled={saving}>{saving ? 'Creando...' : 'Crear de todas formas'}</Button>
+          </>
+        ) : (
+          <>
+            <Button variant="secondary" onClick={handleCerrarModal}>Cancelar</Button>
+            <Button onClick={handleGuardar} disabled={saving}>{saving ? 'Guardando...' : selectedModuleIds.size > 0 ? 'Crear y asignar' : 'Crear'}</Button>
+          </>
+        )
       }
     >
+      {duplicadoInfo ? (
+        <div className="space-y-4">
+          <div className="bg-amber-50 border border-amber-200 text-amber-800 text-xs rounded px-3 py-2.5">
+            Encontramos preguntas similares. Revisalas antes de continuar.
+          </div>
+          <div className="border border-slate-200 rounded px-3 py-2.5 space-y-2">
+            <EstadoSimilitudBadge estado={duplicadoInfo.estado} similar={duplicadoInfo.similar} />
+            {duplicadoInfo.similar?.texto && (
+              <p className="text-slate-600 text-sm">{duplicadoInfo.similar.texto}</p>
+            )}
+          </div>
+          <p className="text-slate-400 text-xs">
+            Es una similitud de texto, no necesariamente la misma pregunta. Si después de revisarla seguís queriendo cargarla, confirmá con "Crear de todas formas".
+          </p>
+        </div>
+      ) : (
       <div className="space-y-4">
         {error && <div className="bg-red-50 border border-red-200 text-red-700 text-xs rounded px-3 py-2">{error}</div>}
-
-        {/* Placeholder no funcional: detección de duplicados queda para un sprint futuro. */}
-        <div className="border border-dashed border-slate-300 rounded px-3 py-2.5 text-slate-400 text-xs flex items-center gap-2">
-          <span>🔍</span>
-          <span>Detección de preguntas similares — próximamente</span>
-        </div>
 
         <div>
           <label className="block text-slate-600 text-xs font-semibold uppercase tracking-widest mb-1.5">Tipo</label>
@@ -964,6 +1072,7 @@ export function NuevaPreguntaModal({ onClose, backendId, onAssigned, onAssign })
           />
         </div>
       </div>
+      )}
     </Modal>
   )
 }
