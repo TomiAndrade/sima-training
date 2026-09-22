@@ -11,6 +11,7 @@ import Usuarios from './core/pages/Usuarios'
 import Organizaciones from './core/pages/Organizaciones'
 import Puestos from './core/pages/Puestos'
 import CentrosCosto from './core/pages/CentrosCosto'
+import AuditoriaGlobal from './core/pages/AuditoriaGlobal'
 import Overview from './sima-check/pages/Overview'
 import TrainingModules from './sima-check/pages/TrainingModules'
 import TrainingAssignments from './sima-check/pages/TrainingAssignments'
@@ -25,6 +26,7 @@ const PAGES = {
   organizaciones: Organizaciones,
   puestos: Puestos,
   'centros-costo': CentrosCosto,
+  auditoria: AuditoriaGlobal,
   'sima-check-overview': Overview,
   'training-modules': TrainingModules,
   questions: Questions,

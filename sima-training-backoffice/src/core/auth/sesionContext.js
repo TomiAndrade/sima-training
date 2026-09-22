@@ -29,3 +29,14 @@ export function useEsAdministrador() {
   const { identidad } = useSesion()
   return identidad?.rol === 'ADMINISTRADOR'
 }
+
+/**
+ * ¿Puede ver la Auditoría global? Mismo corte que el conjunto `AUDITORIA` de
+ * matriz-permisos.ts en el backend (ADMINISTRADOR + AUDITOR, sin COORDINADOR
+ * — ver docs/decisiones/auditoria.md). Sólo gobierna qué se MUESTRA en el
+ * sidebar; el control real es el 403 del backend, esto no lo reemplaza.
+ */
+export function useAccesoAuditoria() {
+  const { identidad } = useSesion()
+  return identidad?.rol === 'ADMINISTRADOR' || identidad?.rol === 'AUDITOR'
+}

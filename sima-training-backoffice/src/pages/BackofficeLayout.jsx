@@ -1,4 +1,5 @@
 import { useAuth0 } from '@auth0/auth0-react'
+import { useAccesoAuditoria } from '../core/auth/sesionContext'
 
 const SIMA_CHECK_PAGES = new Set(['sima-check-overview', 'training-modules', 'questions', 'bases-conocimiento', 'assignment-rules', 'training-assignments', 'sima-check-estadisticas'])
 
@@ -27,6 +28,12 @@ const NAV_SECTIONS = [
       { id: 'organizaciones', label: 'Organizaciones' },
       { id: 'puestos',   label: 'Puestos' },
       { id: 'centros-costo', label: 'Centros de Costo' },
+      // Sólo ADMINISTRADOR/AUDITOR la ven (useAccesoAuditoria, abajo) — pero
+      // sigue en NAV_SECTIONS sin condición para que el breadcrumb (que sale
+      // de ALL_NAV_ITEMS) encuentre su label igual si alguien entra por hash
+      // directo. Ocultar el ítem no reemplaza el 403 del backend, sólo evita
+      // ofrecer un click que va a fallar.
+      { id: 'auditoria', label: 'Auditoría' },
     ],
   },
   {
@@ -42,6 +49,7 @@ const ALL_NAV_ITEMS = NAV_SECTIONS.flatMap((s) => s.items)
 export default function BackofficeLayout({ page, navigate, children }) {
   const { user, logout } = useAuth0()
   const inSimaCheck = SIMA_CHECK_PAGES.has(page)
+  const accesoAuditoria = useAccesoAuditoria()
 
   // El rol real (ADMINISTRADOR/COORDINADOR/AUDITOR) no viaja en el perfil de
   // Auth0 a propósito — vive en Vinculacion, no en el token de identidad.
@@ -77,29 +85,31 @@ export default function BackofficeLayout({ page, navigate, children }) {
                 </div>
               )}
               <div>
-                {section.items.map((item) => {
-                  const isActive =
-                    page === item.id ||
-                    (item.id === 'sima-check-overview' && inSimaCheck)
-                  return (
-                    <button
-                      key={item.id}
-                      onClick={() => navigate(item.id)}
-                      className={`w-full flex items-center gap-2.5 py-2 px-4 text-[13px] transition-colors duration-150 text-left border-l-2 ${
-                        isActive
-                          ? 'border-red-600 text-red-600 bg-red-50 font-medium'
-                          : 'border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-50 font-normal'
-                      }`}
-                    >
-                      <span
-                        className={`w-1 h-1 rounded-full flex-shrink-0 transition-colors ${
-                          isActive ? 'bg-red-500' : 'bg-slate-300'
+                {section.items
+                  .filter((item) => item.id !== 'auditoria' || accesoAuditoria)
+                  .map((item) => {
+                    const isActive =
+                      page === item.id ||
+                      (item.id === 'sima-check-overview' && inSimaCheck)
+                    return (
+                      <button
+                        key={item.id}
+                        onClick={() => navigate(item.id)}
+                        className={`w-full flex items-center gap-2.5 py-2 px-4 text-[13px] transition-colors duration-150 text-left border-l-2 ${
+                          isActive
+                            ? 'border-red-600 text-red-600 bg-red-50 font-medium'
+                            : 'border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-50 font-normal'
                         }`}
-                      />
-                      {item.label}
-                    </button>
-                  )
-                })}
+                      >
+                        <span
+                          className={`w-1 h-1 rounded-full flex-shrink-0 transition-colors ${
+                            isActive ? 'bg-red-500' : 'bg-slate-300'
+                          }`}
+                        />
+                        {item.label}
+                      </button>
+                    )
+                  })}
               </div>
             </div>
           ))}
