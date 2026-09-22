@@ -240,9 +240,9 @@ export default function CriteriosPanel({
             const duplicada = c.baseConocimientoId && repetidos.has(claveCriterio(c))
             return (
               <div key={i} className="px-4 py-3 space-y-2">
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 flex-wrap">
                   <select
-                    className={inputCls}
+                    className={`${inputCls} flex-1 min-w-[10rem]`}
                     value={c.baseConocimientoId}
                     onChange={(e) => cambiarBase(i, e.target.value)}
                   >
@@ -252,7 +252,7 @@ export default function CriteriosPanel({
                     ))}
                   </select>
                   <select
-                    className={inputCls}
+                    className={`${inputCls} flex-1 min-w-[10rem]`}
                     value={c.nivelId ?? CUALQUIER_NIVEL}
                     onChange={(e) => cambiarNivel(i, e.target.value)}
                     disabled={!base}

@@ -175,33 +175,49 @@ function ImagenEnunciado({ imagen, className = 'w-8 h-8' }) {
 // `onVer` va siempre (también en las vistas de solo lectura de una versión
 // publicada o archivada): ver el contenido de una pregunta no es editarla, y es
 // justo lo que hace falta para revisar una versión ya congelada.
+// En desktop (`sm:` en adelante) es una sola fila, igual que siempre:
+// `sm:flex-nowrap` + `sm:order-none` en cada hijo restablece el orden natural
+// del DOM (que es exactamente el layout de antes) y le devuelve a cada uno su
+// ancho original. Por debajo de `sm` el contenedor pasa a `flex-wrap` y cada
+// hijo tiene un `order` explícito: eso arma tres líneas SIN duplicar markup —
+// metadata (número/tipo/miniatura/badges), el enunciado suelto a lo ancho
+// completo (es lo que más empujaba la fila afuera del viewport, apretado
+// entre miniatura y badges) y las acciones al final, también a lo ancho
+// completo para que ningún botón quede recortado ni dependa de scroll
+// horizontal.
 function FilaPregunta({ mvp, porCriterio, mostrarBadge, onVer, onToggle, onRemove, togglingId }) {
   const enPapelera = mvp.pregunta.activa === false
   return (
-    <div className={`px-4 py-2.5 flex items-center gap-3 ${mvp.activa === false ? 'opacity-50' : ''}`}>
-      <span className="text-slate-400 text-xs font-mono w-6">{mvp.orden}</span>
-      {backendTypeBadge(mvp.pregunta.tipo)}
-      <ImagenEnunciado imagen={mvp.pregunta.imagen} />
-      <span className="text-slate-700 text-sm line-clamp-1 flex-1">{mvp.pregunta.texto}</span>
+    <div
+      className={`px-4 py-2.5 flex flex-wrap sm:flex-nowrap items-center gap-x-3 gap-y-2 ${mvp.activa === false ? 'opacity-50' : ''}`}
+    >
+      <span className="order-1 sm:order-none text-slate-400 text-xs font-mono w-6 flex-shrink-0">{mvp.orden}</span>
+      <span className="order-2 sm:order-none flex-shrink-0">{backendTypeBadge(mvp.pregunta.tipo)}</span>
+      <span className="order-3 sm:order-none flex-shrink-0">
+        <ImagenEnunciado imagen={mvp.pregunta.imagen} />
+      </span>
       {porCriterio && mostrarBadge && (
         <span
-          className="px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-indigo-50 text-indigo-600 flex-shrink-0"
+          className="order-4 sm:order-none px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-indigo-50 text-indigo-600 flex-shrink-0"
           title="La trajo un criterio del módulo. Para sacarla de la evaluación, desactivala; para sacar el tema entero, editá los criterios."
         >
           Por criterio
         </span>
       )}
       {enPapelera ? (
-        <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-amber-50 text-amber-600 flex-shrink-0">
+        <span className="order-5 sm:order-none px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-amber-50 text-amber-600 flex-shrink-0">
           En papelera
         </span>
       ) : mvp.activa === false && (
-        <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-slate-100 text-slate-400 flex-shrink-0">
+        <span className="order-5 sm:order-none px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-slate-100 text-slate-400 flex-shrink-0">
           Inactiva
         </span>
       )}
+      <span className="order-6 sm:order-none w-full sm:w-auto min-w-0 sm:flex-1 text-slate-700 text-sm line-clamp-1">
+        {mvp.pregunta.texto}
+      </span>
       {(onVer || onToggle || onRemove) && (
-        <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="order-7 sm:order-none w-full sm:w-auto flex flex-wrap items-center gap-2 sm:flex-shrink-0">
           {onVer && (
             <Button variant="ghost" size="sm" onClick={() => onVer(mvp.pregunta)}>Ver</Button>
           )}
@@ -723,7 +739,7 @@ export function NuevaPreguntaModal({ onClose, backendId, onAssigned, onAssign })
           </select>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className="block text-slate-600 text-xs font-semibold uppercase tracking-widest mb-1.5">Base de conocimiento</label>
             <select
@@ -822,7 +838,7 @@ export function NuevaPreguntaModal({ onClose, backendId, onAssigned, onAssign })
             </label>
             {opcionesSonImagen ? (
               <>
-                <div className="grid grid-cols-4 gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   {OPCION_LETRAS.map((letter, i) => (
                     <div key={letter} className="space-y-1.5">
                       <span className="text-slate-400 text-xs font-mono">{letter})</span>
@@ -890,7 +906,7 @@ export function NuevaPreguntaModal({ onClose, backendId, onAssigned, onAssign })
             // tienen clave (se genera al subir), así que no hay texto que
             // mostrar. Se elige tocando la miniatura, como en la app del alumno.
             opcionFiles.some(Boolean) ? (
-              <div className="grid grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 {opcionFiles.map((file, i) =>
                   file ? (
                     <button
@@ -1030,7 +1046,7 @@ export function VerPreguntaModal({ pregunta, onClose }) {
               Sin opciones: esta pregunta se responde con texto libre.
             </p>
           ) : esImagen ? (
-            <div className="grid grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {opciones.map((clave, i) => {
                 // La correcta se compara por CLAVE de storage, igual que
                 // corregir.ts en el backend. Comparar la URL armada daría

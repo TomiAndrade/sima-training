@@ -111,7 +111,7 @@ export default function Puestos() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h2 className="text-slate-900 font-bold text-xl">Puestos</h2>
           {/* Con búsqueda activa el contador dice cuántos de cuántos: si sólo
@@ -135,9 +135,9 @@ export default function Puestos() {
       )}
 
       {!loadError && (
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <input
-            className="bg-white border border-slate-300 rounded px-3 py-2 text-slate-900 text-sm focus:outline-none focus:border-red-600 min-w-[280px]"
+            className="w-full sm:w-auto bg-white border border-slate-300 rounded px-3 py-2 text-slate-900 text-sm focus:outline-none focus:border-red-600 sm:min-w-[280px]"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Buscar puesto..."

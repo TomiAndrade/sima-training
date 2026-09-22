@@ -397,7 +397,7 @@ export default function AuditoriaGlobal() {
             emptyLabel="Todos"
             searchPlaceholder="Nombre, apellido o DNI…"
             disabled={!catalogos}
-            className="w-56"
+            className="w-full sm:w-56"
           />
         </div>
         <div>

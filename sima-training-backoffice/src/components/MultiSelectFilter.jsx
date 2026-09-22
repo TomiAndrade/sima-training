@@ -49,11 +49,11 @@ export default function MultiSelectFilter({ options, selectedIds, onChange, plac
           queda: el trigger es `w-full`, y suelto en la barra de filtros —que es
           un flex— ese 100% pasa a medirse contra la fila entera en vez de contra
           su caja. */}
-      <div>
+      <div className="w-full sm:w-auto">
         <button
           type="button"
           ref={triggerRef}
-          className={`${inputCls} text-left flex items-center justify-between gap-2 min-w-[220px]`}
+          className={`${inputCls} text-left flex items-center justify-between gap-2 w-full sm:w-auto sm:min-w-[220px]`}
           onClick={() => setOpen((o) => !o)}
         >
           <span className="truncate">{label}</span>

@@ -526,7 +526,7 @@ export default function ReglasAsignacion() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h2 className="text-slate-900 font-bold text-xl">Reglas de asignación</h2>
           <p className="text-slate-400 text-sm">

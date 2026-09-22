@@ -154,7 +154,7 @@ export default function ImportPreguntasModal({ open, onClose, onImported }) {
             </div>
             {/* La clasificación se aplica a TODAS las filas del archivo: el Excel
                 no trae columnas de base/nivel, así que se elige una vez acá. */}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-slate-700 text-sm font-medium mb-1">Base de conocimiento <span className="font-normal text-slate-400">(opcional)</span></label>
                 <select

@@ -70,7 +70,7 @@ export default function ParametrosExamenPanel({
   const cambiar = (campo) => (valor) => onChange({ ...valores, [campo]: valor })
 
   const cuerpo = readOnly ? (
-    <dl className={`grid grid-cols-2 gap-x-4 gap-y-3 text-sm ${desnudo ? '' : 'px-4 py-3'}`}>
+    <dl className={`grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3 text-sm ${desnudo ? '' : 'px-4 py-3'}`}>
       <div>
         <dt className="text-slate-400 text-xs font-medium mb-0.5">Preguntas por examen</dt>
         <dd className="text-slate-900 font-mono">
@@ -100,7 +100,7 @@ export default function ParametrosExamenPanel({
     </dl>
   ) : (
     <div className={desnudo ? 'space-y-4' : 'px-4 py-3 space-y-4'}>
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <Campo
           label="Preguntas por examen"
           ayuda={`Cuántas sortea la app de cada evaluación. Vacío = ${DEFAULT_PREGUNTAS}.`}
@@ -127,7 +127,7 @@ export default function ParametrosExamenPanel({
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <Campo
           label="Reintentos permitidos"
           ayuda="Cuántas veces puede rendirlo una persona. El contador se reinicia cuando aprueba. Vacío = sin límite."

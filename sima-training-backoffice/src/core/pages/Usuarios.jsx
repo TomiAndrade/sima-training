@@ -489,7 +489,7 @@ export default function Usuarios({ sub = [], setSub = () => {} }) {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h2 className="text-slate-900 font-bold text-xl">Usuarios</h2>
           {/* Con filtros de servidor activos `usuarios` ya es el resultado
@@ -651,7 +651,7 @@ export default function Usuarios({ sub = [], setSub = () => {} }) {
               {formError}
             </div>
           )}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-slate-700 text-sm font-medium mb-1">Nombre</label>
               <input
@@ -671,7 +671,7 @@ export default function Usuarios({ sub = [], setSub = () => {} }) {
               />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-slate-700 text-sm font-medium mb-1">DNI</label>
               <input

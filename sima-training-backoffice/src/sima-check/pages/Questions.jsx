@@ -500,7 +500,7 @@ export default function Questions({ sub = [], replaceSub }) {
 
       <div className="flex items-center gap-3 flex-wrap">
         <input
-          className="bg-white border border-slate-300 rounded px-3 py-2 text-slate-900 text-sm focus:outline-none focus:border-red-600 min-w-[240px]"
+          className="w-full sm:w-auto bg-white border border-slate-300 rounded px-3 py-2 text-slate-900 text-sm focus:outline-none focus:border-red-600 sm:min-w-[240px]"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Buscar por enunciado..."

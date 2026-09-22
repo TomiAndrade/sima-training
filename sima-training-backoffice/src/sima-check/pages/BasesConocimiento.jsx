@@ -122,7 +122,7 @@ export default function BasesConocimiento({ navigate }) {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h2 className="text-slate-900 font-bold text-xl">Bases de conocimiento</h2>
           <p className="text-slate-400 text-sm">
@@ -192,7 +192,7 @@ export default function BasesConocimiento({ navigate }) {
               {formError}
             </div>
           )}
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="col-span-2">
               <label className="block text-slate-700 text-sm font-medium mb-1">Nombre</label>
               <input

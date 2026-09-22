@@ -172,7 +172,7 @@ function RespuestaCard({ respuesta, numero }) {
           <span className="text-slate-800">{respuesta.respuestaDada ?? '—'}</span>
         </div>
       ) : esImagen ? (
-        <div className="grid grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {opciones.map((clave, i) => (
             <Opcion
               key={clave}
